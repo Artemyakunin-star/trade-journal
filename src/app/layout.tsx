@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Sidebar from "@/components/Sidebar";
 
-// System font stack (no network fetch at build time; matches the mockup).
 export const metadata: Metadata = {
   title: "TradeJournal",
   description: "Trading journal & analytics for futures — plans, ideas, trades, MAE/MFE what-if.",
@@ -9,8 +9,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+    <html lang="en">
+      <body>
+        <div style={{ display: "flex", minHeight: "100vh" }}>
+          <Sidebar />
+          <div className="main">{children}</div>
+        </div>
+      </body>
     </html>
   );
 }

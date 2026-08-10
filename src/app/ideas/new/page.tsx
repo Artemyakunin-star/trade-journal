@@ -1,0 +1,32 @@
+import IdeaForm from "@/components/IdeaForm";
+import { db } from "@/db";
+import { getAllTrades } from "@/lib/metrics";
+import { kyivDateOf } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
+
+export default async function NewIdeaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; returnTo?: string }>;
+}) {
+  const sp = await searchParams;
+  const instruments = await db.query.instruments.findMany();
+  const allTrades = await getAllTrades();
+  const date = sp.date;
+  const rogue = allTrades.filter((t) => !t.ideaId && (!date || kyivDateOf(t.entryTime) === date));
+
+  return (
+    <>
+      <div className="topbar">
+        <h1>New idea {date && <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {date}</span>}</h1>
+      </div>
+      <IdeaForm
+        instruments={instruments.map((i) => i.symbol)}
+        planDate={date}
+        unattachedTrades={rogue}
+        returnTo={sp.returnTo ?? (date ? `/day/${date}` : "/ideas")}
+      />
+    </>
+  );
+}
