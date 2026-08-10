@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TradeJournal
 
-## Getting Started
+Trading journal & analytics for futures traders. Core model: **Plan → Idea → Trade** —
+a day plan written in advance, ideas written after the fact grouping multiple entries,
+raw executions imported from NinjaTrader. Focus: discipline (rogue trades, tilt
+markers, invalidation) and MAE/MFE what-if analytics on real 5-sec bars.
 
-First, run the development server:
+## Stack
+
+- **Next.js** (App Router, TypeScript) — frontend + backend in one project
+- **PostgreSQL** + **Drizzle ORM** (schema in `src/db/schema.ts`, docs in `docs/SCHEMA.md`)
+- **Tailwind CSS** (+ shadcn/ui planned)
+- Charts: Lightweight Charts (planned)
+- Hosting target: Vercel + Neon Postgres
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env         # set DATABASE_URL
+npm run db:migrate           # apply SQL migrations
+npm run db:seed              # seed the demo day (Mon, Aug 10 2026)
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script | What it does |
+|---|---|
+| `npm run dev` | dev server |
+| `npm run build` / `start` | production build / serve |
+| `npm run db:generate` | generate SQL migration from schema changes |
+| `npm run db:migrate` | apply migrations |
+| `npm run db:seed` | seed demo data |
+| `npm run db:studio` | browse the DB in Drizzle Studio |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Roadmap (build order)
 
-## Learn More
+1. ~~Clickable mockup of all 6 screens~~ ✅ (kept as a Cowork artifact)
+2. ~~DB schema + project scaffold~~ ✅ (this)
+3. Real screens on the DB: Dashboard, Trades, Ideas, Calendar, Day + forms (add/edit idea, attach trades, grade scenarios)
+4. CSV import from the NinjaTrader exporter (`executions_*.csv`, `bars_*.csv`): parse → dedupe by `executionId` → build round-trip trades from `PositionBefore/After`
+5. MAE/MFE computation from bars + what-if simulator
+6. Deploy: GitHub → Vercel, DB on Neon
 
-To learn more about Next.js, take a look at the following resources:
+## Data source
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+A working NinjaTrader 8 AddOn (`TradeJournalExporter.cs`, separate repo/file) exports:
+- `executions_<account>_<date>.csv` — fills with computed `PositionBefore/After/Action`
+- `bars_<symbol>_<date>.csv` — 5-sec OHLCV for instruments traded that day
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Timestamps are local machine time = **Europe/Kyiv** (see `docs/SCHEMA.md`, Timezone).
