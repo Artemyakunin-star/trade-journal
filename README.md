@@ -37,11 +37,15 @@ npm run dev                  # http://localhost:3000
 ## Roadmap (build order)
 
 1. ~~Clickable mockup of all 6 screens~~ ✅ (kept as a Cowork artifact)
-2. ~~DB schema + project scaffold~~ ✅ (this)
-3. Real screens on the DB: Dashboard, Trades, Ideas, Calendar, Day + forms (add/edit idea, attach trades, grade scenarios)
-4. CSV import from the NinjaTrader exporter (`executions_*.csv`, `bars_*.csv`): parse → dedupe by `executionId` → build round-trip trades from `PositionBefore/After`
-5. MAE/MFE computation from bars + what-if simulator
-6. Deploy: GitHub → Vercel, DB on Neon
+2. ~~DB schema + project scaffold~~ ✅
+3. ~~Real screens on the DB: Dashboard, Trades, Ideas, Calendar, Day + forms (add/edit idea, attach trades, grade scenarios)~~ ✅
+4. ~~CSV import from the NinjaTrader exporter (`executions_*.csv`, `bars_*.csv`): parse → dedupe by `executionId` → build round-trip trades from `PositionBefore/After`~~ ✅ (UI at `/import` + `npx tsx scripts/import-cli.ts`)
+5. ~~MAE/MFE computation from bars~~ ✅ (computed on import) · what-if simulator — **next**
+6. Analytics screen (MAE scatter, discipline tiles, what-if) — **next**
+7. Deploy: GitHub → Vercel, DB on Neon
+
+> Timestamps in the exporter CSVs are **America/Chicago** (exchange time, confirmed
+> by the owner); they are converted to UTC on import and displayed in Europe/Kyiv.
 
 ## Data source
 
