@@ -89,7 +89,7 @@ export default function TradesTable({
     return (
       <tr key={t.id} className="in-group">
         <td>
-          <Link href={`/trades/${t.id}`} className="linklike" title="Open trade details">
+          <Link href={`/trades/${t.id}?unit=${unit}`} className="linklike" title="Open trade details">
             {fmtTimeKyiv(t.entryTime, true, tz)}
           </Link>
         </td>

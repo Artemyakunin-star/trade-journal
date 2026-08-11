@@ -9,12 +9,20 @@ import PriceChart from "@/components/charts/PriceChart";
 import { setTradeIdea, setTradeNote } from "@/app/actions";
 import { getAllIdeas } from "@/lib/metrics";
 import { getSettings, tzLabel } from "@/lib/settings";
-import { fmtDateLong, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf } from "@/lib/format";
+import { fmtDateLong, fmtExcursion, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function TradeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TradeDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ unit?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
+  const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "usd") as PnlUnit;
   const trade = await db.query.trades.findFirst({ where: eq(tradesTable.id, id) });
   if (!trade) notFound();
 
@@ -31,7 +39,10 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
   const net = trade.pnl === null ? null : Number(trade.pnl);
   const comm = Number(trade.commission);
   const gross = net === null ? null : net + comm;
-  const tickValue = instrument ? Number(instrument.tickValue) : 5;
+  const spec = {
+    tickSize: instrument ? Number(instrument.tickSize) : 0.25,
+    tickValue: instrument ? Number(instrument.tickValue) : 5,
+  };
   const long = trade.direction === "LONG";
 
   const stat = (lbl: string, val: React.ReactNode, cls = "") => (
@@ -48,8 +59,15 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
           Trade · {trade.instrument} {long ? "Long" : "Short"} ×{trade.quantity}{" "}
           <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {fmtDateLong(date)}</span>
         </h1>
+        <span className="seg">
+          {PNL_UNITS.map((u) => (
+            <Link key={u.key} href={`/trades/${trade.id}?unit=${u.key}`} className={unit === u.key ? "on" : ""}>
+              {u.label}
+            </Link>
+          ))}
+        </span>
         <Link href={`/day/${date}`} className="btn ghost">Open day</Link>
-        <Link href={`/trades?date=${date}`} className="btn ghost">Day trades</Link>
+        <Link href={`/trades?date=${date}&unit=${unit}`} className="btn ghost">Day trades</Link>
       </div>
 
       <div className="tiles" style={{ marginBottom: 14 }}>
@@ -57,13 +75,13 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
         {stat("Gross P&L", gross === null ? "—" : fmtMoney2(gross), "")}
         {stat("Commission", comm > 0 ? "$" + comm.toFixed(2) : "$0")}
         {stat(
-          "MAE (worst against you)",
-          trade.maeTicks === null ? "—" : `${trade.maeTicks}t · ${fmtMoney2(-trade.maeTicks * tickValue * trade.quantity)}`,
+          "MAE (worst against you, per contract)",
+          trade.maeTicks === null ? "—" : fmtExcursion(trade.maeTicks, unit, spec, 1),
           "neg",
         )}
         {stat(
-          "MFE (best in your favor)",
-          trade.mfeTicks === null ? "—" : `${trade.mfeTicks}t · ${fmtMoney2(trade.mfeTicks * tickValue * trade.quantity)}`,
+          "MFE (best in your favor, per contract)",
+          trade.mfeTicks === null ? "—" : fmtExcursion(trade.mfeTicks, unit, spec, 1),
           "pos",
         )}
       </div>

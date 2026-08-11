@@ -46,7 +46,7 @@ function monthTitle(ym: string): string {
   );
 }
 
-export default async function PlansPage({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
+export default async function PlansPage({ searchParams }: { searchParams: Promise<{ m?: string; view?: string }> }) {
   const sp = await searchParams;
   const [documents, prefs] = await Promise.all([
     db.query.docs.findMany({ orderBy: (d, { desc }) => [desc(d.updatedAt)] }),
@@ -55,6 +55,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
 
   const today = kyivDateOf(new Date(), prefs.timezone);
   const month = /^\d{4}-\d{2}$/.test(sp.m ?? "") ? sp.m! : today.slice(0, 7);
+  const view = sp.view === "list" ? "list" : "calendar";
 
   const daily = new Map(documents.filter((d) => d.date).map((d) => [d.date!, d]));
   const undated = documents.filter((d) => !d.date);
@@ -89,16 +90,68 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
     <>
       <div className="topbar">
         <h1>Plans</h1>
-        <span className="range">
-          <Link href={`/plans?m=${addMonths(month, -1)}`} title="Previous month">‹</Link>
-          <Link href="/plans" className={month === today.slice(0, 7) ? "on" : ""}>Today</Link>
-          <Link href={`/plans?m=${addMonths(month, 1)}`} title="Next month">›</Link>
+        <span className="seg">
+          <Link href={`/plans?m=${month}`} className={view === "calendar" ? "on" : ""}>Calendar</Link>
+          <Link href={`/plans?view=list`} className={view === "list" ? "on" : ""}>List</Link>
         </span>
+        {view === "calendar" && (
+          <span className="range">
+            <Link href={`/plans?m=${addMonths(month, -1)}`} title="Previous month">‹</Link>
+            <Link href="/plans" className={month === today.slice(0, 7) ? "on" : ""}>Today</Link>
+            <Link href={`/plans?m=${addMonths(month, 1)}`} title="Next month">›</Link>
+          </span>
+        )}
         <form action={createDoc}>
           <button className="btn" type="submit">+ New document</button>
         </form>
       </div>
 
+      {view === "list" && (
+        <div className="card" style={{ padding: 0 }}>
+          {documents.length === 0 ? (
+            <div className="section-note" style={{ padding: 16 }}>No documents yet.</div>
+          ) : (
+            <table className="tj">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Type</th>
+                  <th>Preview</th>
+                  <th>Edited</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...documents]
+                  .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "") || b.updatedAt.getTime() - a.updatedAt.getTime())
+                  .map((d) => (
+                    <tr key={d.id}>
+                      <td>
+                        <Link href={`/plans/${d.id}`} className="linklike" style={{ fontWeight: 600 }}>
+                          {d.title}
+                        </Link>{" "}
+                        {hasImage(d.content) && <span title="Contains images">🖼</span>}
+                      </td>
+                      <td>
+                        {d.date ? (
+                          <span className="mcal-chip plan">daily · {d.date}</span>
+                        ) : (
+                          <span className="mcal-chip muted">document</span>
+                        )}
+                      </td>
+                      <td style={{ whiteSpace: "normal", maxWidth: 420, color: "var(--muted)" }}>
+                        {excerpt(d.content, 90) || "Empty"}
+                      </td>
+                      <td style={{ color: "var(--muted)" }}>{fmtEdited(d.updatedAt)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {view === "calendar" && (
+      <>
       <div className="card" style={{ padding: 10, marginBottom: 14 }}>
         <h3 style={{ padding: "4px 8px 0" }}>
           {monthTitle(month)} <span className="sub">daily plan notes — click a day to write or open its plan</span>
@@ -157,6 +210,8 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
             </Link>
           ))}
         </div>
+      )}
+      </>
       )}
     </>
   );
