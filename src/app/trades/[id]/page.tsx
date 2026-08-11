@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { eq, asc } from "drizzle-orm";
 import { executions, trades as tradesTable } from "@/db/schema";
 import PriceChart from "@/components/charts/PriceChart";
+import DocEditor from "@/components/DocEditor";
 import { setTradeIdea, setTradeNote } from "@/app/actions";
 import { getAllIdeas } from "@/lib/metrics";
 import { getSettings, tzLabel } from "@/lib/settings";
@@ -176,6 +177,16 @@ export default async function TradeDetailPage({
             </div>
           </div>
         </div>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", margin: "0 0 10px 2px" }}>
+          Trade journal{" "}
+          <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 11.5 }}>
+            — full write-up: what you saw, why you entered, chart screenshots (paste with Ctrl+V)
+          </span>
+        </h3>
+        <DocEditor kind="trade" docId={trade.id} initialTitle="" initialContent={trade.journal} />
       </div>
     </>
   );

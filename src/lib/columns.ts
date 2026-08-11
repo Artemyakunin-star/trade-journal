@@ -9,6 +9,8 @@ export const TRADE_COLUMNS: { key: string; label: string }[] = [
   { key: "perContract", label: "P&L / contract" },
   { key: "mae", label: "MAE" },
   { key: "mfe", label: "MFE" },
+  { key: "keyLevel", label: "Key Level" },
+  { key: "ofConf", label: "OF confirmation" },
   { key: "stop", label: "SL (stop-loss)" },
   { key: "rr", label: "RR" },
   { key: "note", label: "Note" },

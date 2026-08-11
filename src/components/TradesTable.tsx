@@ -1,7 +1,7 @@
 // Server component: trades grouped by idea, with configurable columns,
 // inline "attach to idea" selects, manual stop-loss entry and RR.
 import Link from "next/link";
-import { setTradeIdea, setTradeStop } from "@/app/actions";
+import { setTradeField, setTradeIdea, setTradeStop } from "@/app/actions";
 import {
   fmtExcursion,
   fmtMoney,
@@ -78,7 +78,7 @@ export default function TradesTable({
 
   const colCount =
     1 +
-    ["instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "stop", "rr", "note"].filter(show).length +
+    ["instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "note"].filter(show).length +
     (showIdeaCol ? 1 : 0);
 
   const row = (t: TradeRow) => {
@@ -108,6 +108,40 @@ export default function TradesTable({
         )}
         {show("mae") && <td className="num">{fmtExcursion(t.maeTicks, unit, spec, 1)}</td>}
         {show("mfe") && <td className="num">{fmtExcursion(t.mfeTicks, unit, spec, 1)}</td>}
+        {show("keyLevel") && (
+          <td>
+            <form action={setTradeField} style={{ display: "flex", gap: 4 }}>
+              <input type="hidden" name="tradeId" value={t.id} />
+              <input type="hidden" name="field" value="keyLevel" />
+              <input
+                className="mini-select"
+                name="value"
+                defaultValue={t.keyLevel ?? ""}
+                placeholder="level"
+                title="Key level the trade was taken from (price or short text)"
+                style={{ width: 90 }}
+              />
+              <button className="btn ghost btn-sm" type="submit">set</button>
+            </form>
+          </td>
+        )}
+        {show("ofConf") && (
+          <td>
+            <form action={setTradeField} style={{ display: "flex", gap: 4 }}>
+              <input type="hidden" name="tradeId" value={t.id} />
+              <input type="hidden" name="field" value="ofConfirmation" />
+              <input
+                className="mini-select"
+                name="value"
+                defaultValue={t.ofConfirmation ?? ""}
+                placeholder="OF signal"
+                title="Order-flow confirmation (delta divergence, absorption, big prints…)"
+                style={{ width: 110 }}
+              />
+              <button className="btn ghost btn-sm" type="submit">set</button>
+            </form>
+          </td>
+        )}
         {show("stop") && (
           <td>
             <form action={setTradeStop} style={{ display: "flex", gap: 4 }}>
@@ -170,6 +204,8 @@ export default function TradesTable({
           {show("perContract") && <th className="num" title="Price move for ONE contract in the selected unit ($ / ticks / points). In $ it is gross, before commission">P&L/contract</th>}
           {show("mae") && <th className="num" title="Maximum Adverse Excursion — the worst the price went AGAINST you while the trade was open, per contract, in the selected unit. Computed from 5-sec bars">MAE</th>}
           {show("mfe") && <th className="num" title="Maximum Favorable Excursion — the best the price went IN YOUR FAVOR while open, per contract, in the selected unit. Computed from 5-sec bars">MFE</th>}
+          {show("keyLevel") && <th title="Key level the trade was taken from — a price or short text, entered manually">Key Level</th>}
+          {show("ofConf") && <th title="Order-flow confirmation you saw before entry (delta divergence, absorption, big prints…), entered manually">OF conf</th>}
           {show("stop") && <th title="Original stop-loss, entered manually. In $ mode enter the stop PRICE; in Ticks/Points mode enter the stop distance from avg entry">SL</th>}
           {show("rr") && <th className="num" title="Realized R-multiple: result divided by the initial risk (needs SL). +2R means you made twice your risk; −1R is a full stop">RR</th>}
           {show("note") && <th title="Free-text note for the trade">Note</th>}

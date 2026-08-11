@@ -43,6 +43,13 @@
       "when": 1786454845435,
       "tag": "0005_windy_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786468453990,
+      "tag": "0006_spicy_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

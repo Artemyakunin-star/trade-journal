@@ -16,6 +16,8 @@ export type TradeRow = {
   pnl: string | null;
   commission: string;
   stopPrice: string | null;
+  keyLevel: string | null;
+  ofConfirmation: string | null;
   note: string | null;
   maeTicks: number | null;
   mfeTicks: number | null;

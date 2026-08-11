@@ -141,6 +141,26 @@ export async function setTradeStop(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
+/** Autosave for the rich per-trade journal (Notion-like editor on trade page). */
+export async function saveTradeJournal(id: string, content: unknown) {
+  if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  await db.update(trades).set({ journal: content, updatedAt: new Date() }).where(eq(trades.id, id));
+  revalidatePath(`/trades/${id}`);
+}
+
+/** Inline single-field updates from the trades table (keyLevel / ofConfirmation). */
+export async function setTradeField(fd: FormData) {
+  const tradeId = str(fd, "tradeId");
+  const field = str(fd, "field");
+  const value = str(fd, "value") || null;
+  if (field !== "keyLevel" && field !== "ofConfirmation") return;
+  await db
+    .update(trades)
+    .set({ [field]: value, updatedAt: new Date() })
+    .where(eq(trades.id, tradeId));
+  revalidatePath("/", "layout");
+}
+
 export async function setTradeNote(fd: FormData) {
   const tradeId = str(fd, "tradeId");
   await db

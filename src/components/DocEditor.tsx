@@ -7,12 +7,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import { saveDoc } from "@/app/actions";
+import { saveDoc, saveTradeJournal } from "@/app/actions";
 
 type Props = {
   docId: string;
   initialTitle: string;
   initialContent: unknown | null;
+  /** "doc" (Plans document, has a title) or "trade" (per-trade journal). */
+  kind?: "doc" | "trade";
 };
 
 /** Downscale + recompress a pasted image so the DB stays small. */
@@ -30,10 +32,10 @@ async function compressImage(file: File | Blob): Promise<{ blob: Blob; mime: str
   return { blob, mime: "image/webp" };
 }
 
-async function uploadImage(file: File | Blob, docId: string): Promise<string | null> {
+async function uploadImage(file: File | Blob, docId: string | null): Promise<string | null> {
   try {
     const { blob, mime } = await compressImage(file);
-    const resp = await fetch(`/api/images?docId=${encodeURIComponent(docId)}`, {
+    const resp = await fetch(docId ? `/api/images?docId=${encodeURIComponent(docId)}` : "/api/images", {
       method: "POST",
       headers: { "Content-Type": mime },
       body: blob,
@@ -46,7 +48,7 @@ async function uploadImage(file: File | Blob, docId: string): Promise<string | n
   }
 }
 
-function insertImageFiles(editor: Editor, files: (File | Blob)[], docId: string) {
+function insertImageFiles(editor: Editor, files: (File | Blob)[], docId: string | null) {
   for (const f of files) {
     uploadImage(f, docId).then((url) => {
       if (url) editor.chain().focus().setImage({ src: url }).run();
@@ -54,7 +56,9 @@ function insertImageFiles(editor: Editor, files: (File | Blob)[], docId: string)
   }
 }
 
-export default function DocEditor({ docId, initialTitle, initialContent }: Props) {
+export default function DocEditor({ docId, initialTitle, initialContent, kind = "doc" }: Props) {
+  // Images are linked to a Plans doc for cleanup; trade journals store them unlinked.
+  const imageDocId = kind === "doc" ? docId : null;
   const [title, setTitle] = useState(initialTitle);
   const [status, setStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,7 +79,7 @@ export default function DocEditor({ docId, initialTitle, initialContent }: Props
         const images = [...items].filter((i) => i.type.startsWith("image/"));
         if (!images.length) return false;
         event.preventDefault();
-        if (editor) insertImageFiles(editor, images.map((i) => i.getAsFile()!).filter(Boolean), docId);
+        if (editor) insertImageFiles(editor, images.map((i) => i.getAsFile()!).filter(Boolean), imageDocId);
         return true;
       },
       handleDrop: (_view, event) => {
@@ -84,7 +88,7 @@ export default function DocEditor({ docId, initialTitle, initialContent }: Props
         const images = [...files].filter((f) => f.type.startsWith("image/"));
         if (!images.length) return false;
         event.preventDefault();
-        if (editor) insertImageFiles(editor, images, docId);
+        if (editor) insertImageFiles(editor, images, imageDocId);
         return true;
       },
     },
@@ -97,9 +101,10 @@ export default function DocEditor({ docId, initialTitle, initialContent }: Props
     // TipTap node attrs are null-prototype objects; React server-action
     // serialization silently drops them. Deep-clone to plain JSON first.
     const json = JSON.parse(JSON.stringify(editor.getJSON()));
-    await saveDoc(docId, title, json);
+    if (kind === "trade") await saveTradeJournal(docId, json);
+    else await saveDoc(docId, title, json);
     setStatus("saved");
-  }, [editor, docId, title]);
+  }, [editor, docId, title, kind]);
 
   const scheduleSave = useCallback(() => {
     setStatus("unsaved");
@@ -151,12 +156,14 @@ export default function DocEditor({ docId, initialTitle, initialContent }: Props
 
   return (
     <div className="doc-editor card">
-      <input
-        className="doc-title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Untitled"
-      />
+      {kind === "doc" && (
+        <input
+          className="doc-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Untitled"
+        />
+      )}
       <div className="doc-toolbar">
         {btn("H1", () => editor.chain().focus().toggleHeading({ level: 1 }).run(), editor.isActive("heading", { level: 1 }), "Heading 1 (type # + space)")}
         {btn("H2", () => editor.chain().focus().toggleHeading({ level: 2 }).run(), editor.isActive("heading", { level: 2 }), "Heading 2 (type ## + space)")}
@@ -185,7 +192,7 @@ export default function DocEditor({ docId, initialTitle, initialContent }: Props
         style={{ display: "none" }}
         onChange={(e) => {
           const files = e.target.files;
-          if (files?.length && editor) insertImageFiles(editor, [...files], docId);
+          if (files?.length && editor) insertImageFiles(editor, [...files], imageDocId);
           e.target.value = "";
         }}
       />
