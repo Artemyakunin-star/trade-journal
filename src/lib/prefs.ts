@@ -17,21 +17,7 @@ export const ACCOUNTS_COOKIE_NAME = ACCOUNTS_COOKIE;
 const COLS_COOKIE = "tj_trade_cols";
 export const COLS_COOKIE_NAME = COLS_COOKIE;
 
-export const TRADE_COLUMNS: { key: string; label: string }[] = [
-  { key: "instrument", label: "Instrument" },
-  { key: "dir", label: "Direction" },
-  { key: "qty", label: "Qty" },
-  { key: "entryPrice", label: "Avg entry" },
-  { key: "exitPrice", label: "Avg exit" },
-  { key: "netPnl", label: "Net P&L ($, position)" },
-  { key: "perContract", label: "P&L / contract" },
-  { key: "mae", label: "MAE" },
-  { key: "mfe", label: "MFE" },
-  { key: "stop", label: "Stop-loss" },
-  { key: "rr", label: "RR" },
-  { key: "note", label: "Note" },
-  { key: "idea", label: "Idea" },
-];
+import { TRADE_COLUMNS } from "@/lib/columns";
 
 /** Visible trade-table columns; null = all. */
 export async function getVisibleTradeColumns(): Promise<Set<string> | null> {

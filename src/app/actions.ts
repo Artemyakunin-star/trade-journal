@@ -4,7 +4,8 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ACCOUNTS_COOKIE_NAME, COLS_COOKIE_NAME, TRADE_COLUMNS } from "@/lib/prefs";
+import { ACCOUNTS_COOKIE_NAME, COLS_COOKIE_NAME } from "@/lib/prefs";
+import { TRADE_COLUMNS } from "@/lib/columns";
 import { db } from "@/db";
 import { ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
 import { eq } from "drizzle-orm";
