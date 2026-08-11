@@ -1,4 +1,4 @@
-import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
+import { drizzle as drizzlePg, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { drizzle as drizzleNeon } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import { Pool } from "pg";
@@ -24,5 +24,9 @@ function makePgDb() {
   return drizzlePg(pool, { schema });
 }
 
-export const db = isNeon ? drizzleNeon(neon(url), { schema }) : makePgDb();
+// Both drivers expose the same query API for everything this app uses
+// (no interactive transactions), so we present a single static type.
+export const db: NodePgDatabase<typeof schema> = isNeon
+  ? (drizzleNeon(neon(url), { schema }) as unknown as NodePgDatabase<typeof schema>)
+  : makePgDb();
 export * as dbSchema from "./schema";
