@@ -20,7 +20,7 @@ export default async function TradeDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; wbe?: string }>;
+  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; wbe?: string; wnobe?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -58,13 +58,15 @@ export default async function TradeDetailPage({
   const wStop = toTicks(sp.wstop);
   const wTarget = toTicks(sp.wtarget);
   const wBe = toTicks(sp.wbe);
+  const wNoBe = sp.wnobe === "1"; // ignore the actual (early/BE) exit, hold to stop/target
   let whatIf: { simPnl: number; exitReason: string } | null = null;
-  if ((wStop !== null || wTarget !== null || wBe !== null) && trade.pnl !== null) {
-    const tb = await loadTradeBars([trade as unknown as TradeRow]);
+  if ((wStop !== null || wTarget !== null || wBe !== null || wNoBe) && trade.pnl !== null) {
+    const tb = await loadTradeBars([trade as unknown as TradeRow], wNoBe ? 8 : 0);
     whatIf = simulateTrade(trade as unknown as TradeRow, tb.get(trade.id) ?? [], spec, {
       stopTicks: wStop,
       targetTicks: wTarget,
       beTriggerTicks: wBe,
+      ignoreActualExit: wNoBe,
       slippageTicks: 1,
     });
   }
@@ -209,14 +211,19 @@ export default async function TradeDetailPage({
               <input className="tj-input" name="wstop" type="number" min={0} step="any" placeholder={`stop, ${unitSuffix}`} defaultValue={sp.wstop ?? ""} style={{ width: 96 }} title={`Stop size in ${unitSuffix} per contract`} />
               <input className="tj-input" name="wtarget" type="number" min={0} step="any" placeholder={`target, ${unitSuffix}`} defaultValue={sp.wtarget ?? ""} style={{ width: 96 }} title={`Target size in ${unitSuffix} per contract`} />
               <input className="tj-input" name="wbe" type="number" min={0} step="any" placeholder={`BE after, ${unitSuffix}`} defaultValue={sp.wbe ?? ""} style={{ width: 106 }} title={`Move the stop to break-even after price goes this far in your favor (${unitSuffix} per contract). Empty = no break-even move`} />
+              <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)", cursor: "pointer" }}
+                title="Ignore your actual exit (e.g. an early break-even out) and keep the position running on the bars after it, until the stop/target hits or the session data ends">
+                <input type="checkbox" name="wnobe" value="1" defaultChecked={wNoBe} style={{ accentColor: "var(--s1)" }} />
+                No BE — hold past my exit
+              </label>
               <button className="btn btn-sm" type="submit">Try</button>
-              {(sp.wstop || sp.wtarget || sp.wbe) && (
+              {(sp.wstop || sp.wtarget || sp.wbe || sp.wnobe) && (
                 <Link href={`/trades/${trade.id}?unit=${unit}`} className="btn ghost btn-sm">Reset</Link>
               )}
             </form>
             {whatIf && (
               <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
-                Would exit by <b>{whatIf.exitReason === "asTraded" ? "your actual exit (nothing hit)" : whatIf.exitReason === "breakeven" ? "break-even stop" : whatIf.exitReason}</b>:{" "}
+                Would exit by <b>{whatIf.exitReason === "asTraded" ? "your actual exit (nothing hit)" : whatIf.exitReason === "breakeven" ? "break-even stop" : whatIf.exitReason === "sessionEnd" ? "end of session data (still running)" : whatIf.exitReason}</b>:{" "}
                 <b style={{ color: whatIf.simPnl > 0 ? "var(--pos)" : whatIf.simPnl < 0 ? "var(--neg)" : "var(--ink)" }}>
                   {fmtMoney2(whatIf.simPnl)}
                 </b>{" "}

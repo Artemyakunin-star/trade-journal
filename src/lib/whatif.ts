@@ -12,18 +12,21 @@ export type SimParams = {
   slippageTicks: number; // extra ticks lost on stop fills
   /** Move the stop to break-even after price goes this many ticks in favor; null = no BE move. */
   beTriggerTicks?: number | null;
+  /** "No BE" mode: ignore the actual exit (e.g. your real break-even out) and
+   *  keep the position running on bars PAST it until stop/target/session end. */
+  ignoreActualExit?: boolean;
 };
 
 export type SimResult = {
   tradeId: string;
   simulated: boolean; // false = no bars coverage, actual result used
-  exitReason: "stop" | "target" | "breakeven" | "asTraded";
+  exitReason: "stop" | "target" | "breakeven" | "sessionEnd" | "asTraded";
   actualPnl: number; // net, USD (as recorded)
   simPnl: number; // net, USD
 };
 
 type Spec = { tickSize: number; tickValue: number };
-type Bar = { time: Date; high: number; low: number };
+type Bar = { time: Date; high: number; low: number; close: number };
 
 export function simulateTrade(
   t: TradeRow,
@@ -45,16 +48,22 @@ export function simulateTrade(
   };
 
   const beTrigger = p.beTriggerTicks ?? null;
-  if (!tradeBars.length || (p.stopTicks === null && p.targetTicks === null && beTrigger === null)) {
+  const ignoreExit = p.ignoreActualExit ?? false;
+  if (!tradeBars.length || (p.stopTicks === null && p.targetTicks === null && beTrigger === null && !ignoreExit)) {
     return { ...base, exitReason: "asTraded", simPnl: actualPnl };
   }
+
+  // Without "no BE" mode the replay stops at the actual exit; with it, we run
+  // over every bar the caller loaded (which may extend past the exit).
+  const cutoff = ignoreExit || !t.exitTime ? null : t.exitTime.getTime();
+  const activeBars = cutoff === null ? tradeBars : tradeBars.filter((b) => b.time.getTime() <= cutoff);
 
   let stopPrice = p.stopTicks === null ? null : entry - dir * p.stopTicks * spec.tickSize;
   const targetPrice = p.targetTicks === null ? null : entry + dir * p.targetTicks * spec.tickSize;
   const beLevel = beTrigger === null ? null : entry + dir * beTrigger * spec.tickSize;
   let beArmed = false;
 
-  for (const b of tradeBars) {
+  for (const b of activeBars) {
     const stopHit =
       stopPrice !== null && (dir === 1 ? b.low <= stopPrice : b.high >= stopPrice);
     const targetHit =
@@ -79,13 +88,21 @@ export function simulateTrade(
     }
   }
 
-  // Neither hit within available bars -> exit as actually traded.
+  // Neither hit within available bars.
+  if (ignoreExit && activeBars.length) {
+    // "No BE" hold ran to the end of available data -> exit at the last close.
+    const last = activeBars[activeBars.length - 1];
+    const gross = (last.close - entry) * dir * qty * pv;
+    return { ...base, exitReason: "sessionEnd", simPnl: gross - commission };
+  }
   return { ...base, exitReason: "asTraded", simPnl: actualPnl };
 }
 
-/** Bars for each trade's window (entry..exit, or entry..+4h for open trades). */
+/** Bars for each trade's window (entry..exit, or entry..+4h for open trades).
+ *  extendHours > 0 loads bars past the exit too — needed for "no BE" holds. */
 export async function loadTradeBars(
   trades: TradeRow[],
+  extendHours = 0,
 ): Promise<Map<string, Bar[]>> {
   const out = new Map<string, Bar[]>();
   const instruments = [...new Set(trades.map((t) => t.instrument))];
@@ -96,16 +113,18 @@ export async function loadTradeBars(
     const its = trades.filter((t) => t.instrument === inst);
     const from = new Date(Math.min(...its.map((t) => t.entryTime.getTime())));
     const to = new Date(
-      Math.max(...its.map((t) => (t.exitTime ?? new Date(t.entryTime.getTime() + 4 * 3600_000)).getTime())),
+      Math.max(...its.map((t) => (t.exitTime ?? new Date(t.entryTime.getTime() + 4 * 3600_000)).getTime())) +
+        extendHours * 3600_000,
     );
     const rows = await db
-      .select({ time: bars.time, high: bars.high, low: bars.low })
+      .select({ time: bars.time, high: bars.high, low: bars.low, close: bars.close })
       .from(bars)
       .where(and(eq(bars.instrument, inst), eq(bars.timeframe, "S5"), gte(bars.time, from), lte(bars.time, to)))
       .orderBy(asc(bars.time));
-    const parsed = rows.map((r) => ({ time: r.time, high: Number(r.high), low: Number(r.low) }));
+    const parsed = rows.map((r) => ({ time: r.time, high: Number(r.high), low: Number(r.low), close: Number(r.close) }));
     for (const t of its) {
-      const end = (t.exitTime ?? new Date(t.entryTime.getTime() + 4 * 3600_000)).getTime();
+      const end =
+        (t.exitTime ?? new Date(t.entryTime.getTime() + 4 * 3600_000)).getTime() + extendHours * 3600_000;
       const start = t.entryTime.getTime();
       out.set(
         t.id,
