@@ -60,8 +60,8 @@ export default async function AnalyticsPage({
   trades = filterTradesByRange(trades, range, todayKyiv, tz);
   if (sp.instrument) trades = trades.filter((t) => t.instrument === sp.instrument);
 
-  const tradeBars = await loadTradeBars(trades);
-  const params = { stopTicks, targetTicks, slippageTicks };
+  const tradeBars = await loadTradeBars(trades, 8); // extend past exits: sims are not cut by early real-life outs
+  const params = { stopTicks, targetTicks, slippageTicks, ignoreActualExit: stopTicks !== null || targetTicks !== null };
   const results = trades.map((t) =>
     simulateTrade(t, tradeBars.get(t.id) ?? [], specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 }, params),
   );
@@ -81,11 +81,13 @@ export default async function AnalyticsPage({
     stopTicks: v,
     targetTicks,
     slippageTicks,
+    ignoreActualExit: true,
   })).map((s) => ({ lbl: String(s.value), pnl: s.pnl }));
   const targetSweep = sweep(trades, tradeBars, specs, [5, 10, 15, 20, 25, 30, 40, 50, 60, 80], (v) => ({
     stopTicks,
     targetTicks: v,
     slippageTicks,
+    ignoreActualExit: true,
   })).map((s) => ({ lbl: String(s.value), pnl: s.pnl }));
 
   // MAE scatter: x = MAE ticks, y = per-contract result in ticks.
@@ -141,7 +143,7 @@ export default async function AnalyticsPage({
         <h3>
           What-if simulator{" "}
           <span className="sub">
-            replay every trade on real 5-sec bars with virtual exits · ties inside a bar count as stop (conservative)
+            replay every trade on real 5-sec bars with virtual exits, running PAST your actual exits · ties inside a bar count as stop
           </span>
         </h3>
         <form className="filters" method="get" style={{ marginBottom: 4 }}>
