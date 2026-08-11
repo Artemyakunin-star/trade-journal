@@ -217,6 +217,20 @@ export async function createDoc() {
   redirect(`/plans/${doc.id}`);
 }
 
+/** Open (or create) the daily plan note for a calendar day. */
+export async function openDailyDoc(fd: FormData) {
+  const date = str(fd, "date");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  const existing = await db.query.docs.findFirst({ where: eq(docs.date, date) });
+  if (existing) redirect(`/plans/${existing.id}`);
+  const title = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC", weekday: "short", month: "short", day: "numeric",
+  }).format(new Date(date + "T12:00:00Z"));
+  const [doc] = await db.insert(docs).values({ title: `Plan · ${title}`, date }).returning({ id: docs.id });
+  revalidatePath("/plans");
+  redirect(`/plans/${doc.id}`);
+}
+
 type TipTapNode = { type?: string; attrs?: { src?: string | null }; content?: TipTapNode[] };
 
 /** Drop image nodes that lost their src (failed uploads) so they don't pile up. */

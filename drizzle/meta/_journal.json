@@ -36,6 +36,13 @@
       "when": 1786453942148,
       "tag": "0004_sparkling_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786454845435,
+      "tag": "0005_windy_vindicator",
+      "breakpoints": true
     }
   ]
 }

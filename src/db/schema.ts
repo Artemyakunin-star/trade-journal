@@ -87,14 +87,20 @@ export const settings = pgTable("settings", {
 
 // ---------- free-form documents (the "Plans" section) ----------
 
-/** Notion-like document: rich text (TipTap JSON) with embedded image refs. */
-export const docs = pgTable("docs", {
-  id: text("id").primaryKey().$defaultFn(createId),
-  title: text("title").notNull().default("Untitled"),
-  content: jsonb("content"), // TipTap document JSON
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/** Notion-like document: rich text (TipTap JSON) with embedded image refs.
+ *  date != null -> the daily plan note shown on the Plans calendar. */
+export const docs = pgTable(
+  "docs",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    title: text("title").notNull().default("Untitled"),
+    date: date("date", { mode: "string" }), // daily note binding (one per day)
+    content: jsonb("content"), // TipTap document JSON
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("docs_date_uq").on(t.date)],
+);
 
 /** Pasted screenshots, stored inline (base64) and served via /api/images/[id]. */
 export const docImages = pgTable("doc_images", {
