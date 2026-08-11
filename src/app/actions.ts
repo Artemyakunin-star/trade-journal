@@ -6,9 +6,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ACCOUNTS_COOKIE_NAME } from "@/lib/prefs";
 import { db } from "@/db";
-import { ideas, plans, scenarios, trades } from "@/db/schema";
+import { ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { importCsvFile, type ImportResult } from "@/lib/import";
+import { importCsvFile, rebuildAll, type ImportResult } from "@/lib/import";
+import { TIMEZONES } from "@/lib/settings";
 
 // ---------- ideas ----------
 
@@ -181,6 +182,52 @@ export async function setAccountFilter(fd: FormData) {
   if (all) jar.delete(ACCOUNTS_COOKIE_NAME);
   else jar.set(ACCOUNTS_COOKIE_NAME, selected.join(","), { maxAge: 60 * 60 * 24 * 365, path: "/" });
   revalidatePath("/", "layout");
+}
+
+// ---------- settings ----------
+
+async function setSetting(key: string, value: unknown) {
+  await db
+    .insert(settings)
+    .values({ key, value })
+    .onConflictDoUpdate({ target: settings.key, set: { value } });
+}
+
+export async function saveDisplaySettings(fd: FormData) {
+  const tz = str(fd, "timezone");
+  const theme = str(fd, "theme") === "light" ? "light" : "dark";
+  if (TIMEZONES.includes(tz)) await setSetting("timezone", tz);
+  await setSetting("theme", theme);
+  revalidatePath("/", "layout");
+}
+
+/** Update one instrument's specs; commissions are re-applied to all trades. */
+export async function saveInstrument(fd: FormData) {
+  const symbol = str(fd, "symbol");
+  const tickSize = Number(str(fd, "tickSize"));
+  const tickValue = Number(str(fd, "tickValue"));
+  const commission = Number(str(fd, "commission"));
+  if (!symbol || !(tickSize > 0) || !(tickValue > 0) || commission < 0 || Number.isNaN(commission)) return;
+  await db
+    .update(instruments)
+    .set({ tickSize: String(tickSize), tickValue: String(tickValue), commission: String(commission) })
+    .where(eq(instruments.symbol, symbol));
+  await rebuildAll(); // re-derive PnL net of the new commission
+  revalidatePath("/", "layout");
+}
+
+export async function addInstrument(fd: FormData) {
+  const symbol = str(fd, "symbol").toUpperCase();
+  const name = str(fd, "name") || symbol;
+  const tickSize = Number(str(fd, "tickSize"));
+  const tickValue = Number(str(fd, "tickValue"));
+  const commission = Number(str(fd, "commission")) || 0;
+  if (!/^[A-Z0-9]{1,8}$/.test(symbol) || !(tickSize > 0) || !(tickValue > 0)) return;
+  await db
+    .insert(instruments)
+    .values({ symbol, name, tickSize: String(tickSize), tickValue: String(tickValue), commission: String(commission) })
+    .onConflictDoNothing();
+  revalidatePath("/settings");
 }
 
 // ---------- CSV import ----------

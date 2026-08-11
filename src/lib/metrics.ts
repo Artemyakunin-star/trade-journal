@@ -88,10 +88,10 @@ export function ideaPnl(i: IdeaRow): number {
 }
 
 /** Group trades into Kyiv calendar-day aggregates. */
-export function dayAggregates(trades: TradeRow[]): DayAgg[] {
+export function dayAggregates(trades: TradeRow[], tz?: string): DayAgg[] {
   const map = new Map<string, DayAgg & { ideaIds: Set<string> }>();
   for (const t of trades) {
-    const date = kyivDateOf(t.entryTime);
+    const date = kyivDateOf(t.entryTime, tz);
     let d = map.get(date);
     if (!d) {
       d = { date, pnl: 0, trades: 0, ideas: 0, rogue: 0, ideaIds: new Set() };
@@ -118,15 +118,15 @@ export function rangeStart(range: RangeKey, todayKyiv: string): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-export function filterTradesByRange(trades: TradeRow[], range: RangeKey, todayKyiv: string): TradeRow[] {
+export function filterTradesByRange(trades: TradeRow[], range: RangeKey, todayKyiv: string, tz?: string): TradeRow[] {
   const start = rangeStart(range, todayKyiv);
   if (!start) return trades;
-  return trades.filter((t) => kyivDateOf(t.entryTime) >= start);
+  return trades.filter((t) => kyivDateOf(t.entryTime, tz) >= start);
 }
 
 export type Tile = { lbl: string; val: string; cls?: "pos" | "neg" | ""; delta?: string };
 
-export function tradeModeTiles(trades: TradeRow[], rangeLabel: string): Tile[] {
+export function tradeModeTiles(trades: TradeRow[], rangeLabel: string, tz?: string): Tile[] {
   const closed = trades.filter((t) => t.pnl !== null);
   const net = closed.reduce((a, t) => a + tradePnl(t), 0);
   const wins = closed.filter((t) => tradePnl(t) > 0);
@@ -134,7 +134,7 @@ export function tradeModeTiles(trades: TradeRow[], rangeLabel: string): Tile[] {
   const grossWin = wins.reduce((a, t) => a + tradePnl(t), 0);
   const grossLoss = Math.abs(losses.reduce((a, t) => a + tradePnl(t), 0));
   const pf = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
-  const days = new Set(closed.map((t) => kyivDateOf(t.entryTime))).size;
+  const days = new Set(closed.map((t) => kyivDateOf(t.entryTime, tz))).size;
   const rogue = closed.filter((t) => !t.ideaId);
   const roguePnl = rogue.reduce((a, t) => a + tradePnl(t), 0);
 
@@ -160,7 +160,7 @@ export function tradeModeTiles(trades: TradeRow[], rangeLabel: string): Tile[] {
   ];
 }
 
-export function ideaModeTiles(ideas: IdeaRow[], allTrades: TradeRow[], rangeLabel: string): Tile[] {
+export function ideaModeTiles(ideas: IdeaRow[], allTrades: TradeRow[], rangeLabel: string, tz?: string): Tile[] {
   const withPnl = ideas.map((i) => ({ i, pnl: ideaPnl(i) }));
   const net = allTrades.filter((t) => t.pnl !== null).reduce((a, t) => a + tradePnl(t), 0);
   const wins = withPnl.filter((x) => x.pnl > 0);
@@ -170,7 +170,7 @@ export function ideaModeTiles(ideas: IdeaRow[], allTrades: TradeRow[], rangeLabe
   const revenge = ideas.filter((i) => i.trigger === "REVENGE" || i.trigger === "TILT");
   const revengePnl = revenge.reduce((a, i) => a + ideaPnl(i), 0);
   const entries = ideas.reduce((a, i) => a + i.trades.length, 0);
-  const days = new Set(allTrades.map((t) => kyivDateOf(t.entryTime))).size;
+  const days = new Set(allTrades.map((t) => kyivDateOf(t.entryTime, tz))).size;
 
   const fmt = (v: number) =>
     (v > 0 ? "+$" : v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -185,11 +185,11 @@ export function ideaModeTiles(ideas: IdeaRow[], allTrades: TradeRow[], rangeLabe
 }
 
 /** P&L by Kyiv hour buckets. */
-export function pnlByHour(trades: TradeRow[]): { lbl: string; pnl: number }[] {
+export function pnlByHour(trades: TradeRow[], tz?: string): { lbl: string; pnl: number }[] {
   const map = new Map<number, number>();
   for (const t of trades) {
     if (t.pnl === null) continue;
-    const h = kyivHourOf(t.entryTime);
+    const h = kyivHourOf(t.entryTime, tz);
     map.set(h, (map.get(h) ?? 0) + tradePnl(t));
   }
   return [...map.entries()]

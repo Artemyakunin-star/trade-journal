@@ -25,6 +25,27 @@
   font-size: 14px;
 }
 
+/* Light scheme — same variable names, flipped values. */
+html[data-theme="light"] {
+  color-scheme: light;
+  --page: #f4f4f2;
+  --surface: #ffffff;
+  --surface-2: #ececea;
+  --ink: #16160f;
+  --ink-2: #3f3e37;
+  --muted: #77766e;
+  --grid: #e0e0dc;
+  --baseline: #c9c9c4;
+  --border: rgba(0, 0, 0, 0.12);
+  --good: #0a8a0a;
+  --warn: #b07d00;
+  --crit: #c22f2f;
+  --pos: #0a8a0a;
+  --neg: #c22f2f;
+}
+html[data-theme="light"] .tooltip { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); }
+html[data-theme="light"] .acct-menu { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); }
+
 * { box-sizing: border-box; }
 
 body {

@@ -74,6 +74,15 @@ export const instruments = pgTable("instruments", {
   tickSize: numeric("tick_size", { precision: 10, scale: 6 }).notNull(), // 0.25 for ES/NQ
   tickValue: numeric("tick_value", { precision: 10, scale: 2 }).notNull(), // $ per tick: NQ 5.00, ES 12.50
   currency: text("currency").notNull().default("USD"),
+  /** Commission per contract per side, USD. Applied when the exporter CSV has
+   *  Commission=0 (sim/eval accounts don't report it). */
+  commission: numeric("commission", { precision: 10, scale: 4 }).notNull().default("0"),
+});
+
+/** Single-user app settings: key -> arbitrary JSON value. */
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(), // "timezone", "theme"
+  value: jsonb("value").notNull(),
 });
 
 // ---------- level 1: Plan (the day) ----------

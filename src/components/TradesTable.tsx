@@ -20,6 +20,7 @@ export default function TradesTable({
   showAttach = true,
   unit = "usd",
   tickSizes = {},
+  tz,
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
@@ -27,6 +28,7 @@ export default function TradesTable({
   showAttach?: boolean;
   unit?: PnlUnit;
   tickSizes?: Record<string, number>;
+  tz?: string;
 }) {
   const byIdea = new Map<string, TradeRow[]>();
   const rogue: TradeRow[] = [];
@@ -42,7 +44,7 @@ export default function TradesTable({
     const res = fmtTradeResult(t, unit, tickSizes[t.instrument] ?? 0.25);
     return (
       <tr key={t.id} className="in-group">
-        <td>{fmtTimeKyiv(t.entryTime)}</td>
+        <td>{fmtTimeKyiv(t.entryTime, true, tz)}</td>
         <td>{t.instrument}</td>
         <td>{t.direction === "LONG" ? "Long" : "Short"}</td>
         <td className="num">{t.quantity}</td>
@@ -81,7 +83,7 @@ export default function TradesTable({
     <table className="tj">
       <thead>
         <tr>
-          <th>Entry (Kyiv)</th>
+          <th>Entry</th>
           <th>Instr</th>
           <th>Dir</th>
           <th className="num">Qty</th>

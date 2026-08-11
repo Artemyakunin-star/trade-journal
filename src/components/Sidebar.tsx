@@ -9,9 +9,10 @@ const ITEMS = [
   { href: "/calendar", ico: "▤", label: "Calendar" },
   { href: "/day", ico: "☀", label: "Day" },
   { href: "/import", ico: "⇪", label: "Import" },
+  { href: "/settings", ico: "⚙", label: "Settings" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ footer }: { footer?: string }) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
@@ -28,7 +29,7 @@ export default function Sidebar() {
           {it.label}
         </Link>
       ))}
-      <div className="foot">Times shown in Europe/Kyiv. NinjaTrader CSVs imported as Chicago time.</div>
+      <div className="foot">{footer ?? "NinjaTrader CSVs imported as Chicago time."}</div>
     </aside>
   );
 }

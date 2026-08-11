@@ -29,11 +29,11 @@ export function fmtPrice(v: number | string | null | undefined): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** "16:42:07" in Kyiv time. */
-export function fmtTimeKyiv(d: Date | null | undefined, withSeconds = true): string {
+/** "16:42:07" in the given display timezone (defaults to Kyiv). */
+export function fmtTimeKyiv(d: Date | null | undefined, withSeconds = true, tz: string = KYIV): string {
   if (!d) return "—";
   return new Intl.DateTimeFormat("en-GB", {
-    timeZone: KYIV,
+    timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
     ...(withSeconds ? { second: "2-digit" } : {}),
@@ -58,20 +58,20 @@ export function fmtDateLong(iso: string): string {
   }).format(new Date(iso + "T12:00:00Z"));
 }
 
-/** ISO calendar date (YYYY-MM-DD) of a timestamp, in Kyiv. */
-export function kyivDateOf(d: Date): string {
+/** ISO calendar date (YYYY-MM-DD) of a timestamp in the display timezone. */
+export function kyivDateOf(d: Date, tz: string = KYIV): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: KYIV,
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(d);
 }
 
-/** Kyiv hour (0-23) of a timestamp. */
-export function kyivHourOf(d: Date): number {
+/** Hour (0-23) of a timestamp in the display timezone. */
+export function kyivHourOf(d: Date, tz: string = KYIV): number {
   return Number(
-    new Intl.DateTimeFormat("en-GB", { timeZone: KYIV, hour: "2-digit", hour12: false }).format(d),
+    new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hour12: false }).format(d),
   );
 }
 

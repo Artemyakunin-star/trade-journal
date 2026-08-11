@@ -15,6 +15,13 @@
       "when": 1786434118162,
       "tag": "0001_short_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786435658048,
+      "tag": "0002_nosy_maximus",
+      "breakpoints": true
     }
   ]
 }

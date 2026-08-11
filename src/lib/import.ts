@@ -130,6 +130,7 @@ export type BuiltTrade = {
   avgExitPrice: number | null;
   pnl: number | null;
   commission: number;
+  filledQty: number; // total contracts filled (entries + exits) — commission basis
   execIds: string[]; // ExecutionId of every fill in the round trip
 };
 
@@ -181,6 +182,7 @@ export function buildTrades(rows: ExecRow[], pointValues: PointValues): BuiltTra
         avgExitPrice: avgExit,
         pnl: gross === null ? null : gross - cur.commission,
         commission: cur.commission,
+        filledQty: cur.entryQty + cur.exitQty,
         execIds: cur.execIds,
       });
       cur = null;
@@ -258,6 +260,7 @@ export function buildTrades(rows: ExecRow[], pointValues: PointValues): BuiltTra
         avgExitPrice: null,
         pnl: null,
         commission: c.commission,
+        filledQty: c.entryQty + c.exitQty,
         execIds: c.execIds,
       });
     }
@@ -454,7 +457,11 @@ async function importBars(filename: string, text: string): Promise<ImportResult>
 async function rebuildTradesFor(account: string, symbols: string[]): Promise<number> {
   const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
   const pointValues: PointValues = {};
-  for (const i of instRows) pointValues[i.symbol] = Number(i.tickValue) / Number(i.tickSize);
+  const perSideCommission: Record<string, number> = {};
+  for (const i of instRows) {
+    pointValues[i.symbol] = Number(i.tickValue) / Number(i.tickSize);
+    perSideCommission[i.symbol] = Number(i.commission ?? 0);
+  }
 
   const execRows = await db
     .select()
@@ -504,6 +511,12 @@ async function rebuildTradesFor(account: string, symbols: string[]): Promise<num
 
   let count = 0;
   for (const b of built) {
+    // Sim/eval exports carry Commission=0 — fall back to the per-contract
+    // commission configured in Settings.
+    if (b.commission === 0 && (perSideCommission[b.symbol] ?? 0) > 0) {
+      b.commission = perSideCommission[b.symbol] * b.filledQty;
+      if (b.pnl !== null) b.pnl -= b.commission;
+    }
     const prev = oldByFirstExec.get(b.execIds[0]);
     const [ins] = await db
       .insert(trades)
@@ -529,6 +542,24 @@ async function rebuildTradesFor(account: string, symbols: string[]): Promise<num
     count++;
   }
   return count;
+}
+
+/** Rebuild all trades from stored executions (e.g. after commission changes). */
+export async function rebuildAll(): Promise<number> {
+  const pairs = await db
+    .selectDistinct({ account: executions.account, instrument: executions.instrument })
+    .from(executions);
+  const byAccount = new Map<string, string[]>();
+  for (const p of pairs) {
+    if (!byAccount.has(p.account)) byAccount.set(p.account, []);
+    byAccount.get(p.account)!.push(p.instrument);
+  }
+  let total = 0;
+  for (const [account, symbols] of byAccount) {
+    total += await rebuildTradesFor(account, symbols);
+    await computeMaeMfeFor(account, symbols);
+  }
+  return total;
 }
 
 /** Compute MAE/MFE for closed trades that don't have it yet (bars permitting). */

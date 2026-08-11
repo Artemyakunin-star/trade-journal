@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { distinctAccounts, filterByAccounts, getAllIdeas, getAllTrades } from "@/lib/metrics";
 import { kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -16,17 +17,19 @@ export default async function TradesPage({
   searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; unit?: string }>;
 }) {
   const sp = await searchParams;
-  const [allTrades, allIdeas, instruments, selectedAccounts] = await Promise.all([
+  const [allTrades, allIdeas, instruments, selectedAccounts, prefs] = await Promise.all([
     getAllTrades(),
     getAllIdeas(),
     db.query.instruments.findMany(),
     getSelectedAccounts(),
+    getSettings(),
   ]);
+  const tz = prefs.timezone;
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "usd") as PnlUnit;
   const tickSizes = Object.fromEntries(instruments.map((i) => [i.symbol, Number(i.tickSize)]));
 
   let trades = filterByAccounts(allTrades, selectedAccounts);
-  if (sp.date) trades = trades.filter((t) => kyivDateOf(t.entryTime) === sp.date);
+  if (sp.date) trades = trades.filter((t) => kyivDateOf(t.entryTime, tz) === sp.date);
   if (sp.instrument) trades = trades.filter((t) => t.instrument === sp.instrument);
   if (sp.dir) trades = trades.filter((t) => t.direction === sp.dir);
   if (sp.kind === "rogue") trades = trades.filter((t) => !t.ideaId);
@@ -103,6 +106,7 @@ export default async function TradesPage({
             allIdeasForSelect={allIdeas.map((i) => ({ id: i.id, title: i.title }))}
             unit={unit}
             tickSizes={tickSizes}
+            tz={tz}
           />
         </div>
         <div className="section-note">

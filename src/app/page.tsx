@@ -23,6 +23,7 @@ import {
 } from "@/lib/metrics";
 import { fmtDateShort, kyivDateOf } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
+import { getSettings, tzLabel } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -43,19 +44,21 @@ export default async function Dashboard({
   const range = (RANGES.find((r) => r.key === sp.range)?.key ?? "30d") as RangeKey;
   const mode = sp.mode === "ideas" ? "ideas" : "trades";
 
-  const [rawTrades, rawIdeas, selectedAccounts] = await Promise.all([
+  const [rawTrades, rawIdeas, selectedAccounts, prefs] = await Promise.all([
     getAllTrades(),
     getAllIdeas(),
     getSelectedAccounts(),
+    getSettings(),
   ]);
+  const tz = prefs.timezone;
   const allTrades = filterByAccounts(rawTrades, selectedAccounts);
   const allIdeas = filterIdeasByAccounts(rawIdeas, selectedAccounts);
-  const todayKyiv = kyivDateOf(new Date());
-  const trades = filterTradesByRange(allTrades, range, todayKyiv);
+  const todayKyiv = kyivDateOf(new Date(), tz);
+  const trades = filterTradesByRange(allTrades, range, todayKyiv, tz);
   const tradeIds = new Set(trades.map((t) => t.id));
   const ideas = allIdeas.filter((i) => i.trades.some((t) => tradeIds.has(t.id)));
 
-  const days = dayAggregates(trades);
+  const days = dayAggregates(trades, tz);
   let cum = 0;
   const equityPts = days.map((d) => {
     cum += d.pnl;
@@ -63,10 +66,10 @@ export default async function Dashboard({
   });
 
   const rangeLabel = RANGES.find((r) => r.key === range)!.label.toLowerCase();
-  const tiles = mode === "trades" ? tradeModeTiles(trades, rangeLabel) : ideaModeTiles(ideas, trades, rangeLabel);
+  const tiles = mode === "trades" ? tradeModeTiles(trades, rangeLabel, tz) : ideaModeTiles(ideas, trades, rangeLabel, tz);
 
   const lastDay = days.length ? days[days.length - 1].date : null;
-  const recentTrades = lastDay ? trades.filter((t) => kyivDateOf(t.entryTime) === lastDay) : [];
+  const recentTrades = lastDay ? trades.filter((t) => kyivDateOf(t.entryTime, tz) === lastDay) : [];
   const recentIdeaIds = new Set(recentTrades.map((t) => t.ideaId).filter(Boolean));
   const recentIdeas = allIdeas.filter((i) => recentIdeaIds.has(i.id));
 
@@ -112,7 +115,7 @@ export default async function Dashboard({
           <h3>
             Daily P&L <span className="sub">recent weeks</span>
           </h3>
-          <CalendarGrid days={dayAggregates(allTrades).slice(-15)} mini />
+          <CalendarGrid days={dayAggregates(allTrades, tz).slice(-15)} mini />
           <div className="section-note">
             <Link className="linklike" href="/calendar">Full calendar →</Link>
           </div>
@@ -126,9 +129,9 @@ export default async function Dashboard({
         </div>
         <div className="card">
           <h3>
-            P&L by hour <span className="sub">Kyiv time</span>
+            P&L by hour <span className="sub">{tzLabel(tz)}</span>
           </h3>
-          <BarsChart bars={pnlByHour(trades)} />
+          <BarsChart bars={pnlByHour(trades, tz)} />
         </div>
       </div>
 

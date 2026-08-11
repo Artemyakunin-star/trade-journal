@@ -4,13 +4,14 @@ import AccountFilter from "@/components/AccountFilter";
 import { dayAggregates, distinctAccounts, filterByAccounts, getAllTrades } from "@/lib/metrics";
 import { fmtDateShort } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function CalendarPage() {
-  const [rawTrades, selectedAccounts] = await Promise.all([getAllTrades(), getSelectedAccounts()]);
+  const [rawTrades, selectedAccounts, prefs] = await Promise.all([getAllTrades(), getSelectedAccounts(), getSettings()]);
   const trades = filterByAccounts(rawTrades, selectedAccounts);
-  const days = dayAggregates(trades);
+  const days = dayAggregates(trades, prefs.timezone);
   const title = days.length
     ? `${fmtDateShort(days[0].date)} – ${fmtDateShort(days[days.length - 1].date)}`
     : "No trading days yet";

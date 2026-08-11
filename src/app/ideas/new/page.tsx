@@ -2,6 +2,7 @@ import IdeaForm from "@/components/IdeaForm";
 import { db } from "@/db";
 import { getAllTrades } from "@/lib/metrics";
 import { kyivDateOf } from "@/lib/format";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +13,9 @@ export default async function NewIdeaPage({
 }) {
   const sp = await searchParams;
   const instruments = await db.query.instruments.findMany();
-  const allTrades = await getAllTrades();
+  const [allTrades, prefs] = await Promise.all([getAllTrades(), getSettings()]);
   const date = sp.date;
-  const rogue = allTrades.filter((t) => !t.ideaId && (!date || kyivDateOf(t.entryTime) === date));
+  const rogue = allTrades.filter((t) => !t.ideaId && (!date || kyivDateOf(t.entryTime, prefs.timezone) === date));
 
   return (
     <>

@@ -118,7 +118,19 @@ function exitLabel(m: Marker, unit: Unit): string {
   }
 }
 
-export default function PriceChart({ instruments, date, accounts }: { instruments: string[]; date: string; accounts?: string[] }) {
+export default function PriceChart({
+  instruments,
+  date,
+  accounts,
+  tz,
+  theme = "dark",
+}: {
+  instruments: string[];
+  date: string;
+  accounts?: string[];
+  tz?: string;
+  theme?: "dark" | "light";
+}) {
   const [instrument, setInstrument] = useState(instruments[0] ?? "");
   const [mode, setMode] = useState<"time" | "tick">("time");
   const [timeTf, setTimeTf] = useState(30);
@@ -150,12 +162,21 @@ export default function PriceChart({ instruments, date, accounts }: { instrument
     const el = containerRef.current;
     if (!el || !data || data.bars.length === 0) return;
 
+    const light = theme === "light";
     const chart = createChart(el, {
       height: 420,
-      layout: { background: { color: "transparent" }, textColor: "#898781", fontSize: 11, attributionLogo: true },
-      grid: { vertLines: { color: "#2c2c2a" }, horzLines: { color: "#2c2c2a" } },
-      rightPriceScale: { borderColor: "#383835" },
-      timeScale: { borderColor: "#383835", timeVisible: true, secondsVisible: mode === "time" && timeTf < 30 },
+      layout: {
+        background: { color: "transparent" },
+        textColor: light ? "#77766e" : "#898781",
+        fontSize: 11,
+        attributionLogo: true,
+      },
+      grid: {
+        vertLines: { color: light ? "#e0e0dc" : "#2c2c2a" },
+        horzLines: { color: light ? "#e0e0dc" : "#2c2c2a" },
+      },
+      rightPriceScale: { borderColor: light ? "#c9c9c4" : "#383835" },
+      timeScale: { borderColor: light ? "#c9c9c4" : "#383835", timeVisible: true, secondsVisible: mode === "time" && timeTf < 30 },
       crosshair: { mode: 0 },
     });
     chartRef.current = chart;
@@ -216,7 +237,7 @@ export default function PriceChart({ instruments, date, accounts }: { instrument
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, timeTf, tickTf, mode, unit]);
+  }, [data, timeTf, tickTf, mode, unit, theme]);
 
   if (!instruments.length) return null;
 
@@ -224,7 +245,7 @@ export default function PriceChart({ instruments, date, accounts }: { instrument
     <div className="card" style={{ marginBottom: 14 }}>
       <h3 style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <span>
-          Price chart <span className="sub">entries #N in/out · Kyiv time</span>
+          Price chart <span className="sub">entries #N in/out{tz ? ` · ${tz.split("/").pop()?.replace(/_/g, " ")} time` : ""}</span>
         </span>
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
           {instruments.length > 1 && (

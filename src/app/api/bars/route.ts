@@ -5,14 +5,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { bars, trades } from "@/db/schema";
 import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
-import { parseInTimeZone, KYIV, kyivDateOf } from "@/lib/format";
+import { parseInTimeZone, kyivDateOf } from "@/lib/format";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
-function kyivOffsetSeconds(d: Date): number {
+function tzOffsetSeconds(d: Date, tz: string): number {
   const wall = new Date(
     new Intl.DateTimeFormat("en-CA", {
-      timeZone: KYIV, year: "numeric", month: "2-digit", day: "2-digit",
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
       hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
     })
       .format(d)
@@ -39,7 +40,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "instrument and date=YYYY-MM-DD required" }, { status: 400 });
   }
 
-  const dayStart = parseInTimeZone(`${date} 00:00:00`, KYIV);
+  const { timezone: tz } = await getSettings();
+  const dayStart = parseInTimeZone(`${date} 00:00:00`, tz);
   const nextDay = new Date(dayStart.getTime() + 25 * 3600 * 1000); // +25h, trimmed below
 
   const [rows, tfRows, instrumentRow] = await Promise.all([
@@ -55,8 +57,8 @@ export async function GET(req: NextRequest) {
     db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, instrument) }),
   ]);
 
-  const dayRows = rows.filter((r) => kyivDateOf(r.time) === date);
-  const off = dayRows.length ? kyivOffsetSeconds(dayRows[0].time) : 0;
+  const dayRows = rows.filter((r) => kyivDateOf(r.time, tz) === date);
+  const off = dayRows.length ? tzOffsetSeconds(dayRows[0].time, tz) : 0;
   const tickSize = instrumentRow ? Number(instrumentRow.tickSize) : 0.25;
 
   // T100 bars keep millisecond precision (several bars can close within one
@@ -79,7 +81,7 @@ export async function GET(req: NextRequest) {
           : and(gte(trades.entryTime, dayStart), lt(trades.entryTime, nextDay)),
       )
       .orderBy(asc(trades.entryTime))
-  ).filter((t) => kyivDateOf(t.entryTime) === date);
+  ).filter((t) => kyivDateOf(t.entryTime, tz) === date);
 
   const markers = allDayTrades.flatMap((t, idx) => {
     if (t.instrument !== instrument) return [];

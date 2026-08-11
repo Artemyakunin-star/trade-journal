@@ -21,6 +21,7 @@ import {
 } from "@/lib/metrics";
 import { fmtDateLong, fmtMoney, fmtTimeKyiv, kyivDateOf, OUTCOME_LABEL } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
+import { getSettings, tzLabel } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -31,13 +32,15 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     where: eq(plans.date, date),
     with: { scenarios: true },
   });
-  const [rawTrades, allIdeas, selectedAccounts] = await Promise.all([
+  const [rawTrades, allIdeas, selectedAccounts, prefs] = await Promise.all([
     getAllTrades(),
     getAllIdeas(),
     getSelectedAccounts(),
+    getSettings(),
   ]);
+  const tz = prefs.timezone;
   const allTrades = filterByAccounts(rawTrades, selectedAccounts);
-  const dayTrades = allTrades.filter((t) => kyivDateOf(t.entryTime) === date);
+  const dayTrades = allTrades.filter((t) => kyivDateOf(t.entryTime, tz) === date);
   const tradeIds = new Set(dayTrades.map((t) => t.id));
   const dayIdeas = allIdeas.filter(
     (i) => i.trades.some((t) => tradeIds.has(t.id)) || (plan && i.planId === plan.id),
@@ -88,6 +91,8 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
         instruments={[...new Set(dayTrades.map((t) => t.instrument))]}
         date={date}
         accounts={selectedAccounts ?? undefined}
+        tz={tz}
+        theme={prefs.theme}
       />
 
       <div className="grid2" style={{ gridTemplateColumns: "1.15fr 1fr", marginBottom: 14 }}>
@@ -193,12 +198,12 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
           </div>
         </div>
         <div className="card">
-          <h3>Execution timeline <span className="sub">Kyiv time</span></h3>
+          <h3>Execution timeline <span className="sub">{tzLabel(tz)}</span></h3>
           {timeline.map(({ t, idea, n }) => {
             const p = t.pnl === null ? null : tradePnl(t);
             return (
               <div className="timeline-item" key={t.id}>
-                <span className="t">{fmtTimeKyiv(t.entryTime, false)}</span>
+                <span className="t">{fmtTimeKyiv(t.entryTime, false, tz)}</span>
                 <span className="what">
                   <b style={{ color: "var(--ink)" }}>#{n}</b> {t.instrument} {t.direction === "LONG" ? "Long" : "Short"} ×{t.quantity}
                   {idea ? <> · {idea.title}</> : <> · <span style={{ color: "var(--crit)" }}>rogue</span></>}
