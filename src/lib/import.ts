@@ -96,12 +96,16 @@ export function parseBarsCsv(text: string): BarRow[] {
   });
 }
 
-/** "bars_NQ_SEP26_20260810.csv" -> { symbol: "NQ", day: "2026-08-10" } */
+/**
+ * "bars_NQ_SEP26_20260810.csv" / "bars_ES_SEP26_2026-08-10.csv" ->
+ * { symbol, day }. The date part is optional — when missing (renamed file),
+ * the trading day is derived from the bar data instead.
+ */
 export function parseBarsFilename(name: string): { symbol: string; day: string | null } {
-  const m = name.match(/bars_([A-Z0-9]+)(?:_[A-Z]{3}\d{2})?_(\d{8})/i);
+  const m = name.match(/bars[_ ]([A-Z0-9]+)(?:[_ ][A-Z]{3}\d{2})?(?:[_ ](\d{4})-?(\d{2})-?(\d{2}))?/i);
   if (!m) return { symbol: "?", day: null };
-  const d = m[2];
-  return { symbol: m[1].toUpperCase(), day: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` };
+  const day = m[2] ? `${m[2]}-${m[3]}-${m[4]}` : null;
+  return { symbol: m[1].toUpperCase(), day };
 }
 
 // ---------- building round-trip trades from executions ----------
@@ -302,7 +306,7 @@ export async function importCsvFile(filename: string, text: string): Promise<Imp
   try {
     if (isExec) return await importExecutions(filename, text);
     if (isBars) return await importBars(filename, text);
-    return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Не схоже ні на executions_*.csv, ні на bars_*.csv" };
+    return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Doesn't look like an executions_*.csv or bars_*.csv exporter file" };
   } catch (e) {
     return {
       filename,
@@ -330,7 +334,7 @@ async function ensureInstrument(symbol: string) {
 
 async function importExecutions(filename: string, text: string): Promise<ImportResult> {
   const rows = parseExecutionsCsv(text);
-  if (!rows.length) return { filename, kind: "EXECUTIONS", inserted: 0, skipped: 0, error: "Порожній файл" };
+  if (!rows.length) return { filename, kind: "EXECUTIONS", inserted: 0, skipped: 0, error: "The file has no data rows" };
 
   const symbols = [...new Set(rows.map((r) => r.symbol))];
   for (const s of symbols) await ensureInstrument(s);
@@ -390,13 +394,18 @@ function kyivDay(d: Date): string {
 }
 
 async function importBars(filename: string, text: string): Promise<ImportResult> {
-  const { symbol, day } = parseBarsFilename(filename);
-  if (symbol === "?") {
-    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Не можу визначити інструмент з імені файлу (очікую bars_<символ>_<контракт>_<дата>.csv)" };
+  const parsed = parseBarsFilename(filename);
+  if (parsed.symbol === "?") {
+    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Can't tell the instrument from the file name (expected bars_<symbol>_<contract>_<date>.csv, e.g. bars_NQ_SEP26_20260810.csv)" };
   }
+  const symbol = parsed.symbol;
   await ensureInstrument(symbol);
   const rows = parseBarsCsv(text);
-  if (!rows.length) return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Порожній файл" };
+  if (!rows.length) return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "The file has no data rows" };
+
+  // Trading day: from the file name when present, otherwise from the data
+  // (Kyiv date of the last bar — the session ends on the trading day itself).
+  const day = parsed.day ?? kyivDay(rows[rows.length - 1].time);
 
   await db.insert(imports).values({ kind: "BARS", filename, instrument: symbol, tradingDay: day, rowCount: rows.length });
 
