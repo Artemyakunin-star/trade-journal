@@ -157,6 +157,35 @@ export function fmtTradeResult(
   }
 }
 
+/**
+ * Per-contract result from the price move (gross, one contract) in the chosen
+ * unit. usd -> points × $/point; ticks -> points/tickSize; points -> raw.
+ */
+export function fmtPerContract(
+  t: { direction: "LONG" | "SHORT"; avgEntryPrice: string | number; avgExitPrice: string | number | null },
+  unit: PnlUnit,
+  spec: { tickSize: number; tickValue: number },
+): { text: string; sign: number } {
+  if (t.avgExitPrice === null) return { text: "open", sign: 0 };
+  const dir = t.direction === "LONG" ? 1 : -1;
+  const points = (Number(t.avgExitPrice) - Number(t.avgEntryPrice)) * dir;
+  const sign = Math.sign(Number(points.toFixed(6)));
+  switch (unit) {
+    case "usd": {
+      const v = points * (spec.tickValue / spec.tickSize);
+      return { text: fmtMoney(Math.round(v)), sign };
+    }
+    case "ticks": {
+      const ticks = Math.round(points / spec.tickSize);
+      return { text: `${ticks > 0 ? "+" : ""}${ticks}`, sign };
+    }
+    case "points": {
+      const v = Number(points.toFixed(2));
+      return { text: `${v > 0 ? "+" : ""}${v}`, sign };
+    }
+  }
+}
+
 /** MAE/MFE magnitude in the chosen unit (always positive, no suffix). */
 export function fmtExcursion(
   ticks: number | null,

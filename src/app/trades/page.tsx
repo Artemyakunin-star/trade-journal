@@ -3,10 +3,11 @@
 import Link from "next/link";
 import TradesTable from "@/components/TradesTable";
 import AccountFilter from "@/components/AccountFilter";
+import ColumnsFilter from "@/components/ColumnsFilter";
 import { db } from "@/db";
 import { distinctAccounts, filterByAccounts, getAllIdeas, getAllTrades } from "@/lib/metrics";
 import { kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
-import { getSelectedAccounts } from "@/lib/prefs";
+import { getSelectedAccounts, getVisibleTradeColumns } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +18,13 @@ export default async function TradesPage({
   searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; unit?: string }>;
 }) {
   const sp = await searchParams;
-  const [allTrades, allIdeas, instruments, selectedAccounts, prefs] = await Promise.all([
+  const [allTrades, allIdeas, instruments, selectedAccounts, prefs, visibleCols] = await Promise.all([
     getAllTrades(),
     getAllIdeas(),
     db.query.instruments.findMany(),
     getSelectedAccounts(),
     getSettings(),
+    getVisibleTradeColumns(),
   ]);
   const tz = prefs.timezone;
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "usd") as PnlUnit;
@@ -57,6 +59,7 @@ export default async function TradesPage({
       <div className="topbar">
         <h1>Trades</h1>
         <AccountFilter accounts={distinctAccounts(allTrades)} selected={selectedAccounts} />
+        <ColumnsFilter visible={visibleCols} />
         <Link href="/import" className="btn ghost">⇪ Import CSV</Link>
       </div>
 
@@ -109,6 +112,7 @@ export default async function TradesPage({
             unit={unit}
             specs={specs}
             tz={tz}
+            visibleCols={visibleCols}
           />
         </div>
         <div className="section-note">

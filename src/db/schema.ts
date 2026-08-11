@@ -184,6 +184,8 @@ export const trades = pgTable(
     pnl: numeric("pnl", { precision: 12, scale: 2 }), // realized, USD, net of commission
     commission: numeric("commission", { precision: 10, scale: 2 }).notNull().default("0"),
     note: text("note"), // free text; no grade here by design
+    /** Original stop-loss price, entered manually — basis for the RR column. */
+    stopPrice: numeric("stop_price", { precision: 12, scale: 4 }),
 
     // MAE/MFE — computed bar-by-bar from bars for the trade's time window.
     // Stored denormalized so dashboards don't recompute on every read.

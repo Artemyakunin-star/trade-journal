@@ -1,0 +1,1 @@
+ALTER TABLE "trades" ADD COLUMN "stop_price" numeric(12, 4);

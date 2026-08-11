@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ACCOUNTS_COOKIE_NAME } from "@/lib/prefs";
+import { ACCOUNTS_COOKIE_NAME, COLS_COOKIE_NAME, TRADE_COLUMNS } from "@/lib/prefs";
 import { db } from "@/db";
 import { ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -104,6 +104,18 @@ export async function setTradeIdea(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
+export async function setTradeStop(fd: FormData) {
+  const tradeId = str(fd, "tradeId");
+  const raw = str(fd, "stopPrice");
+  const price = raw === "" ? null : Number(raw);
+  if (price !== null && (Number.isNaN(price) || price <= 0)) return;
+  await db
+    .update(trades)
+    .set({ stopPrice: price === null ? null : price.toFixed(4), updatedAt: new Date() })
+    .where(eq(trades.id, tradeId));
+  revalidatePath("/", "layout");
+}
+
 export async function setTradeNote(fd: FormData) {
   const tradeId = str(fd, "tradeId");
   await db
@@ -173,6 +185,15 @@ export async function deleteScenario(fd: FormData) {
 }
 
 // ---------- display preferences ----------
+
+/** Save visible trade-table columns to a cookie. All selected = clear cookie. */
+export async function setTradeColumns(fd: FormData) {
+  const selected = fd.getAll("cols").map(String).filter(Boolean);
+  const jar = await cookies();
+  if (selected.length === 0 || selected.length === TRADE_COLUMNS.length) jar.delete(COLS_COOKIE_NAME);
+  else jar.set(COLS_COOKIE_NAME, selected.join(","), { maxAge: 60 * 60 * 24 * 365, path: "/" });
+  revalidatePath("/trades");
+}
 
 /** Save the multi-select account filter to a cookie. Empty selection = all. */
 export async function setAccountFilter(fd: FormData) {
