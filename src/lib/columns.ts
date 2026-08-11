@@ -9,7 +9,7 @@ export const TRADE_COLUMNS: { key: string; label: string }[] = [
   { key: "perContract", label: "P&L / contract" },
   { key: "mae", label: "MAE" },
   { key: "mfe", label: "MFE" },
-  { key: "stop", label: "Stop-loss" },
+  { key: "stop", label: "SL (stop-loss)" },
   { key: "rr", label: "RR" },
   { key: "note", label: "Note" },
   { key: "idea", label: "Idea" },

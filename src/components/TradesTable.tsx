@@ -18,6 +18,17 @@ import { tradePnl, ideaPnl } from "@/lib/metrics";
 
 type Spec = { tickSize: number; tickValue: number };
 
+/** Existing stop shown in the active unit: price, or distance in ticks/points. */
+function slDisplay(t: TradeRow, unit: PnlUnit, spec: Spec): number | "" {
+  if (!t.stopPrice) return "";
+  const stop = Number(t.stopPrice);
+  if (unit === "usd") return stop;
+  const dir = t.direction === "LONG" ? 1 : -1;
+  const distPoints = (Number(t.avgEntryPrice) - stop) * dir; // positive = correct side
+  if (unit === "ticks") return Math.round(distPoints / spec.tickSize);
+  return Number(distPoints.toFixed(2));
+}
+
 /** Realized R-multiple: price move per contract / initial risk per contract. */
 function rrOf(t: TradeRow, spec: Spec): { text: string; sign: number } | null {
   if (!t.stopPrice) return null;
@@ -101,17 +112,23 @@ export default function TradesTable({
           <td>
             <form action={setTradeStop} style={{ display: "flex", gap: 4 }}>
               <input type="hidden" name="tradeId" value={t.id} />
+              <input type="hidden" name="unit" value={unit} />
               <input
                 className="mini-select"
-                name="stopPrice"
+                name="stopValue"
                 type="number"
-                step={spec.tickSize}
+                step={unit === "ticks" ? 1 : spec.tickSize}
                 min={0}
-                defaultValue={t.stopPrice ? Number(t.stopPrice) : ""}
-                placeholder="price"
-                style={{ width: 92, textAlign: "right" }}
+                defaultValue={slDisplay(t, unit, spec)}
+                placeholder={unit === "usd" ? "price" : unit}
+                title={
+                  unit === "usd"
+                    ? "Enter the stop-loss PRICE"
+                    : `Enter the stop distance from avg entry in ${unit} (always on the losing side)`
+                }
+                style={{ width: 84, textAlign: "right" }}
               />
-              <button className="btn ghost btn-sm" type="submit">✓</button>
+              <button className="btn ghost btn-sm" type="submit" title="Save stop-loss">set</button>
             </form>
           </td>
         )}
@@ -143,20 +160,20 @@ export default function TradesTable({
     <table className="tj">
       <thead>
         <tr>
-          <th>Entry</th>
-          {show("instrument") && <th>Instr</th>}
-          {show("dir") && <th>Dir</th>}
-          {show("qty") && <th className="num">Qty</th>}
-          {show("entryPrice") && <th className="num">Avg entry</th>}
-          {show("exitPrice") && <th className="num">Avg exit</th>}
-          {show("netPnl") && <th className="num">Net P&L</th>}
-          {show("perContract") && <th className="num">P&L/contract</th>}
-          {show("mae") && <th className="num">MAE</th>}
-          {show("mfe") && <th className="num">MFE</th>}
-          {show("stop") && <th>Stop</th>}
-          {show("rr") && <th className="num">RR</th>}
-          {show("note") && <th>Note</th>}
-          {showIdeaCol && <th>Idea</th>}
+          <th title="Entry time of the first fill — click it to open the trade details page">Entry</th>
+          {show("instrument") && <th title="Futures root symbol (NQ, ES, MNQ, …)">Instr</th>}
+          {show("dir") && <th title="Position direction: Long or Short">Dir</th>}
+          {show("qty") && <th className="num" title="Maximum position size during the trade, in contracts">Qty</th>}
+          {show("entryPrice") && <th className="num" title="Volume-weighted average entry price across all entry fills">Avg entry</th>}
+          {show("exitPrice") && <th className="num" title="Volume-weighted average exit price across all exit fills (partial take-profits included)">Avg exit</th>}
+          {show("netPnl") && <th className="num" title="Realized P&L in USD for the WHOLE position, net of commission">Net P&L</th>}
+          {show("perContract") && <th className="num" title="Price move for ONE contract in the selected unit ($ / ticks / points). In $ it is gross, before commission">P&L/contract</th>}
+          {show("mae") && <th className="num" title="Maximum Adverse Excursion — the worst the price went AGAINST you while the trade was open, per contract, in the selected unit. Computed from 5-sec bars">MAE</th>}
+          {show("mfe") && <th className="num" title="Maximum Favorable Excursion — the best the price went IN YOUR FAVOR while open, per contract, in the selected unit. Computed from 5-sec bars">MFE</th>}
+          {show("stop") && <th title="Original stop-loss, entered manually. In $ mode enter the stop PRICE; in Ticks/Points mode enter the stop distance from avg entry">SL</th>}
+          {show("rr") && <th className="num" title="Realized R-multiple: result divided by the initial risk (needs SL). +2R means you made twice your risk; −1R is a full stop">RR</th>}
+          {show("note") && <th title="Free-text note for the trade">Note</th>}
+          {showIdeaCol && <th title="Idea this trade belongs to. Trades without an idea are counted as rogue">Idea</th>}
         </tr>
       </thead>
       <tbody>

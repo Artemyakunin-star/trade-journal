@@ -105,11 +105,35 @@ export async function setTradeIdea(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
+/**
+ * Save the original stop-loss. The input is interpreted by the active unit:
+ * usd -> absolute price; ticks/points -> distance from avg entry on the
+ * losing side. Always stored as a price.
+ */
 export async function setTradeStop(fd: FormData) {
   const tradeId = str(fd, "tradeId");
-  const raw = str(fd, "stopPrice");
-  const price = raw === "" ? null : Number(raw);
-  if (price !== null && (Number.isNaN(price) || price <= 0)) return;
+  const raw = str(fd, "stopValue");
+  const unit = str(fd, "unit"); // usd | ticks | points
+  const value = raw === "" ? null : Number(raw);
+  if (value !== null && (Number.isNaN(value) || value <= 0)) return;
+
+  let price: number | null = null;
+  if (value !== null) {
+    const trade = await db.query.trades.findFirst({ where: eq(trades.id, tradeId) });
+    if (!trade) return;
+    if (unit === "usd") {
+      price = value;
+    } else {
+      const inst = await db.query.instruments.findFirst({
+        where: (i, { eq: eq_ }) => eq_(i.symbol, trade.instrument),
+      });
+      const tickSize = inst ? Number(inst.tickSize) : 0.25;
+      const distance = unit === "ticks" ? value * tickSize : value; // -> points
+      const dir = trade.direction === "LONG" ? 1 : -1;
+      price = Number(trade.avgEntryPrice) - dir * distance;
+    }
+  }
+
   await db
     .update(trades)
     .set({ stopPrice: price === null ? null : price.toFixed(4), updatedAt: new Date() })
