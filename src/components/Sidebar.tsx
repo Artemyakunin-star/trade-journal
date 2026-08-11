@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/trades", ico: "⇄", label: "Trades" },
   { href: "/ideas", ico: "✦", label: "Ideas" },
   { href: "/calendar", ico: "▤", label: "Calendar" },
+  { href: "/analytics", ico: "∿", label: "Analytics" },
   { href: "/day", ico: "☀", label: "Day" },
   { href: "/import", ico: "⇪", label: "Import" },
   { href: "/settings", ico: "⚙", label: "Settings" },

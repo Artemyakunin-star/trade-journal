@@ -8,7 +8,8 @@ import { executions, trades as tradesTable } from "@/db/schema";
 import PriceChart from "@/components/charts/PriceChart";
 import DocEditor from "@/components/DocEditor";
 import { setTradeIdea, setTradeNote } from "@/app/actions";
-import { getAllIdeas } from "@/lib/metrics";
+import { getAllIdeas, type TradeRow } from "@/lib/metrics";
+import { loadTradeBars, simulateTrade } from "@/lib/whatif";
 import { getSettings, tzLabel } from "@/lib/settings";
 import { fmtDateLong, fmtExcursion, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 
@@ -19,7 +20,7 @@ export default async function TradeDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string }>;
+  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -45,6 +46,19 @@ export default async function TradeDetailPage({
     tickValue: instrument ? Number(instrument.tickValue) : 5,
   };
   const long = trade.direction === "LONG";
+
+  // Per-trade what-if
+  const wStop = sp.wstop && Number(sp.wstop) > 0 ? Number(sp.wstop) : null;
+  const wTarget = sp.wtarget && Number(sp.wtarget) > 0 ? Number(sp.wtarget) : null;
+  let whatIf: { simPnl: number; exitReason: string } | null = null;
+  if ((wStop !== null || wTarget !== null) && trade.pnl !== null) {
+    const tb = await loadTradeBars([trade as unknown as TradeRow]);
+    whatIf = simulateTrade(trade as unknown as TradeRow, tb.get(trade.id) ?? [], spec, {
+      stopTicks: wStop,
+      targetTicks: wTarget,
+      slippageTicks: 1,
+    });
+  }
 
   const stat = (lbl: string, val: React.ReactNode, cls = "") => (
     <div className="card tile">
@@ -176,6 +190,30 @@ export default async function TradeDetailPage({
               <textarea className="tj-textarea" name="note" defaultValue={trade.note ?? ""} placeholder="What happened in this trade…" />
               <button className="btn btn-sm" type="submit" style={{ marginTop: 8 }}>Save note</button>
             </form>
+          </div>
+
+          <div className="card">
+            <h3>What-if this trade <span className="sub">virtual stop/target on 5-sec bars</span></h3>
+            <form method="get" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <input type="hidden" name="unit" value={unit} />
+              <input className="tj-input" name="wstop" type="number" min={1} placeholder="stop, ticks" defaultValue={wStop ?? ""} style={{ width: 100 }} />
+              <input className="tj-input" name="wtarget" type="number" min={1} placeholder="target, ticks" defaultValue={wTarget ?? ""} style={{ width: 100 }} />
+              <button className="btn btn-sm" type="submit">Try</button>
+            </form>
+            {whatIf && (
+              <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
+                Would exit by <b>{whatIf.exitReason === "asTraded" ? "your actual exit (nothing hit)" : whatIf.exitReason}</b>:{" "}
+                <b style={{ color: whatIf.simPnl > 0 ? "var(--pos)" : whatIf.simPnl < 0 ? "var(--neg)" : "var(--ink)" }}>
+                  {fmtMoney2(whatIf.simPnl)}
+                </b>{" "}
+                vs actual {fmtMoney2(net)} ·{" "}
+                <b style={{ color: whatIf.simPnl - (net ?? 0) > 0 ? "var(--pos)" : "var(--neg)" }}>
+                  {fmtMoney2(whatIf.simPnl - (net ?? 0))}
+                </b>{" "}
+                difference
+              </div>
+            )}
+            <div className="section-note">Slippage 1 tick on stops · full sweep across ALL trades lives in Analytics.</div>
           </div>
 
           <div className="card">
