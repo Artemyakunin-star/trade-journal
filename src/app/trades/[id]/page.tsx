@@ -20,7 +20,7 @@ export default async function TradeDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; wbe?: string }>;
+  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; wbe?: string; wnobe?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -57,7 +57,8 @@ export default async function TradeDetailPage({
   };
   const wStop = toTicks(sp.wstop);
   const wTarget = toTicks(sp.wtarget);
-  const wBe = toTicks(sp.wbe);
+  const wNoBe = sp.wnobe === "1";
+  const wBe = wNoBe ? null : toTicks(sp.wbe);
   let whatIf: { simPnl: number; exitReason: string } | null = null;
   if ((wStop !== null || wTarget !== null || wBe !== null) && trade.pnl !== null) {
     // The replay always runs PAST the actual exit: an early break-even out in
@@ -211,9 +212,14 @@ export default async function TradeDetailPage({
               <input type="hidden" name="unit" value={unit} />
               <input className="tj-input" name="wstop" type="number" min={0} step="any" placeholder={`stop, ${unitSuffix}`} defaultValue={sp.wstop ?? ""} style={{ width: 96 }} title={`Stop size in ${unitSuffix} per contract`} />
               <input className="tj-input" name="wtarget" type="number" min={0} step="any" placeholder={`target, ${unitSuffix}`} defaultValue={sp.wtarget ?? ""} style={{ width: 96 }} title={`Target size in ${unitSuffix} per contract`} />
-              <input className="tj-input" name="wbe" type="number" min={0} step="any" placeholder={`BE after, ${unitSuffix}`} defaultValue={sp.wbe ?? ""} style={{ width: 106 }} title={`Move the stop to break-even after price goes this far in your favor (${unitSuffix} per contract). Empty = no break-even move`} />
+              <input className="tj-input" name="wbe" type="number" min={0} step="any" placeholder={`BE after, ${unitSuffix}`} defaultValue={sp.wbe ?? ""} style={{ width: 106 }} title={`Move the stop to break-even after price goes this far in your favor (${unitSuffix} per contract)`} />
+              <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)", cursor: "pointer" }}
+                title="No break-even move at all — the BE field is ignored">
+                <input type="checkbox" name="wnobe" value="1" defaultChecked={wNoBe} style={{ accentColor: "var(--s1)" }} />
+                No BE
+              </label>
               <button className="btn btn-sm" type="submit">Try</button>
-              {(sp.wstop || sp.wtarget || sp.wbe) && (
+              {(sp.wstop || sp.wtarget || sp.wbe || sp.wnobe) && (
                 <Link href={`/trades/${trade.id}?unit=${unit}`} className="btn ghost btn-sm">Reset</Link>
               )}
             </form>

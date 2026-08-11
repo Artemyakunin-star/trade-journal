@@ -167,13 +167,12 @@ export function sweep(
   tradeBars: Map<string, Bar[]>,
   specs: Record<string, Spec>,
   values: number[],
-  make: (v: number) => SimParams,
+  make: (v: number, spec: Spec) => SimParams,
 ): { value: number; pnl: number }[] {
   return values.map((v) => {
-    const params = make(v);
     const total = trades.reduce((a, t) => {
       const spec = specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 };
-      return a + simulateTrade(t, tradeBars.get(t.id) ?? [], spec, params).simPnl;
+      return a + simulateTrade(t, tradeBars.get(t.id) ?? [], spec, make(v, spec)).simPnl;
     }, 0);
     return { value: v, pnl: Math.round(total) };
   });
