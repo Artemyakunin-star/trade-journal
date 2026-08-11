@@ -303,6 +303,7 @@ form.mcal-cell { padding: 6px 7px; }
 .doc-card-date { font-size: 11px; color: var(--muted); margin-top: 10px; }
 
 .doc-editor { max-width: 860px; }
+.doc-editor.full { max-width: none; }
 .doc-title {
   width: 100%; background: none; border: none; outline: none;
   font-size: 26px; font-weight: 700; color: var(--ink); font-family: inherit;

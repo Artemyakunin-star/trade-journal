@@ -155,7 +155,7 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
   );
 
   return (
-    <div className="doc-editor card">
+    <div className={"doc-editor card" + (kind === "trade" ? " full" : "")}>
       {kind === "doc" && (
         <input
           className="doc-title"
