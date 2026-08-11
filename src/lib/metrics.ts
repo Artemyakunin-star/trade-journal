@@ -14,6 +14,7 @@ export type TradeRow = {
   avgEntryPrice: string;
   avgExitPrice: string | null;
   pnl: string | null;
+  commission: string;
   note: string | null;
   maeTicks: number | null;
   mfeTicks: number | null;

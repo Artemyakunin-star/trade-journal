@@ -1,4 +1,5 @@
 // Server component: trades grouped by idea, with inline "attach to idea" selects.
+import Link from "next/link";
 import { setTradeIdea } from "@/app/actions";
 import {
   fmtMoney,
@@ -44,7 +45,11 @@ export default function TradesTable({
     const res = fmtTradeResult(t, unit, tickSizes[t.instrument] ?? 0.25);
     return (
       <tr key={t.id} className="in-group">
-        <td>{fmtTimeKyiv(t.entryTime, true, tz)}</td>
+        <td>
+          <Link href={`/trades/${t.id}`} className="linklike" title="Open trade details">
+            {fmtTimeKyiv(t.entryTime, true, tz)}
+          </Link>
+        </td>
         <td>{t.instrument}</td>
         <td>{t.direction === "LONG" ? "Long" : "Short"}</td>
         <td className="num">{t.quantity}</td>
@@ -52,6 +57,9 @@ export default function TradesTable({
         <td className="num">{t.avgExitPrice ? fmtPrice(t.avgExitPrice) : "open"}</td>
         <td className={"num " + (res.sign > 0 ? "pos" : res.sign < 0 ? "neg" : "")}>
           {t.pnl === null ? "—" : res.text}
+        </td>
+        <td className="num" style={{ color: "var(--muted)" }}>
+          {Number(t.commission) > 0 ? "$" + Number(t.commission).toFixed(2) : "—"}
         </td>
         <td className="num">{t.maeTicks ?? "—"}</td>
         <td className="num">{t.mfeTicks ?? "—"}</td>
@@ -89,7 +97,8 @@ export default function TradesTable({
           <th className="num">Qty</th>
           <th className="num">Avg entry</th>
           <th className="num">Avg exit</th>
-          <th className="num">P&L</th>
+          <th className="num">Net P&L</th>
+          <th className="num">Comm</th>
           <th className="num">MAE t</th>
           <th className="num">MFE t</th>
           <th>Note</th>
@@ -101,7 +110,7 @@ export default function TradesTable({
           const its = byIdea.get(idea.id)!;
           const pnl = ideaPnl({ ...idea, trades: its });
           return (
-            <IdeaGroup key={idea.id} idea={idea} pnl={pnl} colSpan={showAttach ? 11 : 10}>
+            <IdeaGroup key={idea.id} idea={idea} pnl={pnl} colSpan={showAttach ? 12 : 11}>
               {its.map(row)}
             </IdeaGroup>
           );
@@ -109,7 +118,7 @@ export default function TradesTable({
         {rogue.length > 0 && (
           <>
             <tr className="group-head rogue-head">
-              <td colSpan={showAttach ? 11 : 10}>
+              <td colSpan={showAttach ? 12 : 11}>
                 ⚠ Rogue — no idea ({rogue.length}) ·{" "}
                 <span className={rogue.reduce((a, t) => a + tradePnl(t), 0) >= 0 ? "pos" : "neg"}>
                   {fmtMoney(rogue.reduce((a, t) => a + tradePnl(t), 0))}
@@ -121,7 +130,7 @@ export default function TradesTable({
         )}
         {trades.length === 0 && (
           <tr>
-            <td colSpan={showAttach ? 11 : 10} style={{ color: "var(--muted)" }}>
+            <td colSpan={showAttach ? 12 : 11} style={{ color: "var(--muted)" }}>
               No trades in this selection.
             </td>
           </tr>
