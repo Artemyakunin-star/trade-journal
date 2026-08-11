@@ -5,12 +5,16 @@ export type AppSettings = {
   timezone: string; // IANA zone used for ALL display + day grouping (chart timezone)
   importTimezone: string; // zone the NinjaTrader exporter CSVs are written in
   theme: "dark" | "light";
+  keyLevelOptions: string[]; // dropdown vocabulary, grows as the user types new values
+  ofConfOptions: string[];
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
   timezone: "Europe/Kyiv",
   importTimezone: "America/Chicago",
   theme: "dark",
+  keyLevelOptions: ["POC", "VAH", "VAL", "ONH", "ONL", "Asia High", "Asia Low", "IB High", "IB Low", "Open"],
+  ofConfOptions: ["Absorption", "Delta divergence", "Big prints", "Imbalance", "Exhaustion", "Iceberg", "Stops run"],
 };
 
 export const TIMEZONES = [
@@ -29,7 +33,17 @@ export async function getSettings(): Promise<AppSettings> {
   const importTimezone =
     typeof map.get("importTimezone") === "string" ? (map.get("importTimezone") as string) : DEFAULT_SETTINGS.importTimezone;
   const theme = map.get("theme") === "light" ? "light" : "dark";
-  return { timezone, importTimezone, theme };
+  const strArr = (k: string, dflt: string[]) => {
+    const v = map.get(k);
+    return Array.isArray(v) && v.every((x) => typeof x === "string") ? (v as string[]) : dflt;
+  };
+  return {
+    timezone,
+    importTimezone,
+    theme,
+    keyLevelOptions: strArr("keyLevelOptions", DEFAULT_SETTINGS.keyLevelOptions),
+    ofConfOptions: strArr("ofConfOptions", DEFAULT_SETTINGS.ofConfOptions),
+  };
 }
 
 /** Short label for a timezone: "Kyiv time", "Chicago time", "UTC". */

@@ -18,13 +18,12 @@ import { tradePnl, ideaPnl } from "@/lib/metrics";
 
 type Spec = { tickSize: number; tickValue: number };
 
-/** Existing stop shown in the active unit: price, or distance in ticks/points. */
+/** Existing stop size shown in the active unit ($ risk / ticks / points per contract). */
 function slDisplay(t: TradeRow, unit: PnlUnit, spec: Spec): number | "" {
   if (!t.stopPrice) return "";
-  const stop = Number(t.stopPrice);
-  if (unit === "usd") return stop;
   const dir = t.direction === "LONG" ? 1 : -1;
-  const distPoints = (Number(t.avgEntryPrice) - stop) * dir; // positive = correct side
+  const distPoints = (Number(t.avgEntryPrice) - Number(t.stopPrice)) * dir;
+  if (unit === "usd") return Math.round(distPoints * (spec.tickValue / spec.tickSize) * 100) / 100;
   if (unit === "ticks") return Math.round(distPoints / spec.tickSize);
   return Number(distPoints.toFixed(2));
 }
@@ -52,6 +51,8 @@ export default function TradesTable({
   specs = {},
   tz,
   visibleCols = null,
+  keyLevelOptions = [],
+  ofConfOptions = [],
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
@@ -62,6 +63,8 @@ export default function TradesTable({
   tz?: string;
   /** Which optional columns to render; null = all. */
   visibleCols?: Set<string> | null;
+  keyLevelOptions?: string[];
+  ofConfOptions?: string[];
 }) {
   const show = (key: string) => visibleCols === null || visibleCols.has(key);
   const showIdeaCol = showAttach && show("idea");
@@ -116,10 +119,11 @@ export default function TradesTable({
               <input
                 className="mini-select"
                 name="value"
+                list="tj-keylevel-options"
                 defaultValue={t.keyLevel ?? ""}
                 placeholder="level"
-                title="Key level the trade was taken from (price or short text)"
-                style={{ width: 90 }}
+                title="Key level — pick from the list or type your own (new values are remembered)"
+                style={{ width: 100 }}
               />
               <button className="btn ghost btn-sm" type="submit">set</button>
             </form>
@@ -133,10 +137,11 @@ export default function TradesTable({
               <input
                 className="mini-select"
                 name="value"
+                list="tj-ofconf-options"
                 defaultValue={t.ofConfirmation ?? ""}
                 placeholder="OF signal"
-                title="Order-flow confirmation (delta divergence, absorption, big prints…)"
-                style={{ width: 110 }}
+                title="Order-flow confirmation — pick from the list or type your own (new values are remembered)"
+                style={{ width: 118 }}
               />
               <button className="btn ghost btn-sm" type="submit">set</button>
             </form>
@@ -151,15 +156,11 @@ export default function TradesTable({
                 className="mini-select"
                 name="stopValue"
                 type="number"
-                step={unit === "ticks" ? 1 : spec.tickSize}
+                step={unit === "ticks" ? 1 : unit === "usd" ? 0.01 : spec.tickSize}
                 min={0}
                 defaultValue={slDisplay(t, unit, spec)}
-                placeholder={unit === "usd" ? "price" : unit}
-                title={
-                  unit === "usd"
-                    ? "Enter the stop-loss PRICE"
-                    : `Enter the stop distance from avg entry in ${unit} (always on the losing side)`
-                }
+                placeholder={unit === "usd" ? "$ risk" : unit}
+                title={`Stop size per contract in ${unit === "usd" ? "dollars" : unit} — laid off from avg entry on the losing side`}
                 style={{ width: 84, textAlign: "right" }}
               />
               <button className="btn ghost btn-sm" type="submit" title="Save stop-loss">set</button>
@@ -191,6 +192,17 @@ export default function TradesTable({
   };
 
   return (
+    <>
+    <datalist id="tj-keylevel-options">
+      {keyLevelOptions.map((o) => (
+        <option key={o} value={o} />
+      ))}
+    </datalist>
+    <datalist id="tj-ofconf-options">
+      {ofConfOptions.map((o) => (
+        <option key={o} value={o} />
+      ))}
+    </datalist>
     <table className="tj">
       <thead>
         <tr>
@@ -206,7 +218,7 @@ export default function TradesTable({
           {show("mfe") && <th className="num" title="Maximum Favorable Excursion — the best the price went IN YOUR FAVOR while open, per contract, in the selected unit. Computed from 5-sec bars">MFE</th>}
           {show("keyLevel") && <th title="Key level the trade was taken from — a price or short text, entered manually">Key Level</th>}
           {show("ofConf") && <th title="Order-flow confirmation you saw before entry (delta divergence, absorption, big prints…), entered manually">OF conf</th>}
-          {show("stop") && <th title="Original stop-loss, entered manually. In $ mode enter the stop PRICE; in Ticks/Points mode enter the stop distance from avg entry">SL</th>}
+          {show("stop") && <th title="Original stop-loss SIZE per contract, entered manually in the selected unit ($ risk / ticks / points). Stored as a price behind the scenes for RR">SL</th>}
           {show("rr") && <th className="num" title="Realized R-multiple: result divided by the initial risk (needs SL). +2R means you made twice your risk; −1R is a full stop">RR</th>}
           {show("note") && <th title="Free-text note for the trade">Note</th>}
           {showIdeaCol && <th title="Idea this trade belongs to. Trades without an idea are counted as rogue">Idea</th>}
@@ -244,6 +256,7 @@ export default function TradesTable({
         )}
       </tbody>
     </table>
+    </>
   );
 }
 

@@ -106,9 +106,9 @@ export async function setTradeIdea(fd: FormData) {
 }
 
 /**
- * Save the original stop-loss. The input is interpreted by the active unit:
- * usd -> absolute price; ticks/points -> distance from avg entry on the
- * losing side. Always stored as a price.
+ * Save the original stop-loss as a SIZE (risk per contract) in the active
+ * unit: usd -> dollars, ticks -> ticks, points -> points. The distance is
+ * laid off from avg entry on the losing side and stored as a price.
  */
 export async function setTradeStop(fd: FormData) {
   const tradeId = str(fd, "tradeId");
@@ -121,17 +121,15 @@ export async function setTradeStop(fd: FormData) {
   if (value !== null) {
     const trade = await db.query.trades.findFirst({ where: eq(trades.id, tradeId) });
     if (!trade) return;
-    if (unit === "usd") {
-      price = value;
-    } else {
-      const inst = await db.query.instruments.findFirst({
-        where: (i, { eq: eq_ }) => eq_(i.symbol, trade.instrument),
-      });
-      const tickSize = inst ? Number(inst.tickSize) : 0.25;
-      const distance = unit === "ticks" ? value * tickSize : value; // -> points
-      const dir = trade.direction === "LONG" ? 1 : -1;
-      price = Number(trade.avgEntryPrice) - dir * distance;
-    }
+    const inst = await db.query.instruments.findFirst({
+      where: (i, { eq: eq_ }) => eq_(i.symbol, trade.instrument),
+    });
+    const tickSize = inst ? Number(inst.tickSize) : 0.25;
+    const tickValue = inst ? Number(inst.tickValue) : 5;
+    const distancePoints =
+      unit === "ticks" ? value * tickSize : unit === "usd" ? (value / tickValue) * tickSize : value;
+    const dir = trade.direction === "LONG" ? 1 : -1;
+    price = Number(trade.avgEntryPrice) - dir * distancePoints;
   }
 
   await db
@@ -148,7 +146,8 @@ export async function saveTradeJournal(id: string, content: unknown) {
   revalidatePath(`/trades/${id}`);
 }
 
-/** Inline single-field updates from the trades table (keyLevel / ofConfirmation). */
+/** Inline single-field updates from the trades table (keyLevel / ofConfirmation).
+ *  New values are added to the dropdown vocabulary in settings automatically. */
 export async function setTradeField(fd: FormData) {
   const tradeId = str(fd, "tradeId");
   const field = str(fd, "field");
@@ -158,6 +157,16 @@ export async function setTradeField(fd: FormData) {
     .update(trades)
     .set({ [field]: value, updatedAt: new Date() })
     .where(eq(trades.id, tradeId));
+
+  if (value) {
+    const { getSettings } = await import("@/lib/settings");
+    const prefs = await getSettings();
+    const key = field === "keyLevel" ? "keyLevelOptions" : "ofConfOptions";
+    const list = field === "keyLevel" ? prefs.keyLevelOptions : prefs.ofConfOptions;
+    if (!list.some((v) => v.toLowerCase() === value.toLowerCase())) {
+      await setSetting(key, [...list, value]);
+    }
+  }
   revalidatePath("/", "layout");
 }
 

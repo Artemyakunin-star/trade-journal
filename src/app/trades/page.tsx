@@ -113,6 +113,8 @@ export default async function TradesPage({
             specs={specs}
             tz={tz}
             visibleCols={visibleCols}
+            keyLevelOptions={prefs.keyLevelOptions}
+            ofConfOptions={prefs.ofConfOptions}
           />
         </div>
         <div className="section-note">
