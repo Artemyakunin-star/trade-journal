@@ -10,12 +10,14 @@ export type SimParams = {
   stopTicks: number | null; // null = no virtual stop
   targetTicks: number | null; // null = no virtual target (exit as traded)
   slippageTicks: number; // extra ticks lost on stop fills
+  /** Move the stop to break-even after price goes this many ticks in favor; null = no BE move. */
+  beTriggerTicks?: number | null;
 };
 
 export type SimResult = {
   tradeId: string;
   simulated: boolean; // false = no bars coverage, actual result used
-  exitReason: "stop" | "target" | "asTraded";
+  exitReason: "stop" | "target" | "breakeven" | "asTraded";
   actualPnl: number; // net, USD (as recorded)
   simPnl: number; // net, USD
 };
@@ -42,12 +44,15 @@ export function simulateTrade(
     actualPnl,
   };
 
-  if (!tradeBars.length || (p.stopTicks === null && p.targetTicks === null)) {
+  const beTrigger = p.beTriggerTicks ?? null;
+  if (!tradeBars.length || (p.stopTicks === null && p.targetTicks === null && beTrigger === null)) {
     return { ...base, exitReason: "asTraded", simPnl: actualPnl };
   }
 
-  const stopPrice = p.stopTicks === null ? null : entry - dir * p.stopTicks * spec.tickSize;
+  let stopPrice = p.stopTicks === null ? null : entry - dir * p.stopTicks * spec.tickSize;
   const targetPrice = p.targetTicks === null ? null : entry + dir * p.targetTicks * spec.tickSize;
+  const beLevel = beTrigger === null ? null : entry + dir * beTrigger * spec.tickSize;
+  let beArmed = false;
 
   for (const b of tradeBars) {
     const stopHit =
@@ -59,11 +64,18 @@ export function simulateTrade(
       // conservative: stop wins ties; slippage worsens the fill
       const fill = stopPrice! - dir * p.slippageTicks * spec.tickSize;
       const gross = (fill - entry) * dir * qty * pv;
-      return { ...base, exitReason: "stop", simPnl: gross - commission };
+      return { ...base, exitReason: beArmed && Math.abs(stopPrice! - entry) < 1e-9 ? "breakeven" : "stop", simPnl: gross - commission };
     }
     if (targetHit) {
       const gross = (targetPrice! - entry) * dir * qty * pv;
       return { ...base, exitReason: "target", simPnl: gross - commission };
+    }
+
+    // BE trigger: applies starting from the NEXT bar (conservative within the bar).
+    if (!beArmed && beLevel !== null && (dir === 1 ? b.high >= beLevel : b.low <= beLevel)) {
+      beArmed = true;
+      const be = entry;
+      stopPrice = stopPrice === null ? be : dir === 1 ? Math.max(stopPrice, be) : Math.min(stopPrice, be);
     }
   }
 

@@ -20,7 +20,7 @@ export default async function TradeDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string }>;
+  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; wbe?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -47,18 +47,28 @@ export default async function TradeDetailPage({
   };
   const long = trade.direction === "LONG";
 
-  // Per-trade what-if
-  const wStop = sp.wstop && Number(sp.wstop) > 0 ? Number(sp.wstop) : null;
-  const wTarget = sp.wtarget && Number(sp.wtarget) > 0 ? Number(sp.wtarget) : null;
+  // Per-trade what-if. Inputs are in the SELECTED unit; convert to ticks.
+  const toTicks = (raw: string | undefined): number | null => {
+    const v = raw ? Number(raw) : NaN;
+    if (!(v > 0)) return null;
+    if (unit === "ticks") return Math.round(v);
+    if (unit === "points") return Math.round(v / spec.tickSize);
+    return Math.round(v / spec.tickValue); // usd risk per contract
+  };
+  const wStop = toTicks(sp.wstop);
+  const wTarget = toTicks(sp.wtarget);
+  const wBe = toTicks(sp.wbe);
   let whatIf: { simPnl: number; exitReason: string } | null = null;
-  if ((wStop !== null || wTarget !== null) && trade.pnl !== null) {
+  if ((wStop !== null || wTarget !== null || wBe !== null) && trade.pnl !== null) {
     const tb = await loadTradeBars([trade as unknown as TradeRow]);
     whatIf = simulateTrade(trade as unknown as TradeRow, tb.get(trade.id) ?? [], spec, {
       stopTicks: wStop,
       targetTicks: wTarget,
+      beTriggerTicks: wBe,
       slippageTicks: 1,
     });
   }
+  const unitSuffix = unit === "usd" ? "$" : unit === "ticks" ? "t" : "pt";
 
   const stat = (lbl: string, val: React.ReactNode, cls = "") => (
     <div className="card tile">
@@ -193,16 +203,20 @@ export default async function TradeDetailPage({
           </div>
 
           <div className="card">
-            <h3>What-if this trade <span className="sub">virtual stop/target on 5-sec bars</span></h3>
+            <h3>What-if this trade <span className="sub">virtual exits on 5-sec bars · sizes in {unitSuffix} per contract</span></h3>
             <form method="get" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <input type="hidden" name="unit" value={unit} />
-              <input className="tj-input" name="wstop" type="number" min={1} placeholder="stop, ticks" defaultValue={wStop ?? ""} style={{ width: 100 }} />
-              <input className="tj-input" name="wtarget" type="number" min={1} placeholder="target, ticks" defaultValue={wTarget ?? ""} style={{ width: 100 }} />
+              <input className="tj-input" name="wstop" type="number" min={0} step="any" placeholder={`stop, ${unitSuffix}`} defaultValue={sp.wstop ?? ""} style={{ width: 96 }} title={`Stop size in ${unitSuffix} per contract`} />
+              <input className="tj-input" name="wtarget" type="number" min={0} step="any" placeholder={`target, ${unitSuffix}`} defaultValue={sp.wtarget ?? ""} style={{ width: 96 }} title={`Target size in ${unitSuffix} per contract`} />
+              <input className="tj-input" name="wbe" type="number" min={0} step="any" placeholder={`BE after, ${unitSuffix}`} defaultValue={sp.wbe ?? ""} style={{ width: 106 }} title={`Move the stop to break-even after price goes this far in your favor (${unitSuffix} per contract). Empty = no break-even move`} />
               <button className="btn btn-sm" type="submit">Try</button>
+              {(sp.wstop || sp.wtarget || sp.wbe) && (
+                <Link href={`/trades/${trade.id}?unit=${unit}`} className="btn ghost btn-sm">Reset</Link>
+              )}
             </form>
             {whatIf && (
               <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
-                Would exit by <b>{whatIf.exitReason === "asTraded" ? "your actual exit (nothing hit)" : whatIf.exitReason}</b>:{" "}
+                Would exit by <b>{whatIf.exitReason === "asTraded" ? "your actual exit (nothing hit)" : whatIf.exitReason === "breakeven" ? "break-even stop" : whatIf.exitReason}</b>:{" "}
                 <b style={{ color: whatIf.simPnl > 0 ? "var(--pos)" : whatIf.simPnl < 0 ? "var(--neg)" : "var(--ink)" }}>
                   {fmtMoney2(whatIf.simPnl)}
                 </b>{" "}
@@ -213,7 +227,10 @@ export default async function TradeDetailPage({
                 difference
               </div>
             )}
-            <div className="section-note">Slippage 1 tick on stops · full sweep across ALL trades lives in Analytics.</div>
+            <div className="section-note">
+              Empty field = as traded · BE empty = no break-even move · slippage 1 tick on stops · the full sweep across
+              ALL trades lives in Analytics.
+            </div>
           </div>
 
           <div className="card">
