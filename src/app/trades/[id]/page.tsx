@@ -90,6 +90,7 @@ export default async function TradeDetailPage({
       <PriceChart instruments={[trade.instrument]} date={date} tz={tz} theme={prefs.theme} tradeId={trade.id} />
 
       <div className="grid2" style={{ gridTemplateColumns: "1.2fr 1fr", alignItems: "start" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
         <div className="card">
           <h3>
             Fills <span className="sub">{fills.length} executions · every partial entry/exit is a row · {tzLabel(tz)}</span>
@@ -131,6 +132,17 @@ export default async function TradeDetailPage({
             {trade.exitTime ? `${fmtTimeKyiv(trade.exitTime, true, tz)} @ ${fmtPrice(trade.avgExitPrice)}` : "still open"} · avg
             prices are volume-weighted across fills, so several take-profits stay one round-trip trade.
           </div>
+        </div>
+
+        <div>
+          <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", margin: "0 0 10px 2px" }}>
+            Trade journal{" "}
+            <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 11.5 }}>
+              — full write-up: what you saw, why you entered, chart screenshots (paste with Ctrl+V)
+            </span>
+          </h3>
+          <DocEditor kind="trade" docId={trade.id} initialTitle="" initialContent={trade.journal} />
+        </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -179,15 +191,6 @@ export default async function TradeDetailPage({
         </div>
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", margin: "0 0 10px 2px" }}>
-          Trade journal{" "}
-          <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 11.5 }}>
-            — full write-up: what you saw, why you entered, chart screenshots (paste with Ctrl+V)
-          </span>
-        </h3>
-        <DocEditor kind="trade" docId={trade.id} initialTitle="" initialContent={trade.journal} />
-      </div>
     </>
   );
 }
