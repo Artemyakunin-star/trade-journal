@@ -16,6 +16,9 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@paralleldrive/cuid2": "^3.3.0",
+    "@tiptap/extension-image": "^3.30.0",
+    "@tiptap/react": "^3.30.0",
+    "@tiptap/starter-kit": "^3.30.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "lightweight-charts": "^5.2.0",

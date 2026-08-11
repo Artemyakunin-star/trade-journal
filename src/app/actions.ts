@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { ACCOUNTS_COOKIE_NAME, COLS_COOKIE_NAME } from "@/lib/prefs";
 import { TRADE_COLUMNS } from "@/lib/columns";
 import { db } from "@/db";
-import { ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
+import { docs, ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { importCsvFile, rebuildAll, type ImportResult } from "@/lib/import";
 import { TIMEZONES } from "@/lib/settings";
@@ -207,6 +207,43 @@ export async function setScenarioOutcome(fd: FormData) {
 export async function deleteScenario(fd: FormData) {
   await db.delete(scenarios).where(eq(scenarios.id, str(fd, "id")));
   revalidatePath("/", "layout");
+}
+
+// ---------- docs (the Plans section) ----------
+
+export async function createDoc() {
+  const [doc] = await db.insert(docs).values({ title: "Untitled" }).returning({ id: docs.id });
+  revalidatePath("/plans");
+  redirect(`/plans/${doc.id}`);
+}
+
+type TipTapNode = { type?: string; attrs?: { src?: string | null }; content?: TipTapNode[] };
+
+/** Drop image nodes that lost their src (failed uploads) so they don't pile up. */
+function pruneEmptyImages(node: TipTapNode): TipTapNode {
+  return {
+    ...node,
+    content: node.content
+      ?.filter((n) => !(n.type === "image" && !n.attrs?.src))
+      .map(pruneEmptyImages),
+  };
+}
+
+/** Autosave endpoint for the editor (called from the client, not a form). */
+export async function saveDoc(id: string, title: string, content: unknown) {
+  if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  await db
+    .update(docs)
+    .set({ title: title.trim() || "Untitled", content, updatedAt: new Date() })
+    .where(eq(docs.id, id));
+  revalidatePath("/plans");
+}
+
+export async function deleteDoc(fd: FormData) {
+  const id = str(fd, "id");
+  await db.delete(docs).where(eq(docs.id, id));
+  revalidatePath("/plans");
+  redirect("/plans");
 }
 
 // ---------- display preferences ----------

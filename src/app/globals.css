@@ -261,6 +261,61 @@ a.linklike:hover { text-decoration: underline; }
 .acct-menu label { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
 .acct-menu input[type="checkbox"] { accent-color: var(--s1); }
 
+/* ---------- Plans documents (Notion-like editor) ---------- */
+.doc-card { display: block; text-decoration: none; }
+.doc-card:hover { background: var(--surface-2); }
+.doc-card-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+.doc-card-excerpt { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; min-height: 38px; }
+.doc-card-date { font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+.doc-editor { max-width: 860px; }
+.doc-title {
+  width: 100%; background: none; border: none; outline: none;
+  font-size: 26px; font-weight: 700; color: var(--ink); font-family: inherit;
+  margin-bottom: 8px; padding: 4px 0;
+}
+.doc-title::placeholder { color: var(--muted); }
+.doc-toolbar {
+  display: flex; gap: 4px; align-items: center; flex-wrap: wrap;
+  border-top: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
+  padding: 6px 0; margin-bottom: 14px; position: sticky; top: 0;
+  background: var(--surface); z-index: 10;
+}
+.doc-tool {
+  background: none; border: 1px solid transparent; color: var(--ink-2);
+  border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.doc-tool:hover { background: var(--surface-2); color: var(--ink); }
+.doc-tool.on { background: var(--surface-2); color: var(--s1); border-color: var(--grid); }
+.doc-sep { width: 1px; height: 18px; background: var(--grid); margin: 0 4px; }
+
+.doc-editor-content { outline: none; min-height: 320px; font-size: 14px; color: var(--ink-2); line-height: 1.65; }
+.doc-editor-content h1 { font-size: 22px; font-weight: 700; color: var(--ink); margin: 18px 0 8px; }
+.doc-editor-content h2 { font-size: 18px; font-weight: 700; color: var(--ink); margin: 16px 0 6px; }
+.doc-editor-content h3 { font-size: 15px; font-weight: 600; color: var(--ink); margin: 14px 0 4px; }
+.doc-editor-content p { margin: 6px 0; }
+.doc-editor-content ul, .doc-editor-content ol { padding-left: 24px; margin: 6px 0; }
+.doc-editor-content li { margin: 3px 0; }
+.doc-editor-content blockquote {
+  border-left: 3px solid var(--s1); padding: 4px 14px; margin: 10px 0;
+  color: var(--ink-2); background: var(--surface-2); border-radius: 0 8px 8px 0;
+}
+.doc-editor-content code {
+  background: var(--surface-2); border: 1px solid var(--grid); border-radius: 4px;
+  padding: 1px 5px; font-size: 12.5px;
+}
+.doc-editor-content pre {
+  background: var(--surface-2); border: 1px solid var(--grid); border-radius: 8px;
+  padding: 10px 12px; margin: 10px 0; overflow-x: auto;
+}
+.doc-editor-content pre code { background: none; border: none; padding: 0; }
+.doc-editor-content hr { border: none; border-top: 1px solid var(--baseline); margin: 16px 0; }
+.doc-editor-content img {
+  max-width: 100%; border-radius: 8px; border: 1px solid var(--grid);
+  display: block; margin: 10px 0;
+}
+.doc-editor-content img.ProseMirror-selectednode { outline: 2px solid var(--s1); }
+
 /* import screen */
 .drop {
   border: 1.5px dashed var(--baseline); border-radius: var(--radius);

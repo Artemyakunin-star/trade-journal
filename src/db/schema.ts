@@ -85,6 +85,26 @@ export const settings = pgTable("settings", {
   value: jsonb("value").notNull(),
 });
 
+// ---------- free-form documents (the "Plans" section) ----------
+
+/** Notion-like document: rich text (TipTap JSON) with embedded image refs. */
+export const docs = pgTable("docs", {
+  id: text("id").primaryKey().$defaultFn(createId),
+  title: text("title").notNull().default("Untitled"),
+  content: jsonb("content"), // TipTap document JSON
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Pasted screenshots, stored inline (base64) and served via /api/images/[id]. */
+export const docImages = pgTable("doc_images", {
+  id: text("id").primaryKey().$defaultFn(createId),
+  docId: text("doc_id").references(() => docs.id, { onDelete: "set null" }),
+  mimeType: text("mime_type").notNull(),
+  data: text("data").notNull(), // base64
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------- level 1: Plan (the day) ----------
 
 /**
