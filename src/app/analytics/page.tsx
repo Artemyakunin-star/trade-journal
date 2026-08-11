@@ -18,7 +18,7 @@ import {
   type RangeKey,
   type Tile,
 } from "@/lib/metrics";
-import { fmtMoney, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
 import { loadTradeBars, simulateTrade, summarize, sweep } from "@/lib/whatif";
@@ -260,6 +260,84 @@ export default async function AnalyticsPage({
           Empty stop/target = keep that side as you actually traded it. Trades without imported bars are counted with
           their real result.
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3>
+          Per-trade simulation{" "}
+          <span className="sub">
+            what the current rule set does to each trade · click the time to open the trade
+          </span>
+        </h3>
+        <div style={{ overflowX: "auto" }}>
+          <table className="tj">
+            <thead>
+              <tr>
+                <th title="Entry time — opens the trade page">Entry</th>
+                <th>Instr</th>
+                <th>Dir</th>
+                <th className="num">Qty</th>
+                <th className="num" title="Recorded net P&L">Actual</th>
+                <th className="num" title="Simulated net P&L under the current rules">Sim</th>
+                <th className="num" title="Sim minus actual">Δ</th>
+                <th title="How the simulated position exited">Sim exit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.map((t, i) => {
+                const r = results[i];
+                const d = r.simPnl - r.actualPnl;
+                const reason =
+                  r.exitReason === "asTraded"
+                    ? { text: "as traded", cls: "" }
+                    : r.exitReason === "target"
+                      ? { text: "target", cls: "done" }
+                      : r.exitReason === "breakeven"
+                        ? { text: "break-even", cls: "active" }
+                        : r.exitReason === "sessionEnd"
+                          ? { text: "session end", cls: "" }
+                          : { text: "stop", cls: "invalid" };
+                return (
+                  <tr key={t.id}>
+                    <td>
+                      <Link href={`/trades/${t.id}?unit=${unit}`} className="linklike">
+                        {kyivDateOf(t.entryTime, tz).slice(5)} {fmtTimeKyiv(t.entryTime, false, tz)}
+                      </Link>
+                    </td>
+                    <td>{t.instrument}</td>
+                    <td>{t.direction === "LONG" ? "Long" : "Short"}</td>
+                    <td className="num">{t.quantity}</td>
+                    <td className={"num " + (r.actualPnl > 0 ? "pos" : r.actualPnl < 0 ? "neg" : "")}>
+                      {fmtMoney(Math.round(r.actualPnl))}
+                    </td>
+                    <td className={"num " + (r.simPnl > 0 ? "pos" : r.simPnl < 0 ? "neg" : "")}>
+                      {fmtMoney(Math.round(r.simPnl))}
+                    </td>
+                    <td className={"num " + (d > 0 ? "pos" : d < 0 ? "neg" : "")} style={{ fontWeight: 600 }}>
+                      {fmtMoney(Math.round(d))}
+                    </td>
+                    <td>
+                      <span className={"status-chip " + reason.cls}>{reason.text}</span>
+                      {!r.simulated && (
+                        <span className="section-note" style={{ marginLeft: 6 }} title="No imported bars for this trade — kept as traded">
+                          no bars
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {trades.length === 0 && (
+                <tr>
+                  <td colSpan={8} style={{ color: "var(--muted)" }}>No closed trades in this selection.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {!anyRule && (
+          <div className="section-note">No rules set — every row equals its actual result. Enter a stop/target/BE above.</div>
+        )}
       </div>
 
       <div className="grid2" style={{ gridTemplateColumns: "1fr 1fr", marginBottom: 14 }}>
