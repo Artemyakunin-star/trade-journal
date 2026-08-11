@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Tiles from "@/components/Tiles";
 import IdeaCard from "@/components/IdeaCard";
+import PriceChart from "@/components/charts/PriceChart";
 import { db } from "@/db";
 import { eq } from "drizzle-orm";
 import { plans } from "@/db/schema";
@@ -70,6 +71,8 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
       </div>
 
       <Tiles tiles={tiles} />
+
+      <PriceChart instruments={[...new Set(dayTrades.map((t) => t.instrument))]} date={date} />
 
       <div className="grid2" style={{ gridTemplateColumns: "1.15fr 1fr", marginBottom: 14 }}>
         <div className="card">
