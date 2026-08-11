@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { setTradeIdea } from "@/app/actions";
 import {
+  fmtExcursion,
   fmtMoney,
   fmtPrice,
   fmtTimeKyiv,
@@ -20,7 +21,7 @@ export default function TradesTable({
   allIdeasForSelect,
   showAttach = true,
   unit = "usd",
-  tickSizes = {},
+  specs = {},
   tz,
 }: {
   trades: TradeRow[];
@@ -28,7 +29,7 @@ export default function TradesTable({
   allIdeasForSelect: { id: string; title: string }[];
   showAttach?: boolean;
   unit?: PnlUnit;
-  tickSizes?: Record<string, number>;
+  specs?: Record<string, { tickSize: number; tickValue: number }>;
   tz?: string;
 }) {
   const byIdea = new Map<string, TradeRow[]>();
@@ -42,7 +43,8 @@ export default function TradesTable({
   const groups = ideas.filter((i) => byIdea.has(i.id));
 
   const row = (t: TradeRow) => {
-    const res = fmtTradeResult(t, unit, tickSizes[t.instrument] ?? 0.25);
+    const spec = specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 };
+    const res = fmtTradeResult(t, unit, spec.tickSize);
     return (
       <tr key={t.id} className="in-group">
         <td>
@@ -58,11 +60,8 @@ export default function TradesTable({
         <td className={"num " + (res.sign > 0 ? "pos" : res.sign < 0 ? "neg" : "")}>
           {t.pnl === null ? "—" : res.text}
         </td>
-        <td className="num" style={{ color: "var(--muted)" }}>
-          {Number(t.commission) > 0 ? "$" + Number(t.commission).toFixed(2) : "—"}
-        </td>
-        <td className="num">{t.maeTicks ?? "—"}</td>
-        <td className="num">{t.mfeTicks ?? "—"}</td>
+        <td className="num">{fmtExcursion(t.maeTicks, unit, spec, t.quantity)}</td>
+        <td className="num">{fmtExcursion(t.mfeTicks, unit, spec, t.quantity)}</td>
         <td style={{ whiteSpace: "normal", maxWidth: 260 }}>{t.note ?? ""}</td>
         {showAttach && (
           <td>
@@ -98,9 +97,8 @@ export default function TradesTable({
           <th className="num">Avg entry</th>
           <th className="num">Avg exit</th>
           <th className="num">Net P&L</th>
-          <th className="num">Comm</th>
-          <th className="num">MAE t</th>
-          <th className="num">MFE t</th>
+          <th className="num">MAE</th>
+          <th className="num">MFE</th>
           <th>Note</th>
           {showAttach && <th>Idea</th>}
         </tr>
@@ -110,7 +108,7 @@ export default function TradesTable({
           const its = byIdea.get(idea.id)!;
           const pnl = ideaPnl({ ...idea, trades: its });
           return (
-            <IdeaGroup key={idea.id} idea={idea} pnl={pnl} colSpan={showAttach ? 12 : 11}>
+            <IdeaGroup key={idea.id} idea={idea} pnl={pnl} colSpan={showAttach ? 11 : 10}>
               {its.map(row)}
             </IdeaGroup>
           );
@@ -118,7 +116,7 @@ export default function TradesTable({
         {rogue.length > 0 && (
           <>
             <tr className="group-head rogue-head">
-              <td colSpan={showAttach ? 12 : 11}>
+              <td colSpan={showAttach ? 11 : 10}>
                 ⚠ Rogue — no idea ({rogue.length}) ·{" "}
                 <span className={rogue.reduce((a, t) => a + tradePnl(t), 0) >= 0 ? "pos" : "neg"}>
                   {fmtMoney(rogue.reduce((a, t) => a + tradePnl(t), 0))}
@@ -130,7 +128,7 @@ export default function TradesTable({
         )}
         {trades.length === 0 && (
           <tr>
-            <td colSpan={showAttach ? 12 : 11} style={{ color: "var(--muted)" }}>
+            <td colSpan={showAttach ? 11 : 10} style={{ color: "var(--muted)" }}>
               No trades in this selection.
             </td>
           </tr>

@@ -14,6 +14,9 @@ export default async function EditIdeaPage({ params }: { params: Promise<{ id: s
   const idea = allIdeas.find((i) => i.id === id);
   if (!idea) notFound();
   const instruments = await db.query.instruments.findMany();
+  const specs = Object.fromEntries(
+    instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
+  );
 
   return (
     <>
@@ -33,6 +36,7 @@ export default async function EditIdeaPage({ params }: { params: Promise<{ id: s
               trades={idea.trades}
               ideas={[idea as IdeaRow]}
               allIdeasForSelect={allIdeas.map((i) => ({ id: i.id, title: i.title }))}
+              specs={specs}
             />
           </div>
           <div className="section-note">Deleting the idea detaches its trades (they become rogue) — it does not delete the trades.</div>

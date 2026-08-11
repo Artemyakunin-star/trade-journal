@@ -114,13 +114,12 @@ function tzOffsetMs(d: Date, timeZone: string): number {
 
 // ---------- P&L display units ----------
 
-export type PnlUnit = "usd" | "ticks" | "points" | "price";
+export type PnlUnit = "usd" | "ticks" | "points";
 
 export const PNL_UNITS: { key: PnlUnit; label: string }[] = [
   { key: "usd", label: "$" },
   { key: "ticks", label: "Ticks" },
   { key: "points", label: "Points" },
-  { key: "price", label: "Exit price" },
 ];
 
 /**
@@ -149,14 +148,30 @@ export function fmtTradeResult(
       return { text: fmtMoney(pnl), sign: Math.sign(pnl) };
     case "ticks": {
       const ticks = Math.round(points / tickSize);
-      return { text: `${ticks > 0 ? "+" : ""}${ticks}t`, sign };
+      return { text: `${ticks > 0 ? "+" : ""}${ticks}`, sign };
     }
     case "points": {
       const p = Number(points.toFixed(2));
-      return { text: `${p > 0 ? "+" : ""}${p}pt`, sign };
+      return { text: `${p > 0 ? "+" : ""}${p}`, sign };
     }
-    case "price":
-      return { text: fmtPrice(exit), sign: Math.sign(pnl) };
+  }
+}
+
+/** MAE/MFE magnitude in the chosen unit (always positive, no suffix). */
+export function fmtExcursion(
+  ticks: number | null,
+  unit: PnlUnit,
+  spec: { tickSize: number; tickValue: number },
+  quantity: number,
+): string {
+  if (ticks === null) return "—";
+  switch (unit) {
+    case "usd":
+      return "$" + Math.round(ticks * spec.tickValue * quantity).toLocaleString("en-US");
+    case "ticks":
+      return String(ticks);
+    case "points":
+      return String(Number((ticks * spec.tickSize).toFixed(2)));
   }
 }
 

@@ -124,12 +124,15 @@ export default function PriceChart({
   accounts,
   tz,
   theme = "dark",
+  tradeId,
 }: {
   instruments: string[];
   date: string;
   accounts?: string[];
   tz?: string;
   theme?: "dark" | "light";
+  /** Show markers for this one trade only (trade detail page). */
+  tradeId?: string;
 }) {
   const [instrument, setInstrument] = useState(instruments[0] ?? "");
   const [mode, setMode] = useState<"time" | "tick">("time");
@@ -147,6 +150,7 @@ export default function PriceChart({
     setLoading(true);
     const params = new URLSearchParams({ instrument, date, tf: mode === "tick" ? "T100" : "S5" });
     if (accounts?.length) params.set("accounts", accounts.join(","));
+    if (tradeId) params.set("tradeId", tradeId);
     fetch(`/api/bars?${params}`)
       .then((r) => r.json())
       .then((d) => {
@@ -156,7 +160,7 @@ export default function PriceChart({
     return () => {
       cancelled = true;
     };
-  }, [instrument, date, mode, accounts]);
+  }, [instrument, date, mode, accounts, tradeId]);
 
   useEffect(() => {
     const el = containerRef.current;

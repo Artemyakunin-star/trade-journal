@@ -8,7 +8,7 @@ export default function AccountFilter({
   accounts: string[];
   selected: string[] | null; // null = all
 }) {
-  if (accounts.length <= 1) return null; // nothing to choose from
+  if (accounts.length === 0) return null;
   const label =
     selected === null || selected.length === accounts.length
       ? "All accounts"

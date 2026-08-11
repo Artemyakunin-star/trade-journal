@@ -68,7 +68,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
         )}
       </div>
 
-      <PriceChart instruments={[trade.instrument]} date={date} tz={tz} theme={prefs.theme} />
+      <PriceChart instruments={[trade.instrument]} date={date} tz={tz} theme={prefs.theme} tradeId={trade.id} />
 
       <div className="grid2" style={{ gridTemplateColumns: "1.2fr 1fr", alignItems: "start" }}>
         <div className="card">

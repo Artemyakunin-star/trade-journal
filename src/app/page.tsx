@@ -23,6 +23,7 @@ import {
 } from "@/lib/metrics";
 import { fmtDateShort, kyivDateOf } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
+import { db } from "@/db";
 import { getSettings, tzLabel } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -44,12 +45,16 @@ export default async function Dashboard({
   const range = (RANGES.find((r) => r.key === sp.range)?.key ?? "30d") as RangeKey;
   const mode = sp.mode === "ideas" ? "ideas" : "trades";
 
-  const [rawTrades, rawIdeas, selectedAccounts, prefs] = await Promise.all([
+  const [rawTrades, rawIdeas, selectedAccounts, prefs, instrumentRows] = await Promise.all([
     getAllTrades(),
     getAllIdeas(),
     getSelectedAccounts(),
     getSettings(),
+    db.query.instruments.findMany(),
   ]);
+  const specs = Object.fromEntries(
+    instrumentRows.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
+  );
   const tz = prefs.timezone;
   const allTrades = filterByAccounts(rawTrades, selectedAccounts);
   const allIdeas = filterIdeasByAccounts(rawIdeas, selectedAccounts);
@@ -147,6 +152,8 @@ export default async function Dashboard({
           ideas={recentIdeas}
           allIdeasForSelect={allIdeas.map((i) => ({ id: i.id, title: i.title }))}
           showAttach={false}
+          specs={specs}
+          tz={tz}
         />
       </div>
     </>

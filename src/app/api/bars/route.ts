@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
   const date = q.get("date") ?? "";
   const tf = q.get("tf") === "T100" ? ("T100" as const) : ("S5" as const);
   const accounts = (q.get("accounts") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const tradeId = q.get("tradeId");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !instrument) {
     return NextResponse.json({ error: "instrument and date=YYYY-MM-DD required" }, { status: 400 });
   }
@@ -85,6 +86,7 @@ export async function GET(req: NextRequest) {
 
   const markers = allDayTrades.flatMap((t, idx) => {
     if (t.instrument !== instrument) return [];
+    if (tradeId && t.id !== tradeId) return []; // detail page: this trade only
     const n = idx + 1;
     const long = t.direction === "LONG";
     const entry = Number(t.avgEntryPrice);

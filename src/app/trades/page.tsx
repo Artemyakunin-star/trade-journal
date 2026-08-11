@@ -26,7 +26,9 @@ export default async function TradesPage({
   ]);
   const tz = prefs.timezone;
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "usd") as PnlUnit;
-  const tickSizes = Object.fromEntries(instruments.map((i) => [i.symbol, Number(i.tickSize)]));
+  const specs = Object.fromEntries(
+    instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
+  );
 
   let trades = filterByAccounts(allTrades, selectedAccounts);
   if (sp.date) trades = trades.filter((t) => kyivDateOf(t.entryTime, tz) === sp.date);
@@ -96,7 +98,7 @@ export default async function TradesPage({
           {sp.date ? `Trades — ${sp.date}` : "All trades"}{" "}
           <span className="sub">
             grouped by idea · {trades.length} trades, {ideaIds.size} ideas, {rogueCount} rogue
-            {unit !== "usd" && " · ticks/points are per contract"}
+            {unit !== "usd" && " · P&L per contract, MAE/MFE for the position"}
           </span>
         </h3>
         <div style={{ overflowX: "auto" }}>
@@ -105,7 +107,7 @@ export default async function TradesPage({
             ideas={allIdeas}
             allIdeasForSelect={allIdeas.map((i) => ({ id: i.id, title: i.title }))}
             unit={unit}
-            tickSizes={tickSizes}
+            specs={specs}
             tz={tz}
           />
         </div>
