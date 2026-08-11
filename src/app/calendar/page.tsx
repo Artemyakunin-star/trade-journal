@@ -1,12 +1,15 @@
 // Calendar screen: all trading days, weekly totals, rogue-day flags.
 import CalendarGrid from "@/components/CalendarGrid";
-import { dayAggregates, getAllTrades } from "@/lib/metrics";
+import AccountFilter from "@/components/AccountFilter";
+import { dayAggregates, distinctAccounts, filterByAccounts, getAllTrades } from "@/lib/metrics";
 import { fmtDateShort } from "@/lib/format";
+import { getSelectedAccounts } from "@/lib/prefs";
 
 export const dynamic = "force-dynamic";
 
 export default async function CalendarPage() {
-  const trades = await getAllTrades();
+  const [rawTrades, selectedAccounts] = await Promise.all([getAllTrades(), getSelectedAccounts()]);
+  const trades = filterByAccounts(rawTrades, selectedAccounts);
   const days = dayAggregates(trades);
   const title = days.length
     ? `${fmtDateShort(days[0].date)} – ${fmtDateShort(days[days.length - 1].date)}`
@@ -16,6 +19,7 @@ export default async function CalendarPage() {
     <>
       <div className="topbar">
         <h1>Calendar</h1>
+        <AccountFilter accounts={distinctAccounts(rawTrades)} selected={selectedAccounts} />
       </div>
       <div className="card">
         <h3>

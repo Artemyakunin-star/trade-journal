@@ -52,6 +52,25 @@ export async function getAllTrades(): Promise<TradeRow[]> {
   return rows as unknown as TradeRow[];
 }
 
+export function distinctAccounts(trades: TradeRow[]): string[] {
+  return [...new Set(trades.map((t) => t.account))].sort();
+}
+
+/** accounts = null → all. Also drops ideas' trades outside the selection. */
+export function filterByAccounts(trades: TradeRow[], accounts: string[] | null): TradeRow[] {
+  if (!accounts) return trades;
+  const set = new Set(accounts);
+  return trades.filter((t) => set.has(t.account));
+}
+
+export function filterIdeasByAccounts(ideas: IdeaRow[], accounts: string[] | null): IdeaRow[] {
+  if (!accounts) return ideas;
+  const set = new Set(accounts);
+  return ideas
+    .map((i) => ({ ...i, trades: i.trades.filter((t) => set.has(t.account)) }))
+    .filter((i) => i.trades.length > 0 || true); // keep tradeless ideas visible
+}
+
 export async function getAllIdeas(): Promise<IdeaRow[]> {
   const rows = await db.query.ideas.findMany({
     with: { trades: true },

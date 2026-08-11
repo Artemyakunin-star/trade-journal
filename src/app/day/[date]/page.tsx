@@ -8,8 +8,11 @@ import { db } from "@/db";
 import { eq } from "drizzle-orm";
 import { plans } from "@/db/schema";
 import { addScenario, deleteScenario, setScenarioOutcome } from "@/app/actions";
+import AccountFilter from "@/components/AccountFilter";
 import {
   dayAggregates,
+  distinctAccounts,
+  filterByAccounts,
   getAllIdeas,
   getAllTrades,
   reentryAfterInvalidation,
@@ -17,6 +20,7 @@ import {
   type Tile,
 } from "@/lib/metrics";
 import { fmtDateLong, fmtMoney, fmtTimeKyiv, kyivDateOf, OUTCOME_LABEL } from "@/lib/format";
+import { getSelectedAccounts } from "@/lib/prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +31,12 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     where: eq(plans.date, date),
     with: { scenarios: true },
   });
-  const [allTrades, allIdeas] = await Promise.all([getAllTrades(), getAllIdeas()]);
+  const [rawTrades, allIdeas, selectedAccounts] = await Promise.all([
+    getAllTrades(),
+    getAllIdeas(),
+    getSelectedAccounts(),
+  ]);
+  const allTrades = filterByAccounts(rawTrades, selectedAccounts);
   const dayTrades = allTrades.filter((t) => kyivDateOf(t.entryTime) === date);
   const tradeIds = new Set(dayTrades.map((t) => t.id));
   const dayIdeas = allIdeas.filter(
@@ -57,22 +66,29 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     dayTrades,
   ).filter((g) => g < 15);
 
-  const timeline = dayTrades.map((t) => {
+  // #N numbering: entry-time order across the whole (account-filtered) day —
+  // the same rule the chart markers use, so numbers always match.
+  const timeline = dayTrades.map((t, idx) => {
     const idea = t.ideaId ? allIdeas.find((i) => i.id === t.ideaId) : null;
-    return { t, idea };
+    return { t, idea, n: idx + 1 };
   });
 
   return (
     <>
       <div className="topbar">
         <h1>Day · {fmtDateLong(date)}</h1>
+        <AccountFilter accounts={distinctAccounts(rawTrades)} selected={selectedAccounts} />
         <Link href={`/day/${date}/plan`} className="btn ghost">{plan ? "Edit plan" : "Write plan"}</Link>
         <Link href={`/ideas/new?date=${date}`} className="btn">+ Idea</Link>
       </div>
 
       <Tiles tiles={tiles} />
 
-      <PriceChart instruments={[...new Set(dayTrades.map((t) => t.instrument))]} date={date} />
+      <PriceChart
+        instruments={[...new Set(dayTrades.map((t) => t.instrument))]}
+        date={date}
+        accounts={selectedAccounts ?? undefined}
+      />
 
       <div className="grid2" style={{ gridTemplateColumns: "1.15fr 1fr", marginBottom: 14 }}>
         <div className="card">
@@ -178,13 +194,13 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
         </div>
         <div className="card">
           <h3>Execution timeline <span className="sub">Kyiv time</span></h3>
-          {timeline.map(({ t, idea }) => {
+          {timeline.map(({ t, idea, n }) => {
             const p = t.pnl === null ? null : tradePnl(t);
             return (
               <div className="timeline-item" key={t.id}>
                 <span className="t">{fmtTimeKyiv(t.entryTime, false)}</span>
                 <span className="what">
-                  {t.instrument} {t.direction === "LONG" ? "Long" : "Short"} ×{t.quantity}
+                  <b style={{ color: "var(--ink)" }}>#{n}</b> {t.instrument} {t.direction === "LONG" ? "Long" : "Short"} ×{t.quantity}
                   {idea ? <> · {idea.title}</> : <> · <span style={{ color: "var(--crit)" }}>rogue</span></>}
                   {t.note && <span style={{ color: "var(--muted)" }}> — {t.note}</span>}
                 </span>

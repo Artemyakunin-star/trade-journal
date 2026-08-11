@@ -6,8 +6,12 @@ import EquityChart from "@/components/charts/EquityChart";
 import BarsChart from "@/components/charts/BarsChart";
 import CalendarGrid from "@/components/CalendarGrid";
 import TradesTable from "@/components/TradesTable";
+import AccountFilter from "@/components/AccountFilter";
 import {
   dayAggregates,
+  distinctAccounts,
+  filterByAccounts,
+  filterIdeasByAccounts,
   filterTradesByRange,
   getAllIdeas,
   getAllTrades,
@@ -18,6 +22,7 @@ import {
   type RangeKey,
 } from "@/lib/metrics";
 import { fmtDateShort, kyivDateOf } from "@/lib/format";
+import { getSelectedAccounts } from "@/lib/prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +43,13 @@ export default async function Dashboard({
   const range = (RANGES.find((r) => r.key === sp.range)?.key ?? "30d") as RangeKey;
   const mode = sp.mode === "ideas" ? "ideas" : "trades";
 
-  const [allTrades, allIdeas] = await Promise.all([getAllTrades(), getAllIdeas()]);
+  const [rawTrades, rawIdeas, selectedAccounts] = await Promise.all([
+    getAllTrades(),
+    getAllIdeas(),
+    getSelectedAccounts(),
+  ]);
+  const allTrades = filterByAccounts(rawTrades, selectedAccounts);
+  const allIdeas = filterIdeasByAccounts(rawIdeas, selectedAccounts);
   const todayKyiv = kyivDateOf(new Date());
   const trades = filterTradesByRange(allTrades, range, todayKyiv);
   const tradeIds = new Set(trades.map((t) => t.id));
@@ -68,6 +79,7 @@ export default async function Dashboard({
     <>
       <div className="topbar">
         <h1>Dashboard</h1>
+        <AccountFilter accounts={distinctAccounts(rawTrades)} selected={selectedAccounts} />
         <div className="range">
           {RANGES.map((r) => (
             <Link key={r.key} href={qs({ range: r.key })} className={range === r.key ? "on" : ""}>

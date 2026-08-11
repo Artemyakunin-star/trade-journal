@@ -112,6 +112,54 @@ function tzOffsetMs(d: Date, timeZone: string): number {
   return wall - (Math.floor(d.getTime() / 1000) * 1000);
 }
 
+// ---------- P&L display units ----------
+
+export type PnlUnit = "usd" | "ticks" | "points" | "price";
+
+export const PNL_UNITS: { key: PnlUnit; label: string }[] = [
+  { key: "usd", label: "$" },
+  { key: "ticks", label: "Ticks" },
+  { key: "points", label: "Points" },
+  { key: "price", label: "Exit price" },
+];
+
+/**
+ * Format a closed trade's result in the chosen unit.
+ * Ticks/points are PER CONTRACT (price move × direction), independent of quantity.
+ */
+export function fmtTradeResult(
+  t: {
+    direction: "LONG" | "SHORT";
+    avgEntryPrice: string | number;
+    avgExitPrice: string | number | null;
+    pnl: string | number | null;
+  },
+  unit: PnlUnit,
+  tickSize: number,
+): { text: string; sign: number } {
+  if (t.avgExitPrice === null || t.pnl === null) return { text: "open", sign: 0 };
+  const entry = Number(t.avgEntryPrice);
+  const exit = Number(t.avgExitPrice);
+  const dir = t.direction === "LONG" ? 1 : -1;
+  const points = (exit - entry) * dir;
+  const pnl = Number(t.pnl);
+  const sign = unit === "usd" ? Math.sign(pnl) : Math.sign(Math.round(points / tickSize));
+  switch (unit) {
+    case "usd":
+      return { text: fmtMoney(pnl), sign: Math.sign(pnl) };
+    case "ticks": {
+      const ticks = Math.round(points / tickSize);
+      return { text: `${ticks > 0 ? "+" : ""}${ticks}t`, sign };
+    }
+    case "points": {
+      const p = Number(points.toFixed(2));
+      return { text: `${p > 0 ? "+" : ""}${p}pt`, sign };
+    }
+    case "price":
+      return { text: fmtPrice(exit), sign: Math.sign(pnl) };
+  }
+}
+
 export const GRADE_LABEL: Record<string, string> = {
   A_PLUS: "A+", A: "A", A_MINUS: "A−",
   B_PLUS: "B+", B: "B", B_MINUS: "B−",

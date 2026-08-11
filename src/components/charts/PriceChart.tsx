@@ -1,6 +1,7 @@
 "use client";
-// TradingView-style price chart (Lightweight Charts v5): 5s bars from the DB
-// with entry/exit markers. Instrument tabs + timeframe aggregation client-side.
+// TradingView-style price chart (Lightweight Charts v5): bars from the DB with
+// numbered entry/exit markers (#1 in / #1 out), instrument tabs, time and tick
+// timeframes, and a P&L unit switch for exit labels ($ / ticks / points / price).
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,
@@ -12,16 +13,44 @@ import {
 } from "lightweight-charts";
 
 type Bar = { time: number; open: number; high: number; low: number; close: number; volume: number };
-type Marker = { time: number; position: "aboveBar" | "belowBar"; shape: "arrowUp" | "arrowDown"; color: string; text: string };
+type Marker = {
+  n: number;
+  kind: "entry" | "exit";
+  time: number;
+  position: "aboveBar" | "belowBar";
+  shape: "arrowUp" | "arrowDown";
+  color: string;
+  direction: "LONG" | "SHORT";
+  quantity: number;
+  price: number;
+  pnl?: number | null;
+  points?: number | null;
+  ticks?: number | null;
+};
+type ApiResponse = { bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number };
 
-const TFS = [
+const TIME_TFS = [
   { key: 5, label: "5s" },
   { key: 30, label: "30s" },
   { key: 60, label: "1m" },
   { key: 300, label: "5m" },
 ];
+// Tick TFS aggregate N/100 consecutive 100-tick bars.
+const TICK_TFS = [
+  { key: 1000, label: "1000t" },
+  { key: 2000, label: "2000t" },
+  { key: 5000, label: "5000t" },
+];
 
-function aggregate(barsIn: Bar[], seconds: number): Bar[] {
+type Unit = "usd" | "ticks" | "points" | "price";
+const UNITS: { key: Unit; label: string }[] = [
+  { key: "usd", label: "$" },
+  { key: "ticks", label: "t" },
+  { key: "points", label: "pt" },
+  { key: "price", label: "px" },
+];
+
+function aggregateTime(barsIn: Bar[], seconds: number): Bar[] {
   if (seconds <= 5) return barsIn;
   const out: Bar[] = [];
   let cur: Bar | null = null;
@@ -41,10 +70,61 @@ function aggregate(barsIn: Bar[], seconds: number): Bar[] {
   return out;
 }
 
-export default function PriceChart({ instruments, date }: { instruments: string[]; date: string }) {
+function aggregateCount(barsIn: Bar[], groupSize: number): Bar[] {
+  const out: Bar[] = [];
+  for (let i = 0; i < barsIn.length; i += groupSize) {
+    const chunk = barsIn.slice(i, i + groupSize);
+    out.push({
+      time: chunk[0].time,
+      open: chunk[0].open,
+      high: Math.max(...chunk.map((b) => b.high)),
+      low: Math.min(...chunk.map((b) => b.low)),
+      close: chunk[chunk.length - 1].close,
+      volume: chunk.reduce((a, b) => a + b.volume, 0),
+    });
+  }
+  // The chart requires strictly increasing times — nudge duplicates forward.
+  for (let i = 1; i < out.length; i++) {
+    if (out[i].time <= out[i - 1].time) out[i].time = out[i - 1].time + 0.001;
+  }
+  return out;
+}
+
+/** Latest bar time <= t (markers must sit on an existing bar). */
+function snapToBar(barTimes: number[], t: number): number {
+  let lo = 0, hi = barTimes.length - 1, ans = barTimes[0];
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (barTimes[mid] <= t) { ans = barTimes[mid]; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return ans;
+}
+
+function exitLabel(m: Marker, unit: Unit): string {
+  if (m.kind !== "exit") return "";
+  switch (unit) {
+    case "usd": {
+      const v = m.pnl;
+      if (v === null || v === undefined) return `#${m.n} out`;
+      return `#${m.n} out ${v > 0 ? "+$" : v < 0 ? "−$" : "$"}${Math.abs(v).toLocaleString("en-US")}`;
+    }
+    case "ticks":
+      return m.ticks === null || m.ticks === undefined ? `#${m.n} out` : `#${m.n} out ${m.ticks > 0 ? "+" : ""}${m.ticks}t`;
+    case "points":
+      return m.points === null || m.points === undefined ? `#${m.n} out` : `#${m.n} out ${m.points > 0 ? "+" : ""}${Number(m.points.toFixed(2))}pt`;
+    case "price":
+      return `#${m.n} out @ ${m.price.toLocaleString("en-US")}`;
+  }
+}
+
+export default function PriceChart({ instruments, date, accounts }: { instruments: string[]; date: string; accounts?: string[] }) {
   const [instrument, setInstrument] = useState(instruments[0] ?? "");
-  const [tf, setTf] = useState(30);
-  const [data, setData] = useState<{ bars: Bar[]; markers: Marker[] } | null>(null);
+  const [mode, setMode] = useState<"time" | "tick">("time");
+  const [timeTf, setTimeTf] = useState(30);
+  const [tickTf, setTickTf] = useState(2000);
+  const [unit, setUnit] = useState<Unit>("usd");
+  const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -53,35 +133,29 @@ export default function PriceChart({ instruments, date }: { instruments: string[
     if (!instrument) return;
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/bars?instrument=${encodeURIComponent(instrument)}&date=${date}`)
+    const params = new URLSearchParams({ instrument, date, tf: mode === "tick" ? "T100" : "S5" });
+    if (accounts?.length) params.set("accounts", accounts.join(","));
+    fetch(`/api/bars?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled) setData({ bars: d.bars ?? [], markers: d.markers ?? [] });
+        if (!cancelled) setData({ bars: d.bars ?? [], markers: d.markers ?? [], hasTicks: !!d.hasTicks, tickSize: d.tickSize ?? 0.25 });
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [instrument, date]);
+  }, [instrument, date, mode, accounts]);
 
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !data) return;
+    if (!el || !data || data.bars.length === 0) return;
 
     const chart = createChart(el, {
       height: 420,
-      layout: {
-        background: { color: "transparent" },
-        textColor: "#898781",
-        fontSize: 11,
-        attributionLogo: true,
-      },
-      grid: {
-        vertLines: { color: "#2c2c2a" },
-        horzLines: { color: "#2c2c2a" },
-      },
+      layout: { background: { color: "transparent" }, textColor: "#898781", fontSize: 11, attributionLogo: true },
+      grid: { vertLines: { color: "#2c2c2a" }, horzLines: { color: "#2c2c2a" } },
       rightPriceScale: { borderColor: "#383835" },
-      timeScale: { borderColor: "#383835", timeVisible: true, secondsVisible: tf < 30 },
+      timeScale: { borderColor: "#383835", timeVisible: true, secondsVisible: mode === "time" && timeTf < 30 },
       crosshair: { mode: 0 },
     });
     chartRef.current = chart;
@@ -94,7 +168,7 @@ export default function PriceChart({ instruments, date }: { instruments: string[
       wickUpColor: "#0ca30c88",
       wickDownColor: "#d03b3b88",
     });
-    const agg = aggregate(data.bars, tf);
+    const agg = mode === "time" ? aggregateTime(data.bars, timeTf) : aggregateCount(data.bars, Math.max(1, Math.round(tickTf / 100)));
     candles.setData(agg.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
 
     const vol = chart.addSeries(HistogramSeries, {
@@ -105,25 +179,31 @@ export default function PriceChart({ instruments, date }: { instruments: string[
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
     vol.setData(agg.map((b) => ({ time: b.time as UTCTimestamp, value: b.volume })));
 
-    // Snap markers to the aggregated bar grid so they always land on a bar.
+    const barTimes = agg.map((b) => b.time);
     createSeriesMarkers(
       candles,
       data.markers.map((m) => ({
-        time: (Math.floor(m.time / tf) * tf) as UTCTimestamp,
+        time: snapToBar(barTimes, m.time) as UTCTimestamp,
         position: m.position,
         shape: m.shape,
         color: m.color,
-        text: m.text,
         size: 1,
+        text:
+          m.kind === "entry"
+            ? `#${m.n} ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${m.price.toLocaleString("en-US")}`
+            : exitLabel(m, unit),
       })),
     );
 
-    // Default view: from 20 min before the first trade to 20 min after the last.
     if (data.markers.length && agg.length) {
-      const pad = 20 * 60;
-      const from = Math.max(agg[0].time, data.markers[0].time - pad);
-      const to = Math.min(agg[agg.length - 1].time, data.markers[data.markers.length - 1].time + pad);
-      chart.timeScale().setVisibleRange({ from: from as UTCTimestamp, to: to as UTCTimestamp });
+      const pad = mode === "time" ? 20 * 60 : 0;
+      if (mode === "time") {
+        const from = Math.max(agg[0].time, data.markers[0].time - pad);
+        const to = Math.min(agg[agg.length - 1].time, data.markers[data.markers.length - 1].time + pad);
+        chart.timeScale().setVisibleRange({ from: from as UTCTimestamp, to: to as UTCTimestamp });
+      } else {
+        chart.timeScale().fitContent();
+      }
     } else {
       chart.timeScale().fitContent();
     }
@@ -136,15 +216,17 @@ export default function PriceChart({ instruments, date }: { instruments: string[
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, tf]);
+  }, [data, timeTf, tickTf, mode, unit]);
 
   if (!instruments.length) return null;
 
   return (
     <div className="card" style={{ marginBottom: 14 }}>
-      <h3>
-        Price chart <span className="sub">5-sec bars from the exporter · entries and exits · Kyiv time</span>
-        <span style={{ float: "right", display: "inline-flex", gap: 8 }}>
+      <h3 style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <span>
+          Price chart <span className="sub">entries #N in/out · Kyiv time</span>
+        </span>
+        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
           {instruments.length > 1 && (
             <span className="seg">
               {instruments.map((i) => (
@@ -155,9 +237,36 @@ export default function PriceChart({ instruments, date }: { instruments: string[
             </span>
           )}
           <span className="seg">
-            {TFS.map((t) => (
-              <button key={t.key} className={t.key === tf ? "on" : ""} onClick={() => setTf(t.key)}>
+            {TIME_TFS.map((t) => (
+              <button
+                key={t.key}
+                className={mode === "time" && t.key === timeTf ? "on" : ""}
+                onClick={() => {
+                  setMode("time");
+                  setTimeTf(t.key);
+                }}
+              >
                 {t.label}
+              </button>
+            ))}
+            {data?.hasTicks &&
+              TICK_TFS.map((t) => (
+                <button
+                  key={t.key}
+                  className={mode === "tick" && t.key === tickTf ? "on" : ""}
+                  onClick={() => {
+                    setMode("tick");
+                    setTickTf(t.key);
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+          </span>
+          <span className="seg" title="Exit label units">
+            {UNITS.map((u) => (
+              <button key={u.key} className={unit === u.key ? "on" : ""} onClick={() => setUnit(u.key)}>
+                {u.label}
               </button>
             ))}
           </span>
@@ -166,12 +275,16 @@ export default function PriceChart({ instruments, date }: { instruments: string[
       {loading && <div className="section-note">Loading bars…</div>}
       {!loading && data && data.bars.length === 0 && (
         <div className="section-note">
-          No bars for {instrument} on {date}. Import the day&apos;s <b>bars_{instrument}_*.csv</b> on the Import screen.
+          No {mode === "tick" ? "tick" : "5-sec"} bars for {instrument} on {date}.{" "}
+          {mode === "tick"
+            ? "Tick charts need bars_*_T100_*.csv from the updated exporter."
+            : <>Import the day&apos;s <b>bars_{instrument}_*.csv</b> on the Import screen.</>}
         </div>
       )}
       <div ref={containerRef} style={{ width: "100%" }} />
       <div className="section-note">
-        ▲/▼ — entries, opposite arrows — exits (green: profit, red: loss). Scroll to zoom, drag to pan.
+        #N marks trade number within the day (same numbers as the execution timeline). ▲/▼ — entries; opposite arrows —
+        exits (green: profit, red: loss). The $/t/pt/px switch changes exit labels. Scroll to zoom, drag to pan.
       </div>
     </div>
   );

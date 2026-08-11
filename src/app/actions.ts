@@ -2,7 +2,9 @@
 // Server actions: forms for ideas, plans, scenarios, trade attachment, CSV import.
 // Single-user app (localhost / private deployment) — no auth layer yet.
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { ACCOUNTS_COOKIE_NAME } from "@/lib/prefs";
 import { db } from "@/db";
 import { ideas, plans, scenarios, trades } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -166,6 +168,18 @@ export async function setScenarioOutcome(fd: FormData) {
 
 export async function deleteScenario(fd: FormData) {
   await db.delete(scenarios).where(eq(scenarios.id, str(fd, "id")));
+  revalidatePath("/", "layout");
+}
+
+// ---------- display preferences ----------
+
+/** Save the multi-select account filter to a cookie. Empty selection = all. */
+export async function setAccountFilter(fd: FormData) {
+  const selected = fd.getAll("accounts").map(String).filter(Boolean);
+  const all = str(fd, "allAccounts") === "1" || selected.length === 0;
+  const jar = await cookies();
+  if (all) jar.delete(ACCOUNTS_COOKIE_NAME);
+  else jar.set(ACCOUNTS_COOKIE_NAME, selected.join(","), { maxAge: 60 * 60 * 24 * 365, path: "/" });
   revalidatePath("/", "layout");
 }
 

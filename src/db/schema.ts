@@ -59,7 +59,8 @@ export const execActionEnum = pgEnum("exec_action", [
 export const barTimeframeEnum = pgEnum("bar_timeframe", [
   "S5", // 5-second bars (default from NinjaTrader exporter)
   "M1", // 1-minute
-  "T1", // 1-tick
+  "T1", // 1-tick (raw ticks; heavy — not exported by default)
+  "T100", // 100-tick bars (exporter unit for building 1000/2000/5000-tick charts)
 ]);
 
 export const importKindEnum = pgEnum("import_kind", ["EXECUTIONS", "BARS"]);

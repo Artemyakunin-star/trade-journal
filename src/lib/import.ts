@@ -97,15 +97,24 @@ export function parseBarsCsv(text: string): BarRow[] {
 }
 
 /**
- * "bars_NQ_SEP26_20260810.csv" / "bars_ES_SEP26_2026-08-10.csv" ->
- * { symbol, day }. The date part is optional — when missing (renamed file),
- * the trading day is derived from the bar data instead.
+ * "bars_NQ_SEP26_20260810.csv" / "bars_ES_SEP26_2026-08-10.csv" /
+ * "bars_NQ_SEP26_T100_20260810.csv" (100-tick bars) ->
+ * { symbol, day, timeframe }. The date part is optional — when missing
+ * (renamed file), the trading day is derived from the bar data instead.
  */
-export function parseBarsFilename(name: string): { symbol: string; day: string | null } {
-  const m = name.match(/bars[_ ]([A-Z0-9]+)(?:[_ ][A-Z]{3}\d{2})?(?:[_ ](\d{4})-?(\d{2})-?(\d{2}))?/i);
-  if (!m) return { symbol: "?", day: null };
-  const day = m[2] ? `${m[2]}-${m[3]}-${m[4]}` : null;
-  return { symbol: m[1].toUpperCase(), day };
+export function parseBarsFilename(name: string): {
+  symbol: string;
+  day: string | null;
+  timeframe: "S5" | "M1" | "T100";
+} {
+  const m = name.match(
+    /bars[_ ]([A-Z0-9]+)(?:[_ ][A-Z]{3}\d{2})?(?:[_ ](S5|M1|T100|T1))?(?:[_ ](\d{4})-?(\d{2})-?(\d{2}))?/i,
+  );
+  if (!m) return { symbol: "?", day: null, timeframe: "S5" };
+  const tfRaw = (m[2] ?? "S5").toUpperCase();
+  const timeframe = tfRaw === "T100" ? "T100" : tfRaw === "M1" ? "M1" : "S5";
+  const day = m[3] ? `${m[3]}-${m[4]}-${m[5]}` : null;
+  return { symbol: m[1].toUpperCase(), day, timeframe };
 }
 
 // ---------- building round-trip trades from executions ----------
@@ -399,6 +408,7 @@ async function importBars(filename: string, text: string): Promise<ImportResult>
     return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Can't tell the instrument from the file name (expected bars_<symbol>_<contract>_<date>.csv, e.g. bars_NQ_SEP26_20260810.csv)" };
   }
   const symbol = parsed.symbol;
+  const timeframe = parsed.timeframe;
   await ensureInstrument(symbol);
   const rows = parseBarsCsv(text);
   if (!rows.length) return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "The file has no data rows" };
@@ -419,7 +429,7 @@ async function importBars(filename: string, text: string): Promise<ImportResult>
       .values(
         chunk.map((b) => ({
           instrument: symbol,
-          timeframe: "S5" as const,
+          timeframe,
           time: b.time,
           open: String(b.open), high: String(b.high), low: String(b.low), close: String(b.close),
           volume: b.volume,

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."bar_timeframe" ADD VALUE 'T100';

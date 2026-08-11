@@ -1,6 +1,15 @@
 // Server component: trades grouped by idea, with inline "attach to idea" selects.
 import { setTradeIdea } from "@/app/actions";
-import { fmtMoney, fmtPrice, fmtTimeKyiv, GRADE_LABEL, gradeClass, TRIGGER_LABEL } from "@/lib/format";
+import {
+  fmtMoney,
+  fmtPrice,
+  fmtTimeKyiv,
+  fmtTradeResult,
+  GRADE_LABEL,
+  gradeClass,
+  TRIGGER_LABEL,
+  type PnlUnit,
+} from "@/lib/format";
 import type { IdeaRow, TradeRow } from "@/lib/metrics";
 import { tradePnl, ideaPnl } from "@/lib/metrics";
 
@@ -9,11 +18,15 @@ export default function TradesTable({
   ideas,
   allIdeasForSelect,
   showAttach = true,
+  unit = "usd",
+  tickSizes = {},
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
   allIdeasForSelect: { id: string; title: string }[];
   showAttach?: boolean;
+  unit?: PnlUnit;
+  tickSizes?: Record<string, number>;
 }) {
   const byIdea = new Map<string, TradeRow[]>();
   const rogue: TradeRow[] = [];
@@ -26,7 +39,7 @@ export default function TradesTable({
   const groups = ideas.filter((i) => byIdea.has(i.id));
 
   const row = (t: TradeRow) => {
-    const pnl = t.pnl === null ? null : tradePnl(t);
+    const res = fmtTradeResult(t, unit, tickSizes[t.instrument] ?? 0.25);
     return (
       <tr key={t.id} className="in-group">
         <td>{fmtTimeKyiv(t.entryTime)}</td>
@@ -35,8 +48,8 @@ export default function TradesTable({
         <td className="num">{t.quantity}</td>
         <td className="num">{fmtPrice(t.avgEntryPrice)}</td>
         <td className="num">{t.avgExitPrice ? fmtPrice(t.avgExitPrice) : "open"}</td>
-        <td className={"num " + (pnl === null ? "" : pnl > 0 ? "pos" : pnl < 0 ? "neg" : "")}>
-          {pnl === null ? "—" : fmtMoney(pnl)}
+        <td className={"num " + (res.sign > 0 ? "pos" : res.sign < 0 ? "neg" : "")}>
+          {t.pnl === null ? "—" : res.text}
         </td>
         <td className="num">{t.maeTicks ?? "—"}</td>
         <td className="num">{t.mfeTicks ?? "—"}</td>
