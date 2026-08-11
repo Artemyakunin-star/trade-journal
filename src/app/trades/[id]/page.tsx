@@ -7,9 +7,11 @@ import { eq, asc } from "drizzle-orm";
 import { executions, trades as tradesTable } from "@/db/schema";
 import PriceChart from "@/components/charts/PriceChart";
 import DocEditor from "@/components/DocEditor";
+import BeField from "@/components/BeField";
 import { setTradeIdea, setTradeNote } from "@/app/actions";
 import { getAllIdeas, type TradeRow } from "@/lib/metrics";
-import { loadTradeBars, simulateTrade } from "@/lib/whatif";
+import { loadTradeBars, simulateTrade, type SimResult } from "@/lib/whatif";
+import type { SimOverlay } from "@/components/charts/PriceChart";
 import { getSettings, tzLabel } from "@/lib/settings";
 import { fmtDateLong, fmtExcursion, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 
@@ -20,7 +22,7 @@ export default async function TradeDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; wbe?: string; wnobe?: string }>;
+  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; be?: string; nobe?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -57,9 +59,9 @@ export default async function TradeDetailPage({
   };
   const wStop = toTicks(sp.wstop);
   const wTarget = toTicks(sp.wtarget);
-  const wNoBe = sp.wnobe === "1";
-  const wBe = wNoBe ? null : toTicks(sp.wbe);
-  let whatIf: { simPnl: number; exitReason: string } | null = null;
+  const wNoBe = sp.nobe === "1";
+  const wBe = wNoBe ? null : toTicks(sp.be);
+  let whatIf: SimResult | null = null;
   if ((wStop !== null || wTarget !== null || wBe !== null) && trade.pnl !== null) {
     // The replay always runs PAST the actual exit: an early break-even out in
     // real life must not cut the simulation short.
@@ -73,6 +75,26 @@ export default async function TradeDetailPage({
     });
   }
   const unitSuffix = unit === "usd" ? "$" : unit === "ticks" ? "t" : "pt";
+
+  // Chart overlay for the simulation: SIM exit marker, dashed stop/target
+  // levels and a SIMULATION watermark.
+  const dir = long ? 1 : -1;
+  const entryPx = Number(trade.avgEntryPrice);
+  const reasonLabel =
+    whatIf?.exitReason === "breakeven" ? "BE" :
+    whatIf?.exitReason === "sessionEnd" ? "session end" :
+    whatIf?.exitReason ?? "";
+  const simOverlay: SimOverlay | null =
+    whatIf && whatIf.exitReason !== "asTraded"
+      ? {
+          exitTimeSec: whatIf.exitTime ? Math.floor(whatIf.exitTime.getTime() / 1000) : null,
+          exitPrice: whatIf.exitPrice,
+          label: `SIM exit ${fmtMoney2(whatIf.simPnl)} (${reasonLabel})`,
+          positive: whatIf.simPnl >= 0,
+          stopPrice: wStop === null ? null : entryPx - dir * wStop * spec.tickSize,
+          targetPrice: wTarget === null ? null : entryPx + dir * wTarget * spec.tickSize,
+        }
+      : null;
 
   const stat = (lbl: string, val: React.ReactNode, cls = "") => (
     <div className="card tile">
@@ -115,7 +137,7 @@ export default async function TradeDetailPage({
         )}
       </div>
 
-      <PriceChart instruments={[trade.instrument]} date={date} tz={tz} theme={prefs.theme} tradeId={trade.id} />
+      <PriceChart instruments={[trade.instrument]} date={date} tz={tz} theme={prefs.theme} tradeId={trade.id} sim={simOverlay} />
 
       <div className="grid2" style={{ gridTemplateColumns: "1.2fr 1fr", alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
@@ -212,14 +234,9 @@ export default async function TradeDetailPage({
               <input type="hidden" name="unit" value={unit} />
               <input className="tj-input" name="wstop" type="number" min={0} step="any" placeholder={`stop, ${unitSuffix}`} defaultValue={sp.wstop ?? ""} style={{ width: 96 }} title={`Stop size in ${unitSuffix} per contract`} />
               <input className="tj-input" name="wtarget" type="number" min={0} step="any" placeholder={`target, ${unitSuffix}`} defaultValue={sp.wtarget ?? ""} style={{ width: 96 }} title={`Target size in ${unitSuffix} per contract`} />
-              <input className="tj-input" name="wbe" type="number" min={0} step="any" placeholder={`BE after, ${unitSuffix}`} defaultValue={sp.wbe ?? ""} style={{ width: 106 }} title={`Move the stop to break-even after price goes this far in your favor (${unitSuffix} per contract)`} />
-              <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)", cursor: "pointer" }}
-                title="No break-even move at all — the BE field is ignored">
-                <input type="checkbox" name="wnobe" value="1" defaultChecked={wNoBe} style={{ accentColor: "var(--s1)" }} />
-                No BE
-              </label>
+              <BeField defaultBe={sp.be ?? ""} defaultNoBe={wNoBe} suffix={unitSuffix} compact />
               <button className="btn btn-sm" type="submit">Try</button>
-              {(sp.wstop || sp.wtarget || sp.wbe || sp.wnobe) && (
+              {(sp.wstop || sp.wtarget || sp.be || sp.nobe) && (
                 <Link href={`/trades/${trade.id}?unit=${unit}`} className="btn ghost btn-sm">Reset</Link>
               )}
             </form>

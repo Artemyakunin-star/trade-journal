@@ -27,7 +27,17 @@ type Marker = {
   points?: number | null;
   ticks?: number | null;
 };
-type ApiResponse = { bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number };
+type ApiResponse = { bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number; off: number };
+
+export type SimOverlay = {
+  /** UTC seconds of the simulated exit (unshifted). */
+  exitTimeSec: number | null;
+  exitPrice: number | null;
+  label: string; // "SIM exit +$110 (target)"
+  positive: boolean;
+  stopPrice?: number | null;
+  targetPrice?: number | null;
+};
 
 const TIME_TFS = [
   { key: 5, label: "5s" },
@@ -125,6 +135,7 @@ export default function PriceChart({
   tz,
   theme = "dark",
   tradeId,
+  sim,
 }: {
   instruments: string[];
   date: string;
@@ -133,6 +144,8 @@ export default function PriceChart({
   theme?: "dark" | "light";
   /** Show markers for this one trade only (trade detail page). */
   tradeId?: string;
+  /** Simulation overlay: SIM exit marker, stop/target lines, watermark. */
+  sim?: SimOverlay | null;
 }) {
   const [instrument, setInstrument] = useState(instruments[0] ?? "");
   const [mode, setMode] = useState<"time" | "tick">("time");
@@ -154,7 +167,7 @@ export default function PriceChart({
     fetch(`/api/bars?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled) setData({ bars: d.bars ?? [], markers: d.markers ?? [], hasTicks: !!d.hasTicks, tickSize: d.tickSize ?? 0.25 });
+        if (!cancelled) setData({ bars: d.bars ?? [], markers: d.markers ?? [], hasTicks: !!d.hasTicks, tickSize: d.tickSize ?? 0.25, off: d.off ?? 0 });
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -205,26 +218,44 @@ export default function PriceChart({
     vol.setData(agg.map((b) => ({ time: b.time as UTCTimestamp, value: b.volume })));
 
     const barTimes = agg.map((b) => b.time);
-    createSeriesMarkers(
-      candles,
-      data.markers.map((m) => ({
-        time: snapToBar(barTimes, m.time) as UTCTimestamp,
-        position: m.position,
-        shape: m.shape,
-        color: m.color,
-        size: 1,
-        text:
-          m.kind === "entry"
-            ? `#${m.n} ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${m.price.toLocaleString("en-US")}`
-            : exitLabel(m, unit),
-      })),
-    );
+    const markerList = data.markers.map((m) => ({
+      time: snapToBar(barTimes, m.time) as UTCTimestamp,
+      position: m.position,
+      shape: m.shape,
+      color: m.color,
+      size: 1,
+      text:
+        m.kind === "entry"
+          ? `#${m.n} ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${m.price.toLocaleString("en-US")}`
+          : exitLabel(m, unit),
+    }));
+    // Simulation overlay: exit marker + dashed stop/target levels.
+    if (sim?.exitTimeSec && sim.exitPrice !== null) {
+      markerList.push({
+        time: snapToBar(barTimes, sim.exitTimeSec + data.off) as UTCTimestamp,
+        position: "aboveBar" as const,
+        shape: (sim.positive ? "arrowDown" : "arrowDown") as "arrowUp" | "arrowDown",
+        color: "#3987e5",
+        size: 2 as unknown as 1,
+        text: sim.label,
+      });
+      markerList.sort((a, b) => (a.time as number) - (b.time as number));
+    }
+    createSeriesMarkers(candles, markerList);
+    if (sim?.stopPrice) {
+      candles.createPriceLine({ price: sim.stopPrice, color: "#d03b3b", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "SIM stop" });
+    }
+    if (sim?.targetPrice) {
+      candles.createPriceLine({ price: sim.targetPrice, color: "#0ca30c", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "SIM target" });
+    }
 
     if (data.markers.length && agg.length) {
       const pad = mode === "time" ? 20 * 60 : 0;
       if (mode === "time") {
+        const simT = sim?.exitTimeSec ? sim.exitTimeSec + data.off : null;
+        const lastMark = Math.max(data.markers[data.markers.length - 1].time, simT ?? 0);
         const from = Math.max(agg[0].time, data.markers[0].time - pad);
-        const to = Math.min(agg[agg.length - 1].time, data.markers[data.markers.length - 1].time + pad);
+        const to = Math.min(agg[agg.length - 1].time, lastMark + pad);
         chart.timeScale().setVisibleRange({ from: from as UTCTimestamp, to: to as UTCTimestamp });
       } else {
         chart.timeScale().fitContent();
@@ -241,7 +272,7 @@ export default function PriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, timeTf, tickTf, mode, unit, theme]);
+  }, [data, timeTf, tickTf, mode, unit, theme, sim]);
 
   if (!instruments.length) return null;
 
@@ -306,7 +337,20 @@ export default function PriceChart({
             : <>Import the day&apos;s <b>bars_{instrument}_*.csv</b> on the Import screen.</>}
         </div>
       )}
-      <div ref={containerRef} style={{ width: "100%" }} />
+      <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
+        {sim && (
+          <div
+            style={{
+              position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+              pointerEvents: "none", zIndex: 5,
+            }}
+          >
+            <span style={{ fontSize: 46, fontWeight: 800, letterSpacing: 6, color: "#3987e5", opacity: 0.13, transform: "rotate(-12deg)", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+              Simulation
+            </span>
+          </div>
+        )}
+      </div>
       <div className="section-note">
         #N marks trade number within the day (same numbers as the execution timeline). ▲/▼ — entries; opposite arrows —
         exits (green: profit, red: loss). The $/t/pt/px switch changes exit labels. Scroll to zoom, drag to pan.

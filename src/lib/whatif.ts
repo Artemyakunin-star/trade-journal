@@ -20,9 +20,13 @@ export type SimParams = {
 export type SimResult = {
   tradeId: string;
   simulated: boolean; // false = no bars coverage, actual result used
-  exitReason: "stop" | "target" | "breakeven" | "sessionEnd" | "asTraded";
+  exitReason: "stop" | "target" | "breakeven" | "sessionEnd" | "asTraded" | "skipped";
   actualPnl: number; // net, USD (as recorded)
   simPnl: number; // net, USD
+  /** When the simulated position actually closed (drives the one-position-at-a-time rule). */
+  exitTime: Date | null;
+  /** Simulated exit price (fill incl. slippage for stops); null when as-traded/skipped. */
+  exitPrice: number | null;
 };
 
 type Spec = { tickSize: number; tickValue: number };
@@ -41,7 +45,7 @@ export function simulateTrade(
   const qty = t.quantity;
   const pv = spec.tickValue / spec.tickSize; // $ per point per contract
 
-  const base: Omit<SimResult, "exitReason" | "simPnl"> = {
+  const base: Omit<SimResult, "exitReason" | "simPnl" | "exitTime" | "exitPrice"> = {
     tradeId: t.id,
     simulated: tradeBars.length > 0,
     actualPnl,
@@ -50,7 +54,7 @@ export function simulateTrade(
   const beTrigger = p.beTriggerTicks ?? null;
   const ignoreExit = p.ignoreActualExit ?? false;
   if (!tradeBars.length || (p.stopTicks === null && p.targetTicks === null && beTrigger === null && !ignoreExit)) {
-    return { ...base, exitReason: "asTraded", simPnl: actualPnl };
+    return { ...base, exitReason: "asTraded", simPnl: actualPnl, exitTime: t.exitTime, exitPrice: null };
   }
 
   // Without "no BE" mode the replay stops at the actual exit; with it, we run
@@ -73,11 +77,11 @@ export function simulateTrade(
       // conservative: stop wins ties; slippage worsens the fill
       const fill = stopPrice! - dir * p.slippageTicks * spec.tickSize;
       const gross = (fill - entry) * dir * qty * pv;
-      return { ...base, exitReason: beArmed && Math.abs(stopPrice! - entry) < 1e-9 ? "breakeven" : "stop", simPnl: gross - commission };
+      return { ...base, exitReason: beArmed && Math.abs(stopPrice! - entry) < 1e-9 ? "breakeven" : "stop", simPnl: gross - commission, exitTime: b.time, exitPrice: fill };
     }
     if (targetHit) {
       const gross = (targetPrice! - entry) * dir * qty * pv;
-      return { ...base, exitReason: "target", simPnl: gross - commission };
+      return { ...base, exitReason: "target", simPnl: gross - commission, exitTime: b.time, exitPrice: targetPrice! };
     }
 
     // BE trigger: applies starting from the NEXT bar (conservative within the bar).
@@ -93,9 +97,46 @@ export function simulateTrade(
     // "No BE" hold ran to the end of available data -> exit at the last close.
     const last = activeBars[activeBars.length - 1];
     const gross = (last.close - entry) * dir * qty * pv;
-    return { ...base, exitReason: "sessionEnd", simPnl: gross - commission };
+    return { ...base, exitReason: "sessionEnd", simPnl: gross - commission, exitTime: last.time, exitPrice: last.close };
   }
-  return { ...base, exitReason: "asTraded", simPnl: actualPnl };
+  return { ...base, exitReason: "asTraded", simPnl: actualPnl, exitTime: t.exitTime, exitPrice: null };
+}
+
+/**
+ * Simulate a list of trades with the one-position-at-a-time rule: while the
+ * previous simulated position is still open, later real entries are SKIPPED —
+ * in that alternate world you would not have re-entered.
+ */
+export function simulateSequential(
+  trades: TradeRow[],
+  tradeBars: Map<string, Bar[]>,
+  specs: Record<string, Spec>,
+  paramsFor: (spec: Spec) => SimParams,
+  oneAtATime: boolean,
+): SimResult[] {
+  const sorted = [...trades].sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
+  const results = new Map<string, SimResult>();
+  let busyUntil: number | null = null;
+  for (const t of sorted) {
+    const spec = specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 };
+    if (oneAtATime && busyUntil !== null && t.entryTime.getTime() < busyUntil) {
+      results.set(t.id, {
+        tradeId: t.id,
+        simulated: true,
+        exitReason: "skipped",
+        actualPnl: t.pnl === null ? 0 : Number(t.pnl),
+        simPnl: 0,
+        exitTime: null,
+        exitPrice: null,
+      });
+      continue;
+    }
+    const r = simulateTrade(t, tradeBars.get(t.id) ?? [], spec, paramsFor(spec));
+    results.set(t.id, r);
+    const end = (r.exitTime ?? t.exitTime)?.getTime() ?? null;
+    if (end !== null) busyUntil = busyUntil === null ? end : Math.max(busyUntil, end);
+  }
+  return trades.map((t) => results.get(t.id)!);
 }
 
 /** Bars for each trade's window (entry..exit, or entry..+4h for open trades).
@@ -148,20 +189,21 @@ export type SimSummary = {
 
 export function summarize(results: SimResult[]): SimSummary {
   const covered = results.filter((r) => r.simulated);
+  const executed = results.filter((r) => r.exitReason !== "skipped");
   const wins = (xs: number[]) => (xs.length ? xs.filter((v) => v > 0).length / xs.length : 0);
   return {
     actualTotal: results.reduce((a, r) => a + r.actualPnl, 0),
     simTotal: results.reduce((a, r) => a + r.simPnl, 0),
     actualWinRate: wins(results.map((r) => r.actualPnl)),
-    simWinRate: wins(results.map((r) => r.simPnl)),
-    changed: results.filter((r) => r.exitReason !== "asTraded").length,
+    simWinRate: wins(executed.map((r) => r.simPnl)),
+    changed: results.filter((r) => r.exitReason !== "asTraded" && r.exitReason !== "skipped").length,
     covered: covered.length,
     total: results.length,
     results,
   };
 }
 
-/** Sweep one parameter and return total sim P&L per value (for the optimization curve). */
+/** Sweep one parameter (one-position-at-a-time) → total sim P&L per value. */
 export function sweep(
   trades: TradeRow[],
   tradeBars: Map<string, Bar[]>,
@@ -170,10 +212,7 @@ export function sweep(
   make: (v: number, spec: Spec) => SimParams,
 ): { value: number; pnl: number }[] {
   return values.map((v) => {
-    const total = trades.reduce((a, t) => {
-      const spec = specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 };
-      return a + simulateTrade(t, tradeBars.get(t.id) ?? [], spec, make(v, spec)).simPnl;
-    }, 0);
-    return { value: v, pnl: Math.round(total) };
+    const rs = simulateSequential(trades, tradeBars, specs, (spec) => make(v, spec), true);
+    return { value: v, pnl: Math.round(rs.reduce((a, r) => a + r.simPnl, 0)) };
   });
 }

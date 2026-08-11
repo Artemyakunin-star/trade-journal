@@ -138,6 +138,7 @@ export async function GET(req: NextRequest) {
     instrument,
     date,
     tf,
+    off,
     tickSize,
     hasTicks: tfRows.some((r) => r.timeframe === "T100"),
     bars: series,

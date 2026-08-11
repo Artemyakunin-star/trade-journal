@@ -21,7 +21,8 @@ import {
 import { fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
-import { loadTradeBars, simulateTrade, summarize, sweep } from "@/lib/whatif";
+import { loadTradeBars, simulateSequential, summarize, sweep } from "@/lib/whatif";
+import BeField from "@/components/BeField";
 
 export const dynamic = "force-dynamic";
 
@@ -102,16 +103,21 @@ export default async function AnalyticsPage({
 
   const tradeBars = await loadTradeBars(trades, 8); // extend past exits: sims are not cut by early real-life outs
   const anyRule = stopVal !== null || targetVal !== null || beVal !== null;
-  const results = trades.map((t) => {
-    const spec = specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 };
-    return simulateTrade(t, tradeBars.get(t.id) ?? [], spec, {
+  // One position at a time: while a simulated trade is still open, later real
+  // re-entries are skipped (you would not have re-entered in that world).
+  const results = simulateSequential(
+    trades,
+    tradeBars,
+    specs,
+    (spec) => ({
       stopTicks: toTicks(stopVal, spec),
       targetTicks: toTicks(targetVal, spec),
       beTriggerTicks: toTicks(beVal, spec),
       slippageTicks,
       ignoreActualExit: anyRule,
-    });
-  });
+    }),
+    anyRule,
+  );
   const sum = summarize(results);
 
   const diff = sum.simTotal - sum.actualTotal;
@@ -120,7 +126,14 @@ export default async function AnalyticsPage({
     { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
     { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
     { lbl: "Win rate: actual → sim", val: `${Math.round(sum.actualWinRate * 100)}% → ${Math.round(sum.simWinRate * 100)}%` },
-    { lbl: "Trades re-routed", val: `${sum.changed} of ${sum.covered}`, delta: sum.covered < sum.total ? `${sum.total - sum.covered} without bar data — kept as traded` : "all trades have bar coverage" },
+    { lbl: "Trades re-routed", val: `${sum.changed} of ${sum.covered}`, delta: (() => {
+      const skipped = results.filter((r) => r.exitReason === "skipped").length;
+      const noBars = sum.total - sum.covered;
+      const parts = [];
+      if (skipped) parts.push(`${skipped} skipped (position still open)`);
+      if (noBars) parts.push(`${noBars} without bar data`);
+      return parts.length ? parts.join(" · ") : "all trades have bar coverage";
+    })() },
   ];
 
   // Optimization sweeps in the ACTIVE unit (converted per instrument).
@@ -172,6 +185,13 @@ export default async function AnalyticsPage({
   ];
 
   const instruments = [...new Set(rawTrades.map((t) => t.instrument))].sort();
+  // Carry the current rule set into the trade page so a click on a simulated
+  // row opens THAT simulation (chart with SIM exit + watermark).
+  const simQ =
+    (sp.stop ? `&wstop=${sp.stop}` : "") +
+    (sp.target ? `&wtarget=${sp.target}` : "") +
+    (sp.be ? `&be=${sp.be}` : "") +
+    (noBe ? "&nobe=1" : "");
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
@@ -232,14 +252,7 @@ export default async function AnalyticsPage({
             Target
             <input className="tj-input" name="target" type="number" min={0} step="any" defaultValue={sp.target ?? ""} placeholder={unitSuffix} style={{ width: 76 }} title={`Target size per contract, ${unitSuffix}`} />
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
-            BE after
-            <input className="tj-input" name="be" type="number" min={0} step="any" defaultValue={sp.be ?? ""} placeholder={unitSuffix} style={{ width: 76 }} title={`Move the stop to break-even after this favorable move, ${unitSuffix} per contract`} />
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)", cursor: "pointer" }} title="No break-even move — the BE field is ignored">
-            <input type="checkbox" name="nobe" value="1" defaultChecked={noBe} style={{ accentColor: "var(--s1)" }} />
-            No BE
-          </label>
+          <BeField defaultBe={sp.be ?? ""} defaultNoBe={noBe} suffix={unitSuffix} />
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
             Slip, t
             <input className="tj-input" name="slip" type="number" min={0} step={1} defaultValue={slippageTicks} style={{ width: 58 }} />
@@ -296,11 +309,13 @@ export default async function AnalyticsPage({
                         ? { text: "break-even", cls: "active" }
                         : r.exitReason === "sessionEnd"
                           ? { text: "session end", cls: "" }
-                          : { text: "stop", cls: "invalid" };
+                          : r.exitReason === "skipped"
+                            ? { text: "skipped — in position", cls: "invalid" }
+                            : { text: "stop", cls: "invalid" };
                 return (
                   <tr key={t.id}>
                     <td>
-                      <Link href={`/trades/${t.id}?unit=${unit}`} className="linklike">
+                      <Link href={`/trades/${t.id}?unit=${unit}${simQ}`} className="linklike">
                         {kyivDateOf(t.entryTime, tz).slice(5)} {fmtTimeKyiv(t.entryTime, false, tz)}
                       </Link>
                     </td>
@@ -345,14 +360,14 @@ export default async function AnalyticsPage({
           <h3>
             Stop optimization <span className="sub">total P&L if the stop were N {unitSuffix} (target/BE as selected)</span>
           </h3>
-          <BarsChart bars={stopSweep.map((s) => ({ lbl: s.lbl + "t", pnl: s.pnl }))} />
+          <BarsChart bars={stopSweep} />
           <div className="section-note">Where the bars stop growing, extra stop room no longer pays for itself.</div>
         </div>
         <div className="card">
           <h3>
             Target optimization <span className="sub">total P&L if the target were N {unitSuffix} (stop/BE as selected)</span>
           </h3>
-          <BarsChart bars={targetSweep.map((s) => ({ lbl: s.lbl + "t", pnl: s.pnl }))} />
+          <BarsChart bars={targetSweep} />
           <div className="section-note">Compare with your actual exits — are you cutting winners too early?</div>
         </div>
       </div>
