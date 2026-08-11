@@ -312,8 +312,10 @@ async function setSetting(key: string, value: unknown) {
 
 export async function saveDisplaySettings(fd: FormData) {
   const tz = str(fd, "timezone");
+  const importTz = str(fd, "importTimezone");
   const theme = str(fd, "theme") === "light" ? "light" : "dark";
   if (TIMEZONES.includes(tz)) await setSetting("timezone", tz);
+  if (TIMEZONES.includes(importTz)) await setSetting("importTimezone", importTz);
   await setSetting("theme", theme);
   revalidatePath("/", "layout");
 }

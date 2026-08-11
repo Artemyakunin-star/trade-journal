@@ -16,7 +16,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" data-theme={prefs.theme}>
       <body>
         <div style={{ display: "flex", minHeight: "100vh" }}>
-          <Sidebar footer={`Times shown in ${tzLabel(prefs.timezone)}. NinjaTrader CSVs imported as Chicago time.`} />
+          <Sidebar footer={`Times shown in ${tzLabel(prefs.timezone)}. CSVs imported as ${tzLabel(prefs.importTimezone)}.`} />
           <div className="main">{children}</div>
         </div>
       </body>

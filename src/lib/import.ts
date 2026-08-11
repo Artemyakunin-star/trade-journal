@@ -7,13 +7,14 @@
 //   bars_<symbol>_<contract>_<yyyymmdd>.csv  (e.g. bars_NQ_SEP26_20260810.csv)
 //     Time,Open,High,Low,Close,Volume
 //
-// Timestamps in the files are the NinjaTrader machine's local time =
-// America/Chicago (exchange time). We convert to UTC on import and display
-// everything in Europe/Kyiv.
+// Timestamps in the files are the NinjaTrader machine's local time — the
+// "Import timezone" in Settings (default America/Chicago, exchange time).
+// Converted to UTC on import; displayed in the Chart timezone.
 import { db } from "@/db";
 import { bars, executions, imports, instruments, trades } from "@/db/schema";
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
-import { parseInTimeZone, CHICAGO } from "@/lib/format";
+import { parseInTimeZone } from "@/lib/format";
+import { getSettings } from "@/lib/settings";
 
 // ---------- CSV ----------
 
@@ -42,7 +43,7 @@ export function rootSymbol(contract: string): string {
   return contract.trim().split(/\s+/)[0];
 }
 
-export function parseExecutionsCsv(text: string): ExecRow[] {
+export function parseExecutionsCsv(text: string, tz = "America/Chicago"): ExecRow[] {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   const header = splitCsvLine(lines[0]).map((h) => h.trim());
   const idx = (name: string) => {
@@ -66,7 +67,7 @@ export function parseExecutionsCsv(text: string): ExecRow[] {
       marketPosition: f[cols.mp].trim(),
       quantity: Number(f[cols.qty]),
       price: Number(f[cols.price]),
-      time: parseInTimeZone(f[cols.time], CHICAGO),
+      time: parseInTimeZone(f[cols.time], tz),
       orderId: f[cols.orderId].trim(),
       executionId: f[cols.execId].trim(),
       commission: Number(f[cols.comm]) || 0,
@@ -79,7 +80,7 @@ export function parseExecutionsCsv(text: string): ExecRow[] {
 
 export type BarRow = { time: Date; open: number; high: number; low: number; close: number; volume: number };
 
-export function parseBarsCsv(text: string): BarRow[] {
+export function parseBarsCsv(text: string, tz = "America/Chicago"): BarRow[] {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   const header = splitCsvLine(lines[0]).map((h) => h.trim());
   const ti = header.indexOf("Time");
@@ -89,7 +90,7 @@ export function parseBarsCsv(text: string): BarRow[] {
   return lines.slice(1).map((line) => {
     const f = splitCsvLine(line);
     return {
-      time: parseInTimeZone(f[ti], CHICAGO),
+      time: parseInTimeZone(f[ti], tz),
       open: Number(f[oi]), high: Number(f[hi]), low: Number(f[li]), close: Number(f[ci]),
       volume: Number(f[vi]),
     };
@@ -316,8 +317,9 @@ export async function importCsvFile(filename: string, text: string): Promise<Imp
   const isBars = !isExec && /Open/i.test(firstLine) && /Volume/i.test(firstLine);
 
   try {
-    if (isExec) return await importExecutions(filename, text);
-    if (isBars) return await importBars(filename, text);
+    const { importTimezone } = await getSettings();
+    if (isExec) return await importExecutions(filename, text, importTimezone);
+    if (isBars) return await importBars(filename, text, importTimezone);
     return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Doesn't look like an executions_*.csv or bars_*.csv exporter file" };
   } catch (e) {
     return {
@@ -344,8 +346,8 @@ async function ensureInstrument(symbol: string) {
   await db.insert(instruments).values({ symbol, ...spec }).onConflictDoNothing();
 }
 
-async function importExecutions(filename: string, text: string): Promise<ImportResult> {
-  const rows = parseExecutionsCsv(text);
+async function importExecutions(filename: string, text: string, tz: string): Promise<ImportResult> {
+  const rows = parseExecutionsCsv(text, tz);
   if (!rows.length) return { filename, kind: "EXECUTIONS", inserted: 0, skipped: 0, error: "The file has no data rows" };
 
   const symbols = [...new Set(rows.map((r) => r.symbol))];
@@ -405,7 +407,7 @@ function kyivDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
-async function importBars(filename: string, text: string): Promise<ImportResult> {
+async function importBars(filename: string, text: string, tz: string): Promise<ImportResult> {
   const parsed = parseBarsFilename(filename);
   if (parsed.symbol === "?") {
     return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Can't tell the instrument from the file name (expected bars_<symbol>_<contract>_<date>.csv, e.g. bars_NQ_SEP26_20260810.csv)" };
@@ -413,7 +415,7 @@ async function importBars(filename: string, text: string): Promise<ImportResult>
   const symbol = parsed.symbol;
   const timeframe = parsed.timeframe;
   await ensureInstrument(symbol);
-  const rows = parseBarsCsv(text);
+  const rows = parseBarsCsv(text, tz);
   if (!rows.length) return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "The file has no data rows" };
 
   // Trading day: from the file name when present, otherwise from the data

@@ -40,7 +40,8 @@ export default async function ImportPage() {
             </tbody>
           </table>
           <div className="section-note">
-            Timestamps in the exporter CSVs are Chicago (exchange) time; they are converted and shown in Kyiv time everywhere in the app.
+            CSV timestamps are read in the Import timezone from Settings (default: Chicago, the exchange time), converted
+            to UTC in the database and shown everywhere in the Chart timezone.
           </div>
         </div>
       )}

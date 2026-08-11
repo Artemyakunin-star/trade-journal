@@ -2,12 +2,14 @@
 import { db } from "@/db";
 
 export type AppSettings = {
-  timezone: string; // IANA zone used for ALL display + day grouping
+  timezone: string; // IANA zone used for ALL display + day grouping (chart timezone)
+  importTimezone: string; // zone the NinjaTrader exporter CSVs are written in
   theme: "dark" | "light";
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
   timezone: "Europe/Kyiv",
+  importTimezone: "America/Chicago",
   theme: "dark",
 };
 
@@ -24,8 +26,10 @@ export async function getSettings(): Promise<AppSettings> {
   const rows = await db.query.settings.findMany();
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const timezone = typeof map.get("timezone") === "string" ? (map.get("timezone") as string) : DEFAULT_SETTINGS.timezone;
+  const importTimezone =
+    typeof map.get("importTimezone") === "string" ? (map.get("importTimezone") as string) : DEFAULT_SETTINGS.importTimezone;
   const theme = map.get("theme") === "light" ? "light" : "dark";
-  return { timezone, theme };
+  return { timezone, importTimezone, theme };
 }
 
 /** Short label for a timezone: "Kyiv time", "Chicago time", "UTC". */

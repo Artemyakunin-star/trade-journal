@@ -21,8 +21,18 @@ export default async function SettingsPage() {
         <form action={saveDisplaySettings} className="card">
           <h3>Display</h3>
           <div className="tj-field">
-            <label className="tj-label">Timezone — all times, charts and day grouping use it</label>
+            <label className="tj-label">Chart timezone — all times, charts and day grouping are shown in it</label>
             <select className="tj-select" name="timezone" defaultValue={prefs.timezone} style={{ width: "100%" }}>
+              {TIMEZONES.map((tz) => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+          </div>
+          <div className="tj-field">
+            <label className="tj-label">
+              Import timezone — the timezone your NinjaTrader machine writes CSV timestamps in
+            </label>
+            <select className="tj-select" name="importTimezone" defaultValue={prefs.importTimezone} style={{ width: "100%" }}>
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>{tz}</option>
               ))}
@@ -41,7 +51,8 @@ export default async function SettingsPage() {
           </div>
           <button className="btn" type="submit">Save display settings</button>
           <div className="section-note">
-            NinjaTrader CSVs are always imported as Chicago (exchange) time — this setting only changes how times are shown.
+            Chart timezone only changes how times are shown. Import timezone applies to files you import AFTER changing
+            it — already-imported trades and bars keep their times.
           </div>
         </form>
 
