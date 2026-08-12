@@ -1,6 +1,7 @@
 // Server component: trades grouped by idea, with configurable columns,
 // inline "attach to idea" selects, manual stop-loss entry and RR.
 import Link from "next/link";
+import ComboInput from "@/components/ComboInput";
 import { setTradeField, setTradeIdea, setTradeStop } from "@/app/actions";
 import {
   fmtExcursion,
@@ -117,14 +118,13 @@ export default function TradesTable({
             <form action={setTradeField} style={{ display: "flex", gap: 4 }}>
               <input type="hidden" name="tradeId" value={t.id} />
               <input type="hidden" name="field" value="keyLevel" />
-              <input
-                className="mini-select"
+              <ComboInput
                 name="value"
-                list="tj-keylevel-options"
+                options={keyLevelOptions}
                 defaultValue={t.keyLevel ?? ""}
                 placeholder="level"
                 title="Key level — pick from the list or type your own (new values are remembered)"
-                style={{ width: 100 }}
+                width={100}
               />
               <button className="btn ghost btn-sm" type="submit">set</button>
             </form>
@@ -135,14 +135,13 @@ export default function TradesTable({
             <form action={setTradeField} style={{ display: "flex", gap: 4 }}>
               <input type="hidden" name="tradeId" value={t.id} />
               <input type="hidden" name="field" value="ofConfirmation" />
-              <input
-                className="mini-select"
+              <ComboInput
                 name="value"
-                list="tj-ofconf-options"
+                options={ofConfOptions}
                 defaultValue={t.ofConfirmation ?? ""}
                 placeholder="OF signal"
                 title="Order-flow confirmation — pick from the list or type your own (new values are remembered)"
-                style={{ width: 118 }}
+                width={118}
               />
               <button className="btn ghost btn-sm" type="submit">set</button>
             </form>
@@ -194,16 +193,6 @@ export default function TradesTable({
 
   return (
     <>
-    <datalist id="tj-keylevel-options">
-      {keyLevelOptions.map((o) => (
-        <option key={o} value={o} />
-      ))}
-    </datalist>
-    <datalist id="tj-ofconf-options">
-      {ofConfOptions.map((o) => (
-        <option key={o} value={o} />
-      ))}
-    </datalist>
     <table className="tj">
       <thead>
         <tr>

@@ -1,6 +1,7 @@
 // Manually add a trade (no CSV behind it) — from the Trades screen or a Day.
 // Times are entered in the Chart timezone; P&L is computed from the prices.
 import Link from "next/link";
+import ComboInput from "@/components/ComboInput";
 import { db } from "@/db";
 import { createManualTrade } from "@/app/actions";
 import { distinctAccounts, getAllIdeas, getAllTrades } from "@/lib/metrics";
@@ -49,14 +50,13 @@ export default async function NewTradePage({
         <form action={createManualTrade} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {field(
             "Account",
-            <>
-              <input className="tj-input" name="account" list="tj-new-accounts" required defaultValue={accounts.length === 1 ? accounts[0] : ""} placeholder="BX37797-60" />
-              <datalist id="tj-new-accounts">
-                {accounts.map((a) => (
-                  <option key={a} value={a} />
-                ))}
-              </datalist>
-            </>,
+            <ComboInput
+              className="tj-input"
+              name="account"
+              options={accounts}
+              defaultValue={accounts.length === 1 ? accounts[0] : ""}
+              placeholder="account"
+            />,
           )}
           {field(
             "Instrument",
@@ -100,26 +100,12 @@ export default async function NewTradePage({
           )}
           {field(
             "Key Level",
-            <>
-              <input className="tj-input" name="keyLevel" list="tj-new-keylevel" placeholder="level you traded from" />
-              <datalist id="tj-new-keylevel">
-                {prefs.keyLevelOptions.map((o) => (
-                  <option key={o} value={o} />
-                ))}
-              </datalist>
-            </>,
+            <ComboInput className="tj-input" name="keyLevel" options={prefs.keyLevelOptions} placeholder="level you traded from" />,
             "new values are remembered",
           )}
           {field(
             "OF confirmation",
-            <>
-              <input className="tj-input" name="ofConfirmation" list="tj-new-ofconf" placeholder="delta divergence, absorption…" />
-              <datalist id="tj-new-ofconf">
-                {prefs.ofConfOptions.map((o) => (
-                  <option key={o} value={o} />
-                ))}
-              </datalist>
-            </>,
+            <ComboInput className="tj-input" name="ofConfirmation" options={prefs.ofConfOptions} placeholder="what you saw before entry" />,
             "new values are remembered",
           )}
           {field(
