@@ -196,23 +196,23 @@ export default function TradesTable({
     <table className="tj">
       <thead>
         <tr>
-          <th title="Entry time of the first fill — click it to open the trade details page">Entry</th>
-          {show("account") && <th title="Trading account the trade was executed on">Account</th>}
-          {show("instrument") && <th title="Futures root symbol (NQ, ES, MNQ, …)">Instr</th>}
-          {show("dir") && <th title="Position direction: Long or Short">Dir</th>}
-          {show("qty") && <th className="num" title="Maximum position size during the trade, in contracts">Qty</th>}
-          {show("entryPrice") && <th className="num" title="Volume-weighted average entry price across all entry fills">Avg entry</th>}
-          {show("exitPrice") && <th className="num" title="Volume-weighted average exit price across all exit fills (partial take-profits included)">Avg exit</th>}
-          {show("netPnl") && <th className="num" title="Realized P&L in USD for the WHOLE position, net of commission">Net P&L</th>}
-          {show("perContract") && <th className="num" title="Price move for ONE contract in the selected unit ($ / ticks / points). In $ it is gross, before commission">P&L/contract</th>}
-          {show("mae") && <th className="num" title="Maximum Adverse Excursion — the worst the price went AGAINST you while the trade was open, per contract, in the selected unit. Computed from 5-sec bars">MAE</th>}
-          {show("mfe") && <th className="num" title="Maximum Favorable Excursion — the best the price went IN YOUR FAVOR while open, per contract, in the selected unit. Computed from 5-sec bars">MFE</th>}
-          {show("keyLevel") && <th title="Key level the trade was taken from — a price or short text, entered manually">Key Level</th>}
-          {show("ofConf") && <th title="Order-flow confirmation you saw before entry (delta divergence, absorption, big prints…), entered manually">OF conf</th>}
-          {show("stop") && <th title="Original stop-loss SIZE per contract, entered manually in the selected unit ($ risk / ticks / points). Stored as a price behind the scenes for RR">SL</th>}
-          {show("rr") && <th className="num" title="Realized R-multiple: result divided by the initial risk (needs SL). +2R means you made twice your risk; −1R is a full stop">RR</th>}
-          {show("note") && <th title="Free-text note for the trade">Note</th>}
-          {showIdeaCol && <th title="Idea this trade belongs to. Trades without an idea are counted as rogue">Idea</th>}
+          <th data-tip="Entry time of the first fill — click it to open the trade details page">Entry</th>
+          {show("account") && <th data-tip="Trading account the trade was executed on">Account</th>}
+          {show("instrument") && <th data-tip="Futures root symbol (NQ, ES, MNQ, …)">Instr</th>}
+          {show("dir") && <th data-tip="Position direction: Long or Short">Dir</th>}
+          {show("qty") && <th className="num" data-tip="Maximum position size during the trade, in contracts">Qty</th>}
+          {show("entryPrice") && <th className="num" data-tip="Volume-weighted average entry price across all entry fills">Avg entry</th>}
+          {show("exitPrice") && <th className="num" data-tip="Volume-weighted average exit price across all exit fills (partial take-profits included)">Avg exit</th>}
+          {show("netPnl") && <th className="num" data-tip="Realized P&L in USD for the WHOLE position, net of commission">Net P&L</th>}
+          {show("perContract") && <th className="num" data-tip="Price move for ONE contract in the selected unit ($ / ticks / points). In $ it is gross, before commission">P&L/contract</th>}
+          {show("mae") && <th className="num" data-tip="Maximum Adverse Excursion — the worst the price went AGAINST you while the trade was open, per contract, in the selected unit. Computed from 5-sec bars">MAE</th>}
+          {show("mfe") && <th className="num" data-tip="Maximum Favorable Excursion — the best the price went IN YOUR FAVOR while open, per contract, in the selected unit. Computed from 5-sec bars">MFE</th>}
+          {show("keyLevel") && <th data-tip="Key level the trade was taken from — a price or short text, entered manually">Key Level</th>}
+          {show("ofConf") && <th data-tip="Order-flow confirmation you saw before entry (delta divergence, absorption, big prints…), entered manually">OF conf</th>}
+          {show("stop") && <th className="tip-r" data-tip="Original stop-loss SIZE per contract, entered manually in the selected unit ($ risk / ticks / points). Stored as a price behind the scenes for RR">SL</th>}
+          {show("rr") && <th className="num tip-r" data-tip="Realized R-multiple: result divided by the initial risk (needs SL). +2R means you made twice your risk; −1R is a full stop">RR</th>}
+          {show("note") && <th className="tip-r" data-tip="Free-text note for the trade">Note</th>}
+          {showIdeaCol && <th className="tip-r" data-tip="Idea this trade belongs to. Trades without an idea are counted as rogue">Idea</th>}
         </tr>
       </thead>
       <tbody>

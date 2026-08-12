@@ -286,14 +286,14 @@ export default async function AnalyticsPage({
           <table className="tj">
             <thead>
               <tr>
-                <th title="Entry time — opens the trade page">Entry</th>
+                <th data-tip="Entry time — opens the trade page">Entry</th>
                 <th>Instr</th>
                 <th>Dir</th>
                 <th className="num">Qty</th>
-                <th className="num" title="Recorded net P&L">Actual</th>
-                <th className="num" title="Simulated net P&L under the current rules">Sim</th>
-                <th className="num" title="Sim minus actual">Δ</th>
-                <th title="How the simulated position exited">Sim exit</th>
+                <th className="num" data-tip="Recorded net P&L">Actual</th>
+                <th className="num" data-tip="Simulated net P&L under the current rules">Sim</th>
+                <th className="num" data-tip="Sim minus actual">Δ</th>
+                <th className="tip-r" data-tip="How the simulated position exited">Sim exit</th>
               </tr>
             </thead>
             <tbody>
