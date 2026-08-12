@@ -87,6 +87,42 @@ export default async function NewTradePage({
           )}
           {field("Exit price", <input className="tj-input" name="exitPrice" type="number" min={0} step="any" placeholder="empty = open" />)}
           {field(
+            "Stop-loss size",
+            <span style={{ display: "flex", gap: 6 }}>
+              <input className="tj-input" name="stopValue" type="number" min={0} step="any" placeholder="e.g. 20" style={{ flex: 1, minWidth: 0 }} />
+              <select className="tj-select" name="stopUnit" defaultValue="ticks" style={{ width: 92 }}>
+                <option value="usd">$ / contract</option>
+                <option value="ticks">ticks</option>
+                <option value="points">points</option>
+              </select>
+            </span>,
+            "per contract; used for RR",
+          )}
+          {field(
+            "Key Level",
+            <>
+              <input className="tj-input" name="keyLevel" list="tj-new-keylevel" placeholder="level you traded from" />
+              <datalist id="tj-new-keylevel">
+                {prefs.keyLevelOptions.map((o) => (
+                  <option key={o} value={o} />
+                ))}
+              </datalist>
+            </>,
+            "new values are remembered",
+          )}
+          {field(
+            "OF confirmation",
+            <>
+              <input className="tj-input" name="ofConfirmation" list="tj-new-ofconf" placeholder="delta divergence, absorption…" />
+              <datalist id="tj-new-ofconf">
+                {prefs.ofConfOptions.map((o) => (
+                  <option key={o} value={o} />
+                ))}
+              </datalist>
+            </>,
+            "new values are remembered",
+          )}
+          {field(
             "Commission, $",
             <input className="tj-input" name="commission" type="number" min={0} step="any" placeholder="auto from Settings" />,
             "blank = per-contract rate × contracts × 2 sides",

@@ -191,6 +191,10 @@ export async function createManualTrade(fd: FormData) {
   const commissionRaw = str(fd, "commission");
   const ideaId = str(fd, "ideaId") || null;
   const note = str(fd, "note") || null;
+  const keyLevel = str(fd, "keyLevel") || null;
+  const ofConfirmation = str(fd, "ofConfirmation") || null;
+  const stopRaw = str(fd, "stopValue");
+  const stopUnit = str(fd, "stopUnit"); // usd | ticks | points
 
   const dtOk = (s: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s);
   if (!account || !instrument || !(quantity > 0) || !dtOk(entryAt) || !(entryPrice > 0)) return;
@@ -218,6 +222,16 @@ export async function createManualTrade(fd: FormData) {
   const dir = direction === "LONG" ? 1 : -1;
   const pnl = closed ? (exitPrice - entryPrice) * dir * quantity * (tickValue / tickSize) - commission : null;
 
+  // Original stop-loss entered as a SIZE per contract → stored as a price
+  // (same rule as the SL column in the trades table).
+  let stopPrice: number | null = null;
+  const stopVal = stopRaw === "" ? null : Number(stopRaw);
+  if (stopVal !== null && stopVal > 0) {
+    const distancePoints =
+      stopUnit === "ticks" ? stopVal * tickSize : stopUnit === "usd" ? (stopVal / tickValue) * tickSize : stopVal;
+    stopPrice = entryPrice - dir * distancePoints;
+  }
+
   const [ins] = await db
     .insert(trades)
     .values({
@@ -232,9 +246,23 @@ export async function createManualTrade(fd: FormData) {
       avgExitPrice: exitPrice === null ? null : exitPrice.toFixed(4),
       pnl: pnl === null ? null : pnl.toFixed(2),
       commission: commission.toFixed(2),
+      stopPrice: stopPrice === null ? null : stopPrice.toFixed(4),
+      keyLevel,
+      ofConfirmation,
       note,
     })
     .returning({ id: trades.id });
+
+  // Remember new Key Level / OF confirmation values in the dropdown vocabulary,
+  // exactly like inline editing in the trades table does.
+  for (const [val, key, list] of [
+    [keyLevel, "keyLevelOptions", prefs.keyLevelOptions],
+    [ofConfirmation, "ofConfOptions", prefs.ofConfOptions],
+  ] as const) {
+    if (val && !list.some((v) => v.toLowerCase() === val.toLowerCase())) {
+      await setSetting(key, [...list, val]);
+    }
+  }
 
   // MAE/MFE from bars, if that day's bars are already imported.
   await computeMaeMfeFor(account, [instrument]);
