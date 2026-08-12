@@ -565,7 +565,7 @@ export async function rebuildAll(): Promise<number> {
 }
 
 /** Compute MAE/MFE for closed trades that don't have it yet (bars permitting). */
-async function computeMaeMfeFor(account: string | null, symbols: string[]): Promise<number> {
+export async function computeMaeMfeFor(account: string | null, symbols: string[]): Promise<number> {
   const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
   const tickSizes: Record<string, number> = {};
   for (const i of instRows) tickSizes[i.symbol] = Number(i.tickSize);

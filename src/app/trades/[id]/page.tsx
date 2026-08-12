@@ -8,7 +8,7 @@ import { executions, trades as tradesTable } from "@/db/schema";
 import PriceChart from "@/components/charts/PriceChart";
 import DocEditor from "@/components/DocEditor";
 import BeField from "@/components/BeField";
-import { setTradeIdea, setTradeNote } from "@/app/actions";
+import { deleteManualTrade, setTradeIdea, setTradeNote } from "@/app/actions";
 import { getAllIdeas, type TradeRow } from "@/lib/metrics";
 import { loadTradeBars, simulateTrade, type SimResult } from "@/lib/whatif";
 import type { SimOverlay } from "@/components/charts/PriceChart";
@@ -146,8 +146,14 @@ export default async function TradeDetailPage({
             Fills <span className="sub">{fills.length} executions · every partial entry/exit is a row · {tzLabel(tz)}</span>
           </h3>
           {fills.length === 0 ? (
-            <div className="section-note">
-              This trade has no linked executions (it was created before CSV import or added manually).
+            <div className="section-note" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span>This trade was added manually — it has no linked executions.</span>
+              <form action={deleteManualTrade} style={{ display: "inline" }}>
+                <input type="hidden" name="tradeId" value={trade.id} />
+                <button className="btn ghost btn-sm" type="submit" style={{ color: "var(--neg)" }} title="Remove this manually added trade — cannot be undone">
+                  Delete trade
+                </button>
+              </form>
             </div>
           ) : (
             <table className="tj">

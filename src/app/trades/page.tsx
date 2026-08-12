@@ -60,6 +60,7 @@ export default async function TradesPage({
         <h1>Trades</h1>
         <AccountFilter accounts={distinctAccounts(allTrades)} selected={selectedAccounts} />
         <ColumnsFilter visible={visibleCols} />
+        <Link href={sp.date ? `/trades/new?date=${sp.date}` : "/trades/new"} className="btn">+ Trade</Link>
         <Link href="/import" className="btn ghost">⇪ Import CSV</Link>
       </div>
 

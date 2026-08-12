@@ -7,9 +7,10 @@ import { redirect } from "next/navigation";
 import { ACCOUNTS_COOKIE_NAME, COLS_COOKIE_NAME } from "@/lib/prefs";
 import { TRADE_COLUMNS } from "@/lib/columns";
 import { db } from "@/db";
-import { docs, ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
+import { docs, executions, ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { importCsvFile, rebuildAll, type ImportResult } from "@/lib/import";
+import { computeMaeMfeFor, importCsvFile, rebuildAll, type ImportResult } from "@/lib/import";
+import { parseInTimeZone } from "@/lib/format";
 import { TIMEZONES } from "@/lib/settings";
 
 // ---------- ideas ----------
@@ -168,6 +169,88 @@ export async function setTradeField(fd: FormData) {
     }
   }
   revalidatePath("/", "layout");
+}
+
+/**
+ * Manually add a trade (no CSV executions behind it). Times are entered in the
+ * Chart timezone. P&L is computed from prices; commission left blank falls back
+ * to the per-contract commission from Settings (× contracts × 2 sides).
+ * Manual trades survive CSV re-imports (rebuild only touches execution-linked
+ * trades); MAE/MFE fills in automatically if bars for that day are imported.
+ */
+export async function createManualTrade(fd: FormData) {
+  const account = str(fd, "account");
+  const instrument = str(fd, "instrument");
+  const direction = str(fd, "direction") === "SHORT" ? ("SHORT" as const) : ("LONG" as const);
+  const quantity = Math.round(Number(str(fd, "quantity")));
+  const entryAt = str(fd, "entryAt"); // "YYYY-MM-DDTHH:MM" from datetime-local
+  const exitAt = str(fd, "exitAt");
+  const entryPrice = Number(str(fd, "entryPrice"));
+  const exitPriceRaw = str(fd, "exitPrice");
+  const exitPrice = exitPriceRaw === "" ? null : Number(exitPriceRaw);
+  const commissionRaw = str(fd, "commission");
+  const ideaId = str(fd, "ideaId") || null;
+  const note = str(fd, "note") || null;
+
+  const dtOk = (s: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s);
+  if (!account || !instrument || !(quantity > 0) || !dtOk(entryAt) || !(entryPrice > 0)) return;
+  if (exitPrice !== null && !(exitPrice > 0)) return;
+
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings();
+  const toDate = (s: string) => parseInTimeZone(s.replace("T", " ").slice(0, 16) + ":00", prefs.timezone);
+  const entryTime = toDate(entryAt);
+  const exitTime = dtOk(exitAt) && exitPrice !== null ? toDate(exitAt) : null;
+  const closed = exitTime !== null && exitPrice !== null;
+
+  const inst = await db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, instrument) });
+  const tickSize = inst ? Number(inst.tickSize) : 0.25;
+  const tickValue = inst ? Number(inst.tickValue) : 5;
+  const perSide = inst ? Number(inst.commission ?? 0) : 0;
+
+  // Commission: explicit value wins; blank = Settings per-contract commission
+  // for entry + exit fills.
+  const commission =
+    commissionRaw !== "" && Number(commissionRaw) >= 0
+      ? Number(commissionRaw)
+      : perSide * quantity * (closed ? 2 : 1);
+
+  const dir = direction === "LONG" ? 1 : -1;
+  const pnl = closed ? (exitPrice - entryPrice) * dir * quantity * (tickValue / tickSize) - commission : null;
+
+  const [ins] = await db
+    .insert(trades)
+    .values({
+      ideaId,
+      account,
+      instrument,
+      direction,
+      quantity,
+      entryTime,
+      exitTime,
+      avgEntryPrice: entryPrice.toFixed(4),
+      avgExitPrice: exitPrice === null ? null : exitPrice.toFixed(4),
+      pnl: pnl === null ? null : pnl.toFixed(2),
+      commission: commission.toFixed(2),
+      note,
+    })
+    .returning({ id: trades.id });
+
+  // MAE/MFE from bars, if that day's bars are already imported.
+  await computeMaeMfeFor(account, [instrument]);
+
+  revalidatePath("/", "layout");
+  redirect(`/trades/${ins.id}`);
+}
+
+/** Delete a manually added trade. Trades built from CSV executions are protected. */
+export async function deleteManualTrade(fd: FormData) {
+  const tradeId = str(fd, "tradeId");
+  const linked = await db.query.executions.findFirst({ where: eq(executions.tradeId, tradeId) });
+  if (linked) return; // imported trade — comes back on re-import anyway; don't allow
+  await db.delete(trades).where(eq(trades.id, tradeId));
+  revalidatePath("/", "layout");
+  redirect("/trades");
 }
 
 export async function setTradeNote(fd: FormData) {

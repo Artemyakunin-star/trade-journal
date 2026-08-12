@@ -1,5 +1,6 @@
 // Trade-table column definitions (shared between server prefs and client UI).
 export const TRADE_COLUMNS: { key: string; label: string }[] = [
+  { key: "account", label: "Account" },
   { key: "instrument", label: "Instrument" },
   { key: "dir", label: "Direction" },
   { key: "qty", label: "Qty" },

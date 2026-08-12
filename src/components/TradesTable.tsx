@@ -81,7 +81,7 @@ export default function TradesTable({
 
   const colCount =
     1 +
-    ["instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "note"].filter(show).length +
+    ["account", "instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "note"].filter(show).length +
     (showIdeaCol ? 1 : 0);
 
   const row = (t: TradeRow) => {
@@ -96,6 +96,7 @@ export default function TradesTable({
             {fmtTimeKyiv(t.entryTime, true, tz)}
           </Link>
         </td>
+        {show("account") && <td style={{ color: "var(--ink-2)" }}>{t.account}</td>}
         {show("instrument") && <td>{t.instrument}</td>}
         {show("dir") && <td>{t.direction === "LONG" ? "Long" : "Short"}</td>}
         {show("qty") && <td className="num">{t.quantity}</td>}
@@ -207,6 +208,7 @@ export default function TradesTable({
       <thead>
         <tr>
           <th title="Entry time of the first fill — click it to open the trade details page">Entry</th>
+          {show("account") && <th title="Trading account the trade was executed on">Account</th>}
           {show("instrument") && <th title="Futures root symbol (NQ, ES, MNQ, …)">Instr</th>}
           {show("dir") && <th title="Position direction: Long or Short">Dir</th>}
           {show("qty") && <th className="num" title="Maximum position size during the trade, in contracts">Qty</th>}
