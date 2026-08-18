@@ -3,6 +3,8 @@ import ImportForm from "@/components/ImportForm";
 import { db } from "@/db";
 
 export const dynamic = "force-dynamic";
+// Big bar files take a while to insert — allow up to 60s per request.
+export const maxDuration = 60;
 
 export default async function ImportPage() {
   const history = await db.query.imports.findMany({

@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const instrument = q.get("instrument") ?? "";
   const date = q.get("date") ?? "";
-  const tf = q.get("tf") === "T100" ? ("T100" as const) : ("S5" as const);
+  const tfReq = q.get("tf") === "T100" ? ("T100" as const) : ("S5" as const);
   const accounts = (q.get("accounts") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const tradeId = q.get("tradeId");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !instrument) {
@@ -45,12 +45,15 @@ export async function GET(req: NextRequest) {
   const dayStart = parseInTimeZone(`${date} 00:00:00`, tz);
   const nextDay = new Date(dayStart.getTime() + 25 * 3600 * 1000); // +25h, trimmed below
 
-  const [rows, tfRows, instrumentRow] = await Promise.all([
+  const fetchRows = (timeframe: "S5" | "M1" | "T100") =>
     db
       .select({ time: bars.time, open: bars.open, high: bars.high, low: bars.low, close: bars.close, volume: bars.volume })
       .from(bars)
-      .where(and(eq(bars.instrument, instrument), eq(bars.timeframe, tf), gte(bars.time, dayStart), lt(bars.time, nextDay)))
-      .orderBy(asc(bars.time)),
+      .where(and(eq(bars.instrument, instrument), eq(bars.timeframe, timeframe), gte(bars.time, dayStart), lt(bars.time, nextDay)))
+      .orderBy(asc(bars.time));
+
+  const [rows, tfRows, instrumentRow] = await Promise.all([
+    fetchRows(tfReq),
     db
       .selectDistinct({ timeframe: bars.timeframe })
       .from(bars)
@@ -58,7 +61,14 @@ export async function GET(req: NextRequest) {
     db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, instrument) }),
   ]);
 
-  const dayRows = rows.filter((r) => kyivDateOf(r.time, tz) === date);
+  let tf: "S5" | "M1" | "T100" = tfReq;
+  let dayRows = rows.filter((r) => kyivDateOf(r.time, tz) === date);
+  // No 5-sec bars for the day? Fall back to 1-minute bars if they exist
+  // (some platforms only export minute data).
+  if (tf === "S5" && !dayRows.length && tfRows.some((r) => r.timeframe === "M1")) {
+    dayRows = (await fetchRows("M1")).filter((r) => kyivDateOf(r.time, tz) === date);
+    if (dayRows.length) tf = "M1";
+  }
   const off = dayRows.length ? tzOffsetSeconds(dayRows[0].time, tz) : 0;
   const tickSize = instrumentRow ? Number(instrumentRow.tickSize) : 0.25;
 

@@ -27,7 +27,7 @@ type Marker = {
   points?: number | null;
   ticks?: number | null;
 };
-type ApiResponse = { bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number; off: number };
+type ApiResponse = { bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number; off: number; tf: "S5" | "M1" | "T100" };
 
 export type SimOverlay = {
   /** UTC seconds of the simulated exit (unshifted). */
@@ -44,6 +44,13 @@ const TIME_TFS = [
   { key: 30, label: "30s" },
   { key: 60, label: "1m" },
   { key: 300, label: "5m" },
+];
+// When only 1-minute bars exist for the day (some platforms export minute
+// data, not 5-sec), sub-minute timeframes are impossible.
+const M1_TFS = [
+  { key: 60, label: "1m" },
+  { key: 300, label: "5m" },
+  { key: 900, label: "15m" },
 ];
 // Tick TFS aggregate N/100 consecutive 100-tick bars.
 const TICK_TFS = [
@@ -167,7 +174,7 @@ export default function PriceChart({
     fetch(`/api/bars?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled) setData({ bars: d.bars ?? [], markers: d.markers ?? [], hasTicks: !!d.hasTicks, tickSize: d.tickSize ?? 0.25, off: d.off ?? 0 });
+        if (!cancelled) setData({ bars: d.bars ?? [], markers: d.markers ?? [], hasTicks: !!d.hasTicks, tickSize: d.tickSize ?? 0.25, off: d.off ?? 0, tf: d.tf ?? "S5" });
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -206,7 +213,8 @@ export default function PriceChart({
       wickUpColor: "#0ca30c88",
       wickDownColor: "#d03b3b88",
     });
-    const agg = mode === "time" ? aggregateTime(data.bars, timeTf) : aggregateCount(data.bars, Math.max(1, Math.round(tickTf / 100)));
+    const effTimeTf = data.tf === "M1" ? Math.max(timeTf, 60) : timeTf;
+    const agg = mode === "time" ? aggregateTime(data.bars, effTimeTf) : aggregateCount(data.bars, Math.max(1, Math.round(tickTf / 100)));
     candles.setData(agg.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
 
     const vol = chart.addSeries(HistogramSeries, {
@@ -293,10 +301,10 @@ export default function PriceChart({
             </span>
           )}
           <span className="seg">
-            {TIME_TFS.map((t) => (
+            {(data?.tf === "M1" ? M1_TFS : TIME_TFS).map((t) => (
               <button
                 key={t.key}
-                className={mode === "time" && t.key === timeTf ? "on" : ""}
+                className={mode === "time" && t.key === (data?.tf === "M1" ? Math.max(timeTf, 60) : timeTf) ? "on" : ""}
                 onClick={() => {
                   setMode("time");
                   setTimeTf(t.key);

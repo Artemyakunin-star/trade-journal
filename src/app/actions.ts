@@ -483,3 +483,19 @@ export async function importCsvs(_prev: ImportState, fd: FormData): Promise<Impo
   revalidatePath("/", "layout");
   return { results };
 }
+
+/**
+ * Import one PIECE of a CSV file. Big files (tick bars) exceed the per-request
+ * body limits (Next server actions + Vercel's ~4.5 MB cap), so the browser
+ * splits them into line-aligned chunks, each with the header line prepended,
+ * and sends them one by one. Bars are idempotent and executions are deduped,
+ * so partial re-sends are safe.
+ */
+export async function importCsvPart(fd: FormData): Promise<ImportResult> {
+  const filename = str(fd, "name");
+  const file = fd.get("part");
+  const text = file instanceof File ? await file.text() : String(file ?? "");
+  const res = await importCsvFile(filename, text);
+  if (str(fd, "last") === "1") revalidatePath("/", "layout");
+  return res;
+}
