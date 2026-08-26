@@ -303,7 +303,7 @@ export function computeMaeMfe(
 
 export type ImportResult = {
   filename: string;
-  kind: "EXECUTIONS" | "BARS" | "UNKNOWN";
+  kind: "EXECUTIONS" | "BARS" | "TRADES" | "UNKNOWN";
   inserted: number;
   skipped: number;
   tradesBuilt?: number;
@@ -314,21 +314,187 @@ export type ImportResult = {
 export async function importCsvFile(filename: string, text: string): Promise<ImportResult> {
   const firstLine = text.slice(0, 400).split("\n")[0] ?? "";
   const isExec = /ExecutionId/i.test(firstLine);
-  const isBars = !isExec && /Open/i.test(firstLine) && /Volume/i.test(firstLine);
+  const isBars = !isExec && /Open/i.test(firstLine) && /Volume/i.test(firstLine) && !/entry/i.test(firstLine);
+  // DeepCharts "Strategy Report → Trade List": semicolon-delimited round-trip
+  // trades (Symbol;DT;Quantity;Entry;Exit;ProfitLoss and variants).
+  const isDcTrades = !isExec && !isBars && /symbol|instrument/i.test(firstLine) && /entry/i.test(firstLine) && /exit/i.test(firstLine);
 
   try {
     const { importTimezone } = await getSettings();
     if (isExec) return await importExecutions(filename, text, importTimezone);
     if (isBars) return await importBars(filename, text, importTimezone);
-    return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Doesn't look like an executions_*.csv or bars_*.csv exporter file" };
+    if (isDcTrades) return await importTradeList(filename, text, importTimezone);
+    return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Doesn't look like an executions/bars exporter file or a DeepCharts trade list" };
   } catch (e) {
     return {
       filename,
-      kind: isExec ? "EXECUTIONS" : isBars ? "BARS" : "UNKNOWN",
+      kind: isExec ? "EXECUTIONS" : isBars ? "BARS" : isDcTrades ? "TRADES" : "UNKNOWN",
       inserted: 0, skipped: 0,
       error: e instanceof Error ? e.message : String(e),
     };
   }
+}
+
+// ---------- DeepCharts trade list ----------
+
+/** "23 800,25" / "1,234.50" / "-12.5" → number; NaN when not numeric. */
+function parseLocaleNum(s: string): number {
+  let t = s.trim().replace(/[\s $]/g, "");
+  if (t.includes(",") && t.includes(".")) t = t.replace(/,/g, "");
+  else t = t.replace(",", ".");
+  return Number(t);
+}
+
+/** Normalize a platform symbol to the root: "NQZ5"/"MNQZ25"/"NQ 12-25"/"NQ SEP26" → NQ/MNQ. */
+function normalizeSymbol(raw: string): string {
+  const first = raw.trim().toUpperCase().split(/\s+/)[0];
+  const m = first.match(/^([A-Z]+?)[FGHJKMNQUVXZ]\d{1,2}$/);
+  return m && m[1].length >= 1 ? m[1] : first;
+}
+
+/** Tolerant date parser → "YYYY-MM-DD HH:mm:ss" (for parseInTimeZone) or null. */
+function normalizeDateTime(raw: string): string | null {
+  const s = raw.trim().replace(/ /g, " ");
+  // ISO-ish: 2026-08-10 17:24:35(.123) or with T
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]} ${m[4].padStart(2, "0")}:${m[5]}:${m[6] ?? "00"}`;
+  // EU dotted: 10.08.2026 17:24(:35)
+  m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")} ${m[4].padStart(2, "0")}:${m[5]}:${m[6] ?? "00"}`;
+  // Slashed: 08/10/2026 5:24:35 PM (US month-first unless first number > 12)
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?/i);
+  if (m) {
+    let [, a, b] = m;
+    let month = Number(a), day = Number(b);
+    if (month > 12) [month, day] = [day, month];
+    let hh = Number(m[4]);
+    const ap = m[7]?.toUpperCase();
+    if (ap === "PM" && hh < 12) hh += 12;
+    if (ap === "AM" && hh === 12) hh = 0;
+    return `${m[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")} ${String(hh).padStart(2, "0")}:${m[5]}:${m[6] ?? "00"}`;
+  }
+  return null;
+}
+
+/**
+ * DeepCharts (Volumetrica) "Strategy Report → Trade List" CSV: one row per
+ * ROUND-TRIP trade, semicolon-delimited (sometimes comma), headers vary a bit
+ * between versions, so columns are located by name and numbers/dates parsed
+ * tolerantly (EU decimal commas included).
+ */
+async function importTradeList(filename: string, text: string, tz: string): Promise<ImportResult> {
+  const lines = text.split("\n").map((l) => l.replace(/^﻿/, "").replace(/\r$/, "")).filter((l) => l.trim());
+  if (lines.length < 2) return { filename, kind: "TRADES", inserted: 0, skipped: 0, error: "The file has no data rows" };
+  const delim = (lines[0].match(/;/g)?.length ?? 0) >= (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+  const header = lines[0].split(delim).map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
+
+  const find = (...names: string[]) => {
+    for (const n of names) {
+      const i = header.findIndex((h) => h === n);
+      if (i !== -1) return i;
+    }
+    for (const n of names) {
+      const i = header.findIndex((h) => h.includes(n));
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+  const cSym = find("symbol", "instrument", "contract");
+  const cQty = find("quantity", "qty", "size", "contracts");
+  const cEntry = find("entryprice", "priceentry", "entry", "openprice", "open");
+  const cExit = find("exitprice", "priceexit", "exit", "closeprice", "close");
+  const cPnl = find("profitloss", "netpnl", "realizedpnl", "pnl", "profit", "pl");
+  const cEntryT = find("entrytime", "entrydt", "opentime", "dtentry", "timeentry", "dt", "datetime", "date", "time");
+  const cExitT = find("exittime", "exitdt", "closetime", "dtexit", "timeexit");
+  const cSide = find("side", "direction", "marketposition", "position", "type", "buysell");
+  const cAcc = find("account", "accountname");
+  if (cSym === -1 || cQty === -1 || cEntry === -1 || cExit === -1 || cEntryT === -1) {
+    return { filename, kind: "TRADES", inserted: 0, skipped: 0, error: "Couldn't find the Symbol / Quantity / Entry / Exit / time columns in this trade list" };
+  }
+
+  type T = { account: string; symbol: string; direction: "LONG" | "SHORT"; quantity: number; entryTime: Date; exitTime: Date; entry: number; exit: number; pnl: number | null };
+  const parsed: T[] = [];
+  const problems: string[] = [];
+  for (const line of lines.slice(1)) {
+    const f = line.split(delim);
+    if (f.length < header.length - 1) continue;
+    const symbol = normalizeSymbol(f[cSym] ?? "");
+    const qtyRaw = parseLocaleNum(f[cQty] ?? "");
+    const entry = parseLocaleNum(f[cEntry] ?? "");
+    const exit = parseLocaleNum(f[cExit] ?? "");
+    const pnl = cPnl === -1 ? NaN : parseLocaleNum(f[cPnl] ?? "");
+    const entryIso = normalizeDateTime(f[cEntryT] ?? "");
+    const exitIso = cExitT === -1 ? entryIso : (normalizeDateTime(f[cExitT] ?? "") ?? entryIso);
+    if (!symbol || !entryIso || !(Math.abs(qtyRaw) > 0) || !(entry > 0) || !(exit > 0)) {
+      problems.push(line.slice(0, 60));
+      continue;
+    }
+    const sideRaw = cSide === -1 ? "" : (f[cSide] ?? "").trim().toLowerCase();
+    let direction: "LONG" | "SHORT";
+    if (/long|buy|^b$/.test(sideRaw)) direction = "LONG";
+    else if (/short|sell|^s$/.test(sideRaw)) direction = "SHORT";
+    else if (qtyRaw < 0) direction = "SHORT";
+    else if (!Number.isNaN(pnl) && pnl !== 0) direction = (exit - entry > 0) === pnl > 0 ? "LONG" : "SHORT";
+    else direction = "LONG";
+    parsed.push({
+      account: cAcc === -1 ? "DeepCharts" : (f[cAcc] ?? "").trim() || "DeepCharts",
+      symbol,
+      direction,
+      quantity: Math.round(Math.abs(qtyRaw)),
+      entryTime: parseInTimeZone(entryIso, tz),
+      exitTime: parseInTimeZone(exitIso!, tz),
+      entry,
+      exit,
+      pnl: Number.isNaN(pnl) ? null : pnl,
+    });
+  }
+  if (!parsed.length) {
+    return { filename, kind: "TRADES", inserted: 0, skipped: 0, error: "No rows could be parsed" + (problems.length ? ` (first problem row: "${problems[0]}…")` : "") };
+  }
+
+  const symbols = [...new Set(parsed.map((t) => t.symbol))];
+  for (const s of symbols) await ensureInstrument(s);
+  const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
+  const spec = Object.fromEntries(instRows.map((i) => [i.symbol, { pv: Number(i.tickValue) / Number(i.tickSize), perSide: Number(i.commission ?? 0) }]));
+
+  // Dedup: same account+symbol+entry second+qty+entry price = same trade.
+  const from = new Date(Math.min(...parsed.map((t) => t.entryTime.getTime())) - 60_000);
+  const to = new Date(Math.max(...parsed.map((t) => t.entryTime.getTime())) + 60_000);
+  const existing = await db
+    .select({ account: trades.account, instrument: trades.instrument, entryTime: trades.entryTime, quantity: trades.quantity, avgEntryPrice: trades.avgEntryPrice })
+    .from(trades)
+    .where(and(gte(trades.entryTime, from), lte(trades.entryTime, to)));
+  const keyOf = (a: string, s: string, t: Date, q: number, p: number) => `${a}|${s}|${Math.floor(t.getTime() / 1000)}|${q}|${p.toFixed(4)}`;
+  const seen = new Set(existing.map((e) => keyOf(e.account, e.instrument, e.entryTime, e.quantity, Number(e.avgEntryPrice))));
+
+  let inserted = 0;
+  for (const t of parsed) {
+    const key = keyOf(t.account, t.symbol, t.entryTime, t.quantity, t.entry);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const sp = spec[t.symbol] ?? { pv: 20, perSide: 0 };
+    const commission = sp.perSide * t.quantity * 2;
+    const dir = t.direction === "LONG" ? 1 : -1;
+    const gross = t.pnl !== null ? t.pnl : (t.exit - t.entry) * dir * t.quantity * sp.pv;
+    await db.insert(trades).values({
+      account: t.account,
+      instrument: t.symbol,
+      direction: t.direction,
+      quantity: t.quantity,
+      entryTime: t.entryTime,
+      exitTime: t.exitTime,
+      avgEntryPrice: t.entry.toFixed(4),
+      avgExitPrice: t.exit.toFixed(4),
+      pnl: (gross - commission).toFixed(2),
+      commission: commission.toFixed(2),
+    });
+    inserted++;
+  }
+
+  await db.insert(imports).values({ kind: "TRADES", filename, instrument: symbols.join(","), tradingDay: null, rowCount: parsed.length });
+  const maeMfeComputed = await computeMaeMfeFor(null, symbols);
+
+  return { filename, kind: "TRADES", inserted, skipped: parsed.length - inserted, maeMfeComputed };
 }
 
 async function ensureInstrument(symbol: string) {

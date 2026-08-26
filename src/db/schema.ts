@@ -63,7 +63,7 @@ export const barTimeframeEnum = pgEnum("bar_timeframe", [
   "T100", // 100-tick bars (exporter unit for building 1000/2000/5000-tick charts)
 ]);
 
-export const importKindEnum = pgEnum("import_kind", ["EXECUTIONS", "BARS"]);
+export const importKindEnum = pgEnum("import_kind", ["EXECUTIONS", "BARS", "TRADES"]);
 
 // ---------- reference data ----------
 
