@@ -1,23 +1,27 @@
 // Import screen: upload NinjaTrader exporter CSVs + import history.
 import ImportForm from "@/components/ImportForm";
 import { db } from "@/db";
+import { distinctAccounts, getAllTrades } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
 // Big bar files take a while to insert — allow up to 60s per request.
 export const maxDuration = 60;
 
 export default async function ImportPage() {
-  const history = await db.query.imports.findMany({
-    orderBy: (i, { desc }) => [desc(i.importedAt)],
-    limit: 20,
-  });
+  const [history, allTrades] = await Promise.all([
+    db.query.imports.findMany({
+      orderBy: (i, { desc }) => [desc(i.importedAt)],
+      limit: 20,
+    }),
+    getAllTrades(),
+  ]);
 
   return (
     <>
       <div className="topbar">
         <h1>Import</h1>
       </div>
-      <ImportForm />
+      <ImportForm knownAccounts={distinctAccounts(allTrades)} />
       {history.length > 0 && (
         <div className="card" style={{ maxWidth: 640, marginTop: 14 }}>
           <h3>Recent imports</h3>

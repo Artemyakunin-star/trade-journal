@@ -4,6 +4,7 @@
 // with live progress. Errors are shown inline instead of a dead error page.
 import { useState } from "react";
 import { importCsvPart } from "@/app/actions";
+import ComboInput from "@/components/ComboInput";
 import type { ImportResult } from "@/lib/import";
 
 // Keep each request comfortably under Next's action body limit (4 MB
@@ -30,7 +31,7 @@ function splitCsv(text: string): string[] {
   return chunks;
 }
 
-export default function ImportForm() {
+export default function ImportForm({ knownAccounts = [] }: { knownAccounts?: string[] }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [pending, setPending] = useState(false);
   const [files, setFiles] = useState<FileList | null>(null);
@@ -55,12 +56,15 @@ export default function ImportForm() {
           const fd = new FormData();
           fd.set("name", name);
           fd.set("last", i === chunks.length - 1 ? "1" : "0");
+          const acc = (document.querySelector('input[name="importAccount"]') as HTMLInputElement | null)?.value ?? "";
+          fd.set("account", acc.trim());
           fd.set("part", new Blob([chunks[i]], { type: "text/csv" }), name);
           const r = await importCsvPart(fd);
           row.kind = r.kind;
           row.inserted += r.inserted;
           row.skipped += r.skipped;
           if (r.tradesBuilt !== undefined) row.tradesBuilt = r.tradesBuilt;
+          if (r.accounts?.length) row.accounts = r.accounts;
           if (r.maeMfeComputed) row.maeMfeComputed = (row.maeMfeComputed ?? 0) + r.maeMfeComputed;
           if (r.error) {
             row.error = r.error;
@@ -98,6 +102,17 @@ export default function ImportForm() {
             onChange={(e) => setFiles(e.target.files)}
           />
         </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--ink-2)", marginBottom: 12 }}>
+          Account for trade lists
+          <ComboInput
+            className="tj-input"
+            name="importAccount"
+            options={knownAccounts}
+            placeholder="e.g. ****23384 — optional"
+            title="DeepCharts trade lists don't carry the account number — trades from this import will be filed under this account. Leave empty for “DeepCharts”. Ignored for NinjaTrader executions/bars files."
+            width={220}
+          />
+        </label>
         <button className="btn" type="button" disabled={pending || !files?.length} onClick={run}>
           {pending ? "Importing…" : "Import"}
         </button>
@@ -117,6 +132,7 @@ export default function ImportForm() {
                   ✓ {r.inserted} rows imported{r.skipped ? `, ${r.skipped} duplicates skipped` : ""}
                   {r.tradesBuilt !== undefined ? ` · ${r.tradesBuilt} round-trip trades built` : ""}
                   {r.maeMfeComputed ? ` · MAE/MFE computed for ${r.maeMfeComputed} trades` : ""}
+                  {r.accounts?.length ? ` · account: ${r.accounts.join(", ")}` : ""}
                 </div>
               )}
             </div>

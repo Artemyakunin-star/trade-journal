@@ -308,10 +308,12 @@ export type ImportResult = {
   skipped: number;
   tradesBuilt?: number;
   maeMfeComputed?: number;
+  /** Accounts the trades landed in (trade-list imports) — used to auto-extend the account filter. */
+  accounts?: string[];
   error?: string;
 };
 
-export async function importCsvFile(filename: string, text: string): Promise<ImportResult> {
+export async function importCsvFile(filename: string, text: string, accountOverride?: string): Promise<ImportResult> {
   const firstLine = text.slice(0, 400).split("\n")[0] ?? "";
   const isExec = /ExecutionId/i.test(firstLine);
   // TradingView "Export chart data…": lowercase `time,open,…` header and/or a
@@ -327,7 +329,7 @@ export async function importCsvFile(filename: string, text: string): Promise<Imp
     if (isExec) return await importExecutions(filename, text, importTimezone);
     if (isTvBars) return await importTvBars(filename, text);
     if (isBars) return await importBars(filename, text, importTimezone);
-    if (isDcTrades) return await importTradeList(filename, text, importTimezone);
+    if (isDcTrades) return await importTradeList(filename, text, importTimezone, accountOverride);
     return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Doesn't look like an executions/bars exporter file, a TradingView chart export or a DeepCharts trade list" };
   } catch (e) {
     return {
@@ -485,7 +487,8 @@ function normalizeDateTime(raw: string): string | null {
  * between versions, so columns are located by name and numbers/dates parsed
  * tolerantly (EU decimal commas included).
  */
-async function importTradeList(filename: string, text: string, tz: string): Promise<ImportResult> {
+async function importTradeList(filename: string, text: string, tz: string, accountOverride?: string): Promise<ImportResult> {
+  const fallbackAccount = accountOverride?.trim() || "DeepCharts";
   const lines = text.split("\n").map((l) => l.replace(/^﻿/, "").replace(/\r$/, "")).filter((l) => l.trim());
   if (lines.length < 2) return { filename, kind: "TRADES", inserted: 0, skipped: 0, error: "The file has no data rows" };
   const delim = (lines[0].match(/;/g)?.length ?? 0) >= (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
@@ -540,7 +543,7 @@ async function importTradeList(filename: string, text: string, tz: string): Prom
     else if (!Number.isNaN(pnl) && pnl !== 0) direction = (exit - entry > 0) === pnl > 0 ? "LONG" : "SHORT";
     else direction = "LONG";
     parsed.push({
-      account: cAcc === -1 ? "DeepCharts" : (f[cAcc] ?? "").trim() || "DeepCharts",
+      account: cAcc === -1 ? fallbackAccount : (f[cAcc] ?? "").trim() || fallbackAccount,
       symbol,
       direction,
       quantity: Math.round(Math.abs(qtyRaw)),
@@ -597,7 +600,14 @@ async function importTradeList(filename: string, text: string, tz: string): Prom
   await db.insert(imports).values({ kind: "TRADES", filename, instrument: symbols.join(","), tradingDay: null, rowCount: parsed.length });
   const maeMfeComputed = await computeMaeMfeFor(null, symbols);
 
-  return { filename, kind: "TRADES", inserted, skipped: parsed.length - inserted, maeMfeComputed };
+  return {
+    filename,
+    kind: "TRADES",
+    inserted,
+    skipped: parsed.length - inserted,
+    maeMfeComputed,
+    accounts: [...new Set(parsed.map((t) => t.account))],
+  };
 }
 
 async function ensureInstrument(symbol: string) {

@@ -478,7 +478,9 @@ export async function importCsvs(_prev: ImportState, fd: FormData): Promise<Impo
   const results: ImportResult[] = [];
   for (const f of files) {
     const text = await f.text();
-    results.push(await importCsvFile(f.name, text));
+    const res = await importCsvFile(f.name, text);
+    await widenAccountFilter(res.accounts);
+    results.push(res);
   }
   revalidatePath("/", "layout");
   return { results };
@@ -495,7 +497,21 @@ export async function importCsvPart(fd: FormData): Promise<ImportResult> {
   const filename = str(fd, "name");
   const file = fd.get("part");
   const text = file instanceof File ? await file.text() : String(file ?? "");
-  const res = await importCsvFile(filename, text);
+  const res = await importCsvFile(filename, text, str(fd, "account") || undefined);
+  await widenAccountFilter(res.accounts);
   if (str(fd, "last") === "1") revalidatePath("/", "layout");
   return res;
+}
+
+/** If the account filter is active and the import brought trades for accounts
+ *  outside it, add them — otherwise fresh trades look like they vanished. */
+async function widenAccountFilter(accounts?: string[]) {
+  if (!accounts?.length) return;
+  const jar = await cookies();
+  const raw = jar.get(ACCOUNTS_COOKIE_NAME)?.value;
+  if (!raw) return; // no filter = all accounts visible already
+  const selected = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const missing = accounts.filter((a) => !selected.includes(a));
+  if (!missing.length) return;
+  jar.set(ACCOUNTS_COOKIE_NAME, [...selected, ...missing].join(","), { maxAge: 60 * 60 * 24 * 365, path: "/" });
 }
