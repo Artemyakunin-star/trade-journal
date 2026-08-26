@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   const dayStart = parseInTimeZone(`${date} 00:00:00`, tz);
   const nextDay = new Date(dayStart.getTime() + 25 * 3600 * 1000); // +25h, trimmed below
 
-  const fetchRows = (timeframe: "S5" | "M1" | "T100") =>
+  const fetchRows = (timeframe: "S5" | "S30" | "M1" | "T100") =>
     db
       .select({ time: bars.time, open: bars.open, high: bars.high, low: bars.low, close: bars.close, volume: bars.volume })
       .from(bars)
@@ -61,13 +61,19 @@ export async function GET(req: NextRequest) {
     db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, instrument) }),
   ]);
 
-  let tf: "S5" | "M1" | "T100" = tfReq;
+  let tf: "S5" | "S30" | "M1" | "T100" = tfReq;
   let dayRows = rows.filter((r) => kyivDateOf(r.time, tz) === date);
-  // No 5-sec bars for the day? Fall back to 1-minute bars if they exist
-  // (some platforms only export minute data).
-  if (tf === "S5" && !dayRows.length && tfRows.some((r) => r.timeframe === "M1")) {
-    dayRows = (await fetchRows("M1")).filter((r) => kyivDateOf(r.time, tz) === date);
-    if (dayRows.length) tf = "M1";
+  // No 5-sec bars for the day? Fall back to the finest coarser data available
+  // (30-sec, then 1-minute — some platforms only export those).
+  if (tf === "S5" && !dayRows.length) {
+    for (const alt of ["S30", "M1"] as const) {
+      if (!tfRows.some((r) => r.timeframe === alt)) continue;
+      dayRows = (await fetchRows(alt)).filter((r) => kyivDateOf(r.time, tz) === date);
+      if (dayRows.length) {
+        tf = alt;
+        break;
+      }
+    }
   }
   const off = dayRows.length ? tzOffsetSeconds(dayRows[0].time, tz) : 0;
   const tickSize = instrumentRow ? Number(instrumentRow.tickSize) : 0.25;

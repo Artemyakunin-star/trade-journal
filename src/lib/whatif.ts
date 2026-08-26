@@ -150,6 +150,8 @@ export async function loadTradeBars(
   if (!instruments.length) return out;
 
   // One query per instrument covering the min..max window, then slice in JS.
+  // Finest available bars win: 5-sec, then 30-sec, then 1-minute (imports from
+  // TradingView / other platforms may only have the coarser ones).
   for (const inst of instruments) {
     const its = trades.filter((t) => t.instrument === inst);
     const from = new Date(Math.min(...its.map((t) => t.entryTime.getTime())));
@@ -157,12 +159,18 @@ export async function loadTradeBars(
       Math.max(...its.map((t) => (t.exitTime ?? new Date(t.entryTime.getTime() + 4 * 3600_000)).getTime())) +
         extendHours * 3600_000,
     );
-    const rows = await db
-      .select({ time: bars.time, high: bars.high, low: bars.low, close: bars.close })
-      .from(bars)
-      .where(and(eq(bars.instrument, inst), eq(bars.timeframe, "S5"), gte(bars.time, from), lte(bars.time, to)))
-      .orderBy(asc(bars.time));
-    const parsed = rows.map((r) => ({ time: r.time, high: Number(r.high), low: Number(r.low), close: Number(r.close) }));
+    let parsed: Bar[] = [];
+    for (const tf of ["S5", "S30", "M1"] as const) {
+      const rows = await db
+        .select({ time: bars.time, high: bars.high, low: bars.low, close: bars.close })
+        .from(bars)
+        .where(and(eq(bars.instrument, inst), eq(bars.timeframe, tf), gte(bars.time, from), lte(bars.time, to)))
+        .orderBy(asc(bars.time));
+      if (rows.length) {
+        parsed = rows.map((r) => ({ time: r.time, high: Number(r.high), low: Number(r.low), close: Number(r.close) }));
+        break;
+      }
+    }
     for (const t of its) {
       const end =
         (t.exitTime ?? new Date(t.entryTime.getTime() + 4 * 3600_000)).getTime() + extendHours * 3600_000;

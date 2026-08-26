@@ -27,7 +27,7 @@ type Marker = {
   points?: number | null;
   ticks?: number | null;
 };
-type ApiResponse = { bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number; off: number; tf: "S5" | "M1" | "T100" };
+type ApiResponse = { bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number; off: number; tf: "S5" | "S30" | "M1" | "T100" };
 
 export type SimOverlay = {
   /** UTC seconds of the simulated exit (unshifted). */
@@ -45,13 +45,22 @@ const TIME_TFS = [
   { key: 60, label: "1m" },
   { key: 300, label: "5m" },
 ];
-// When only 1-minute bars exist for the day (some platforms export minute
-// data, not 5-sec), sub-minute timeframes are impossible.
+// When only coarser bars exist for the day (30-sec or 1-minute exports),
+// finer timeframes are impossible — offer what the data allows.
+const S30_TFS = [
+  { key: 30, label: "30s" },
+  { key: 60, label: "1m" },
+  { key: 300, label: "5m" },
+];
 const M1_TFS = [
   { key: 60, label: "1m" },
   { key: 300, label: "5m" },
   { key: 900, label: "15m" },
 ];
+/** Base bar length in seconds for the timeframe the API actually returned. */
+function baseSec(tf: "S5" | "S30" | "M1" | "T100"): number {
+  return tf === "M1" ? 60 : tf === "S30" ? 30 : 5;
+}
 // Tick TFS aggregate N/100 consecutive 100-tick bars.
 const TICK_TFS = [
   { key: 1000, label: "1000t" },
@@ -213,7 +222,7 @@ export default function PriceChart({
       wickUpColor: "#0ca30c88",
       wickDownColor: "#d03b3b88",
     });
-    const effTimeTf = data.tf === "M1" ? Math.max(timeTf, 60) : timeTf;
+    const effTimeTf = Math.max(timeTf, baseSec(data.tf));
     const agg = mode === "time" ? aggregateTime(data.bars, effTimeTf) : aggregateCount(data.bars, Math.max(1, Math.round(tickTf / 100)));
     candles.setData(agg.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
 
@@ -301,10 +310,10 @@ export default function PriceChart({
             </span>
           )}
           <span className="seg">
-            {(data?.tf === "M1" ? M1_TFS : TIME_TFS).map((t) => (
+            {(data?.tf === "M1" ? M1_TFS : data?.tf === "S30" ? S30_TFS : TIME_TFS).map((t) => (
               <button
                 key={t.key}
-                className={mode === "time" && t.key === (data?.tf === "M1" ? Math.max(timeTf, 60) : timeTf) ? "on" : ""}
+                className={mode === "time" && t.key === (data ? Math.max(timeTf, baseSec(data.tf)) : timeTf) ? "on" : ""}
                 onClick={() => {
                   setMode("time");
                   setTimeTf(t.key);

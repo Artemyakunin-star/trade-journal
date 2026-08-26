@@ -57,6 +57,7 @@ export const execActionEnum = pgEnum("exec_action", [
 ]);
 
 export const barTimeframeEnum = pgEnum("bar_timeframe", [
+  "S30", // 30-second (TradingView seconds exports)
   "S5", // 5-second bars (default from NinjaTrader exporter)
   "M1", // 1-minute
   "T1", // 1-tick (raw ticks; heavy — not exported by default)

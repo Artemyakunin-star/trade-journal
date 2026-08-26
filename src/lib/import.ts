@@ -349,19 +349,26 @@ export async function importCsvFile(filename: string, text: string): Promise<Imp
  * "CME_MINI_NQ1!, 1_a1b2c3.csv" (1 = 1-minute) or "…MNQ1!, 5S_….csv" (5-sec).
  */
 async function importTvBars(filename: string, text: string): Promise<ImportResult> {
-  const symM = filename.toUpperCase().match(/([A-Z]{1,4})[0-9]!/);
-  if (!symM) {
-    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Can't tell the instrument from the TradingView file name (expected something like \"CME_MINI_NQ1!, 1_….csv\")" };
+  const upper = filename.toUpperCase();
+  // Continuous (NQ1!) or specific contract (ESU2026 / MNQZ25) in the file name.
+  const contM = upper.match(/([A-Z]{1,4})[0-9]!/);
+  const specM = upper.match(/(?:^|[_:\s])([A-Z]{1,3})([FGHJKMNQUVXZ])(\d{4}|\d{2})(?=[,\s._])/);
+  const symbol = contM ? contM[1] : specM ? specM[1] : null;
+  if (!symbol) {
+    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Can't tell the instrument from the TradingView file name (expected something like \"CME_MINI_NQ1!, 1_….csv\" or \"CME_MINI_ESU2026, 30S_….csv\")" };
   }
-  const symbol = symM[1];
-  const tfM = filename.match(/!\s*,?\s*(\d+)\s*([SHDWM])?[_.\s]/i);
+  const tfM = filename.match(/,\s*(\d+)\s*([SHDWM])?\s*[_.]/i);
   const tfNum = tfM ? Number(tfM[1]) : NaN;
   const tfUnit = (tfM?.[2] ?? "").toUpperCase(); // "" = minutes
-  let timeframe: "S5" | "M1";
+  // Native storage: 5S, 30S, 1m. 10S/15S are aggregated up to 30S.
+  let timeframe: "S5" | "S30" | "M1";
+  let groupSec = 0; // aggregate input rows into buckets of this many seconds
   if (tfUnit === "S" && tfNum === 5) timeframe = "S5";
+  else if (tfUnit === "S" && tfNum === 30) timeframe = "S30";
+  else if (tfUnit === "S" && (tfNum === 10 || tfNum === 15)) { timeframe = "S30"; groupSec = 30; }
   else if (tfUnit === "" && tfNum === 1) timeframe = "M1";
   else {
-    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: `This export looks like a ${tfM ? tfNum + (tfUnit || "m") : "?"} chart — export a 1-minute (or 5-second) chart so the journal can use the bars` };
+    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: `This export looks like a ${tfM ? tfNum + (tfUnit || "m") : "?"} chart — export a 1-minute, 30-second or 5-second chart so the journal can use the bars` };
   }
 
   const lines = text.split("\n").map((l) => l.replace(/^﻿/, "").replace(/\r$/, "")).filter((l) => l.trim());
@@ -373,7 +380,7 @@ async function importTvBars(filename: string, text: string): Promise<ImportResul
     return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Couldn't find time/open/high/low/close columns in this TradingView export" };
   }
 
-  const rows: BarRow[] = [];
+  let rows: BarRow[] = [];
   for (const line of lines.slice(1)) {
     const f = line.split(",");
     const tRaw = (f[cT] ?? "").trim();
@@ -384,6 +391,24 @@ async function importTvBars(filename: string, text: string): Promise<ImportResul
     rows.push({ time, open, high, low, close, volume });
   }
   if (!rows.length) return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "The file has no data rows" };
+  if (groupSec > 0) {
+    // Aggregate finer seconds bars up to the stored timeframe.
+    rows.sort((a, b) => a.time.getTime() - b.time.getTime());
+    const agg: BarRow[] = [];
+    for (const b of rows) {
+      const bucket = Math.floor(b.time.getTime() / 1000 / groupSec) * groupSec * 1000;
+      const cur = agg[agg.length - 1];
+      if (!cur || cur.time.getTime() !== bucket) {
+        agg.push({ ...b, time: new Date(bucket) });
+      } else {
+        cur.high = Math.max(cur.high, b.high);
+        cur.low = Math.min(cur.low, b.low);
+        cur.close = b.close;
+        cur.volume += b.volume;
+      }
+    }
+    rows = agg;
+  }
 
   await ensureInstrument(symbol);
   const day = kyivDay(rows[rows.length - 1].time);
