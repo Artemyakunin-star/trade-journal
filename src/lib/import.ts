@@ -314,7 +314,10 @@ export type ImportResult = {
 export async function importCsvFile(filename: string, text: string): Promise<ImportResult> {
   const firstLine = text.slice(0, 400).split("\n")[0] ?? "";
   const isExec = /ExecutionId/i.test(firstLine);
-  const isBars = !isExec && /Open/i.test(firstLine) && /Volume/i.test(firstLine) && !/entry/i.test(firstLine);
+  // TradingView "Export chart data…": lowercase `time,open,…` header and/or a
+  // continuous-contract symbol like NQ1! in the file name.
+  const isTvBars = !isExec && /open/i.test(firstLine) && /close/i.test(firstLine) && (/^time,/.test(firstLine) || /[0-9]!/.test(filename));
+  const isBars = !isExec && !isTvBars && /Open/i.test(firstLine) && /Volume/i.test(firstLine) && !/entry/i.test(firstLine);
   // DeepCharts "Strategy Report → Trade List": semicolon-delimited round-trip
   // trades (Symbol;DT;Quantity;Entry;Exit;ProfitLoss and variants).
   const isDcTrades = !isExec && !isBars && /symbol|instrument/i.test(firstLine) && /entry/i.test(firstLine) && /exit/i.test(firstLine);
@@ -322,17 +325,92 @@ export async function importCsvFile(filename: string, text: string): Promise<Imp
   try {
     const { importTimezone } = await getSettings();
     if (isExec) return await importExecutions(filename, text, importTimezone);
+    if (isTvBars) return await importTvBars(filename, text);
     if (isBars) return await importBars(filename, text, importTimezone);
     if (isDcTrades) return await importTradeList(filename, text, importTimezone);
-    return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Doesn't look like an executions/bars exporter file or a DeepCharts trade list" };
+    return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Doesn't look like an executions/bars exporter file, a TradingView chart export or a DeepCharts trade list" };
   } catch (e) {
     return {
       filename,
-      kind: isExec ? "EXECUTIONS" : isBars ? "BARS" : isDcTrades ? "TRADES" : "UNKNOWN",
+      kind: isExec ? "EXECUTIONS" : isBars || isTvBars ? "BARS" : isDcTrades ? "TRADES" : "UNKNOWN",
       inserted: 0, skipped: 0,
       error: e instanceof Error ? e.message : String(e),
     };
   }
+}
+
+// ---------- TradingView chart data export ----------
+
+/**
+ * TradingView "Export chart data…" CSV: comma-delimited, lowercase header
+ * `time,open,high,low,close[,VOL or indicator columns…]`; `time` is either a
+ * unix timestamp (seconds, UTC) or an ISO date — absolute time, so the Import
+ * timezone does NOT apply. Symbol and timeframe come from the file name, e.g.
+ * "CME_MINI_NQ1!, 1_a1b2c3.csv" (1 = 1-minute) or "…MNQ1!, 5S_….csv" (5-sec).
+ */
+async function importTvBars(filename: string, text: string): Promise<ImportResult> {
+  const symM = filename.toUpperCase().match(/([A-Z]{1,4})[0-9]!/);
+  if (!symM) {
+    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Can't tell the instrument from the TradingView file name (expected something like \"CME_MINI_NQ1!, 1_….csv\")" };
+  }
+  const symbol = symM[1];
+  const tfM = filename.match(/!\s*,?\s*(\d+)\s*([SHDWM])?[_.\s]/i);
+  const tfNum = tfM ? Number(tfM[1]) : NaN;
+  const tfUnit = (tfM?.[2] ?? "").toUpperCase(); // "" = minutes
+  let timeframe: "S5" | "M1";
+  if (tfUnit === "S" && tfNum === 5) timeframe = "S5";
+  else if (tfUnit === "" && tfNum === 1) timeframe = "M1";
+  else {
+    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: `This export looks like a ${tfM ? tfNum + (tfUnit || "m") : "?"} chart — export a 1-minute (or 5-second) chart so the journal can use the bars` };
+  }
+
+  const lines = text.split("\n").map((l) => l.replace(/^﻿/, "").replace(/\r$/, "")).filter((l) => l.trim());
+  const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
+  const col = (n: string) => header.indexOf(n);
+  const cT = col("time"), cO = col("open"), cH = col("high"), cL = col("low"), cC = col("close");
+  const cV = header.findIndex((h) => h === "volume" || h === "vol");
+  if (cT === -1 || cO === -1 || cH === -1 || cL === -1 || cC === -1) {
+    return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Couldn't find time/open/high/low/close columns in this TradingView export" };
+  }
+
+  const rows: BarRow[] = [];
+  for (const line of lines.slice(1)) {
+    const f = line.split(",");
+    const tRaw = (f[cT] ?? "").trim();
+    const time = /^\d+$/.test(tRaw) ? new Date(Number(tRaw) * 1000) : new Date(tRaw);
+    const open = Number(f[cO]), high = Number(f[cH]), low = Number(f[cL]), close = Number(f[cC]);
+    if (Number.isNaN(time.getTime()) || !(open > 0) || !(high > 0)) continue;
+    const volume = cV === -1 ? 0 : Math.round(Number(f[cV]) || 0);
+    rows.push({ time, open, high, low, close, volume });
+  }
+  if (!rows.length) return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "The file has no data rows" };
+
+  await ensureInstrument(symbol);
+  const day = kyivDay(rows[rows.length - 1].time);
+  await db.insert(imports).values({ kind: "BARS", filename, instrument: symbol, tradingDay: day, rowCount: rows.length });
+
+  let inserted = 0;
+  const CHUNK = 2000;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const res = await db
+      .insert(bars)
+      .values(
+        chunk.map((b) => ({
+          instrument: symbol,
+          timeframe,
+          time: b.time,
+          open: String(b.open), high: String(b.high), low: String(b.low), close: String(b.close),
+          volume: b.volume,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning({ id: bars.id });
+    inserted += res.length;
+  }
+
+  const maeMfeComputed = await computeMaeMfeFor(null, [symbol]);
+  return { filename, kind: "BARS", inserted, skipped: rows.length - inserted, maeMfeComputed };
 }
 
 // ---------- DeepCharts trade list ----------

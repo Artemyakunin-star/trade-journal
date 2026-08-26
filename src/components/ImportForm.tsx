@@ -84,10 +84,10 @@ export default function ImportForm() {
       <div className="card" style={{ maxWidth: 640 }}>
         <div className="drop" style={{ marginBottom: 14 }}>
           <p style={{ marginBottom: 10 }}>
-            Select the files — NinjaTrader exporter <b>executions_*.csv</b> / <b>bars_*.csv</b>, or a{" "}
-            <b>DeepCharts</b> trade list (Trading → Strategy Report → Trade List → export CSV). You can pick several at
-            once; re-importing the same file is safe (rows are deduplicated). Big files (tick data) are uploaded in
-            parts automatically.
+            Select the files — NinjaTrader exporter <b>executions_*.csv</b> / <b>bars_*.csv</b>, a <b>DeepCharts</b>{" "}
+            trade list (Trading → Strategy Report → Trade List → export CSV), or a <b>TradingView</b> chart export
+            (Export chart data… on a 1-minute or 5-second chart). You can pick several at once; re-importing the same
+            file is safe (rows are deduplicated). Big files (tick data) are uploaded in parts automatically.
           </p>
           <input
             type="file"
