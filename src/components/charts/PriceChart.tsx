@@ -348,10 +348,10 @@ export default function PriceChart({
       {loading && <div className="section-note">Loading bars…</div>}
       {!loading && data && data.bars.length === 0 && (
         <div className="section-note">
-          No {mode === "tick" ? "tick" : "5-sec"} bars for {instrument} on {date}.{" "}
+          No {mode === "tick" ? "tick" : ""} bars for {instrument} on {date}.{" "}
           {mode === "tick"
             ? "Tick charts need bars_*_T100_*.csv from the updated exporter."
-            : <>Import the day&apos;s <b>bars_{instrument}_*.csv</b> on the Import screen.</>}
+            : <>Import the day&apos;s bars on the Import screen — NinjaTrader <b>bars_{instrument}_*.csv</b> or a TradingView chart export (30S or 1-minute) for this instrument.</>}
         </div>
       )}
       <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
