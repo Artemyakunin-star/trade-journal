@@ -5,8 +5,8 @@ import Tiles from "@/components/Tiles";
 import IdeaCard from "@/components/IdeaCard";
 import PriceChart from "@/components/charts/PriceChart";
 import { db } from "@/db";
-import { eq } from "drizzle-orm";
-import { plans } from "@/db/schema";
+import { and, eq, gte, lt } from "drizzle-orm";
+import { bars, plans } from "@/db/schema";
 import { addScenario, deleteScenario, setScenarioOutcome } from "@/app/actions";
 import AccountFilter from "@/components/AccountFilter";
 import {
@@ -46,6 +46,20 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     (i) => i.trades.some((t) => tradeIds.has(t.id)) || (plan && i.planId === plan.id),
   );
   const rogue = dayTrades.filter((t) => !t.ideaId);
+
+  // Chart instruments: the day's trades, or — when no trades are visible
+  // (e.g. account filter) — any instruments that have imported bars that day.
+  let chartInstruments = [...new Set(dayTrades.map((t) => t.instrument))];
+  if (!chartInstruments.length) {
+    const { parseInTimeZone } = await import("@/lib/format");
+    const dayStart = parseInTimeZone(`${date} 00:00:00`, tz);
+    const dayEnd = new Date(dayStart.getTime() + 25 * 3600 * 1000);
+    const barInstruments = await db
+      .selectDistinct({ instrument: bars.instrument })
+      .from(bars)
+      .where(and(gte(bars.time, dayStart), lt(bars.time, dayEnd)));
+    chartInstruments = barInstruments.map((b) => b.instrument).sort();
+  }
 
   const pnl = dayTrades.reduce((a, t) => a + tradePnl(t), 0);
   const wins = dayTrades.filter((t) => tradePnl(t) > 0).length;
@@ -89,7 +103,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
       <Tiles tiles={tiles} />
 
       <PriceChart
-        instruments={[...new Set(dayTrades.map((t) => t.instrument))]}
+        instruments={chartInstruments}
         date={date}
         accounts={selectedAccounts ?? undefined}
         tz={tz}
