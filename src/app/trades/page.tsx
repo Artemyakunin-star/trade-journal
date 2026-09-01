@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function TradesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; unit?: string }>;
+  searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; from?: string; to?: string; unit?: string }>;
 }) {
   const sp = await searchParams;
   const [allTrades, allIdeas, instruments, selectedAccounts, prefs, visibleCols] = await Promise.all([
@@ -32,8 +32,11 @@ export default async function TradesPage({
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
   );
 
+  const isDate = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
   let trades = filterByAccounts(allTrades, selectedAccounts);
   if (sp.date) trades = trades.filter((t) => kyivDateOf(t.entryTime, tz) === sp.date);
+  if (isDate(sp.from)) trades = trades.filter((t) => kyivDateOf(t.entryTime, tz) >= sp.from!);
+  if (isDate(sp.to)) trades = trades.filter((t) => kyivDateOf(t.entryTime, tz) <= sp.to!);
   if (sp.instrument) trades = trades.filter((t) => t.instrument === sp.instrument);
   if (sp.dir) trades = trades.filter((t) => t.direction === sp.dir);
   if (sp.kind === "rogue") trades = trades.filter((t) => !t.ideaId);
@@ -84,8 +87,14 @@ export default async function TradesPage({
           <option value="idea">With idea only</option>
         </select>
         <input type="text" name="q" placeholder="Search notes…" defaultValue={sp.q ?? ""} />
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
+          From
+          <input className="tj-input" name="from" type="date" defaultValue={isDate(sp.from) ? sp.from : ""} style={{ width: 140 }} />
+          to
+          <input className="tj-input" name="to" type="date" defaultValue={isDate(sp.to) ? sp.to : ""} style={{ width: 140 }} />
+        </span>
         <button className="btn ghost" type="submit">Filter</button>
-        {(sp.instrument || sp.dir || sp.kind || sp.q || sp.date) && (
+        {(sp.instrument || sp.dir || sp.kind || sp.q || sp.date || sp.from || sp.to) && (
           <Link href="/trades" className="btn ghost">Reset</Link>
         )}
         <span className="seg" style={{ marginLeft: "auto" }}>
