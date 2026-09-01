@@ -18,7 +18,7 @@ import {
   type RangeKey,
   type Tile,
 } from "@/lib/metrics";
-import { fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { fmtExcursion, fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
 import { loadTradeBars, simulateSequential, summarize, sweep } from "@/lib/whatif";
@@ -290,6 +290,8 @@ export default async function AnalyticsPage({
                 <th>Instr</th>
                 <th>Dir</th>
                 <th className="num">Qty</th>
+                <th className="num" data-tip="Maximum Adverse Excursion — the worst the price went against you while open, per contract, in the selected unit">MAE</th>
+                <th className="num" data-tip="Maximum Favorable Excursion — the best the price went in your favor while open, per contract, in the selected unit">MFE</th>
                 <th className="num" data-tip="Recorded net P&L">Actual</th>
                 <th className="num" data-tip="Simulated net P&L under the current rules">Sim</th>
                 <th className="num" data-tip="Sim minus actual">Δ</th>
@@ -322,6 +324,8 @@ export default async function AnalyticsPage({
                     <td>{t.instrument}</td>
                     <td>{t.direction === "LONG" ? "Long" : "Short"}</td>
                     <td className="num">{t.quantity}</td>
+                    <td className="num neg">{fmtExcursion(t.maeTicks, unit, specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 }, 1)}</td>
+                    <td className="num pos">{fmtExcursion(t.mfeTicks, unit, specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 }, 1)}</td>
                     <td className={"num " + (r.actualPnl > 0 ? "pos" : r.actualPnl < 0 ? "neg" : "")}>
                       {fmtMoney(Math.round(r.actualPnl))}
                     </td>
@@ -344,7 +348,7 @@ export default async function AnalyticsPage({
               })}
               {trades.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ color: "var(--muted)" }}>No closed trades in this selection.</td>
+                  <td colSpan={10} style={{ color: "var(--muted)" }}>No closed trades in this selection.</td>
                 </tr>
               )}
             </tbody>
