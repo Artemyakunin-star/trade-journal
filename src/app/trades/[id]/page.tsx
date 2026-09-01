@@ -127,12 +127,30 @@ export default async function TradeDetailPage({
         {stat("Commission", comm > 0 ? "$" + comm.toFixed(2) : "$0")}
         {stat(
           "MAE (worst against you, per contract)",
-          trade.maeTicks === null ? "—" : fmtExcursion(trade.maeTicks, unit, spec, 1),
+          trade.maeTicks === null ? "—" : (
+            <>
+              {fmtExcursion(trade.maeTicks, unit, spec, 1)}
+              {trade.quantity > 1 && unit === "usd" && (
+                <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
+                  whole trade ×{trade.quantity}: {fmtExcursion(trade.maeTicks, unit, spec, trade.quantity)}
+                </div>
+              )}
+            </>
+          ),
           "neg",
         )}
         {stat(
           "MFE (best in your favor, per contract)",
-          trade.mfeTicks === null ? "—" : fmtExcursion(trade.mfeTicks, unit, spec, 1),
+          trade.mfeTicks === null ? "—" : (
+            <>
+              {fmtExcursion(trade.mfeTicks, unit, spec, 1)}
+              {trade.quantity > 1 && unit === "usd" && (
+                <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
+                  whole trade ×{trade.quantity}: {fmtExcursion(trade.mfeTicks, unit, spec, trade.quantity)}
+                </div>
+              )}
+            </>
+          ),
           "pos",
         )}
       </div>
