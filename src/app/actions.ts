@@ -281,6 +281,44 @@ export async function deleteManualTrade(fd: FormData) {
   redirect("/trades");
 }
 
+/** Change the account label of a trade that has no linked executions
+ *  (manual / trade-list imports — e.g. to tell DeepCharts accounts apart).
+ *  Executions-built trades are protected: a re-import would restore the
+ *  account from the CSV anyway. */
+export async function setTradeAccount(fd: FormData) {
+  const tradeId = str(fd, "tradeId");
+  const account = str(fd, "account");
+  if (!account) return;
+  const linked = await db.query.executions.findFirst({ where: eq(executions.tradeId, tradeId) });
+  if (linked) return;
+  await db.update(trades).set({ account, updatedAt: new Date() }).where(eq(trades.id, tradeId));
+  await widenAccountFilter([account]);
+  revalidatePath("/", "layout");
+}
+
+/** Rename an account across all its trades — only for accounts that have no
+ *  executions behind them (imported trade lists / manual trades). */
+export async function renameAccount(fd: FormData) {
+  const from = str(fd, "from");
+  const to = str(fd, "to");
+  if (!from || !to || from === to) return;
+  const hasExecs = await db.query.executions.findFirst({ where: eq(executions.account, from) });
+  if (hasExecs) return; // NT-imported account — names come from the CSVs
+  await db.update(trades).set({ account: to }).where(eq(trades.account, from));
+
+  // Keep the account filter working: replace the old name if it was selected.
+  const jar = await cookies();
+  const raw = jar.get(ACCOUNTS_COOKIE_NAME)?.value;
+  if (raw) {
+    const selected = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (selected.includes(from)) {
+      const next = [...new Set(selected.map((a) => (a === from ? to : a)))];
+      jar.set(ACCOUNTS_COOKIE_NAME, next.join(","), { maxAge: 60 * 60 * 24 * 365, path: "/" });
+    }
+  }
+  revalidatePath("/", "layout");
+}
+
 export async function setTradeNote(fd: FormData) {
   const tradeId = str(fd, "tradeId");
   await db

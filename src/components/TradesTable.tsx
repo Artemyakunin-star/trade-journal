@@ -9,6 +9,7 @@ import {
   fmtPerContract,
   fmtPrice,
   fmtTimeKyiv,
+  kyivDateOf,
   GRADE_LABEL,
   gradeClass,
   TRIGGER_LABEL,
@@ -82,7 +83,7 @@ export default function TradesTable({
 
   const colCount =
     1 +
-    ["account", "instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "note"].filter(show).length +
+    ["date", "account", "instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "note"].filter(show).length +
     (showIdeaCol ? 1 : 0);
 
   const row = (t: TradeRow) => {
@@ -97,6 +98,13 @@ export default function TradesTable({
             {fmtTimeKyiv(t.entryTime, true, tz)}
           </Link>
         </td>
+        {show("date") && (
+          <td style={{ color: "var(--ink-2)", fontVariantNumeric: "tabular-nums" }}>
+            <Link href={`/day/${kyivDateOf(t.entryTime, tz)}`} className="linklike" title="Open this day">
+              {kyivDateOf(t.entryTime, tz)}
+            </Link>
+          </td>
+        )}
         {show("account") && <td style={{ color: "var(--ink-2)" }}>{t.account}</td>}
         {show("instrument") && <td>{t.instrument}</td>}
         {show("dir") && <td>{t.direction === "LONG" ? "Long" : "Short"}</td>}
@@ -197,6 +205,7 @@ export default function TradesTable({
       <thead>
         <tr>
           <th data-tip="Entry time of the first fill — click it to open the trade details page">Entry</th>
+          {show("date") && <th data-tip="Trading day (in the Chart timezone) — click to open the Day screen">Date</th>}
           {show("account") && <th data-tip="Trading account the trade was executed on">Account</th>}
           {show("instrument") && <th data-tip="Futures root symbol (NQ, ES, MNQ, …)">Instr</th>}
           {show("dir") && <th data-tip="Position direction: Long or Short">Dir</th>}

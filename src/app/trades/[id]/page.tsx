@@ -8,7 +8,7 @@ import { executions, trades as tradesTable } from "@/db/schema";
 import PriceChart from "@/components/charts/PriceChart";
 import DocEditor from "@/components/DocEditor";
 import BeField from "@/components/BeField";
-import { deleteManualTrade, setTradeIdea, setTradeNote } from "@/app/actions";
+import { deleteManualTrade, setTradeAccount, setTradeIdea, setTradeNote } from "@/app/actions";
 import { getAllIdeas, type TradeRow } from "@/lib/metrics";
 import { loadTradeBars, simulateTrade, type SimResult } from "@/lib/whatif";
 import type { SimOverlay } from "@/components/charts/PriceChart";
@@ -271,9 +271,25 @@ export default async function TradeDetailPage({
               Worst price while open (MAE): <b>{trade.maePrice ? fmtPrice(trade.maePrice) : "—"}</b>
               <br />
               Best price while open (MFE): <b>{trade.mfePrice ? fmtPrice(trade.mfePrice) : "—"}</b>
-              <br />
-              Account: <b>{trade.account}</b>
             </div>
+            {fills.length === 0 ? (
+              <form action={setTradeAccount} style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 8 }}>
+                <input type="hidden" name="tradeId" value={trade.id} />
+                <span style={{ fontSize: 12.5, color: "var(--ink-2)" }}>Account</span>
+                <input
+                  className="tj-input"
+                  name="account"
+                  defaultValue={trade.account}
+                  style={{ width: 150 }}
+                  title="This trade has no CSV executions behind it, so you can relabel its account (e.g. your real DeepCharts account number)"
+                />
+                <button className="btn btn-sm" type="submit">Save</button>
+              </form>
+            ) : (
+              <div style={{ fontSize: 12.5, color: "var(--ink-2)", marginTop: 4 }}>
+                Account: <b>{trade.account}</b>
+              </div>
+            )}
           </div>
         </div>
       </div>

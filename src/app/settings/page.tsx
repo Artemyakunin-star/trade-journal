@@ -1,15 +1,21 @@
 // Settings: display timezone, color scheme, instrument specs & commissions.
 import { db } from "@/db";
-import { addInstrument, saveDisplaySettings, saveInstrument } from "@/app/actions";
+import { addInstrument, renameAccount, saveDisplaySettings, saveInstrument } from "@/app/actions";
 import { getSettings, TIMEZONES } from "@/lib/settings";
+import { executions, trades } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [prefs, instruments] = await Promise.all([
+  const [prefs, instruments, tradeAccounts, execAccounts] = await Promise.all([
     getSettings(),
     db.query.instruments.findMany({ orderBy: (i, { asc }) => [asc(i.symbol)] }),
+    db.selectDistinct({ account: trades.account }).from(trades),
+    db.selectDistinct({ account: executions.account }).from(executions),
   ]);
+  // Accounts safe to rename: no executions behind them (trade lists / manual).
+  const execSet = new Set(execAccounts.map((a) => a.account));
+  const renamable = tradeAccounts.map((a) => a.account).filter((a) => !execSet.has(a)).sort();
 
   return (
     <>
@@ -100,6 +106,28 @@ export default async function SettingsPage() {
           </form>
         </div>
       </div>
+
+      {renamable.length > 0 && (
+        <div className="card" style={{ maxWidth: 420, marginTop: 14 }}>
+          <h3>
+            Accounts <span className="sub">rename imported trade-list accounts (e.g. DeepCharts → your real number)</span>
+          </h3>
+          <form action={renameAccount} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <select className="tj-select" name="from" defaultValue={renamable[0]} style={{ flex: "1 1 140px" }}>
+              {renamable.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+            <span style={{ color: "var(--muted)", fontSize: 12.5 }}>→</span>
+            <input className="tj-input" name="to" placeholder="new name, e.g. ****23384" required style={{ flex: "1 1 150px" }} />
+            <button className="btn btn-sm" type="submit">Rename</button>
+          </form>
+          <div className="section-note">
+            Renames the account label on ALL trades of that account at once. Accounts imported from NinjaTrader
+            executions can&apos;t be renamed — their names come from the CSVs.
+          </div>
+        </div>
+      )}
     </>
   );
 }
