@@ -2,7 +2,7 @@
 // inline "attach to idea" selects, manual stop-loss entry and RR.
 import Link from "next/link";
 import ComboInput from "@/components/ComboInput";
-import { setTradeField, setTradeIdea, setTradeStop } from "@/app/actions";
+import { deleteManualTrade, setTradeAccount, setTradeField, setTradeIdea, setTradeStop } from "@/app/actions";
 import {
   fmtExcursion,
   fmtMoney,
@@ -55,6 +55,7 @@ export default function TradesTable({
   visibleCols = null,
   keyLevelOptions = [],
   ofConfOptions = [],
+  editableAccountIds = null,
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
@@ -67,6 +68,8 @@ export default function TradesTable({
   visibleCols?: Set<string> | null;
   keyLevelOptions?: string[];
   ofConfOptions?: string[];
+  /** Trades whose account label can be edited inline (no CSV executions behind them). */
+  editableAccountIds?: Set<string> | null;
 }) {
   const show = (key: string) => visibleCols === null || visibleCols.has(key);
   const showIdeaCol = showAttach && show("idea");
@@ -94,9 +97,23 @@ export default function TradesTable({
     return (
       <tr key={t.id} className="in-group">
         <td>
-          <Link href={`/trades/${t.id}?unit=${unit}`} className="linklike" title="Open trade details">
-            {fmtTimeKyiv(t.entryTime, true, tz)}
-          </Link>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Link href={`/trades/${t.id}?unit=${unit}`} className="linklike" title="Open trade details">
+              {fmtTimeKyiv(t.entryTime, true, tz)}
+            </Link>
+            {editableAccountIds?.has(t.id) && (
+              <form action={deleteManualTrade} style={{ display: "inline" }}>
+                <input type="hidden" name="tradeId" value={t.id} />
+                <button
+                  type="submit"
+                  title="Delete this trade (added manually or from a trade list — no CSV executions behind it). Cannot be undone."
+                  style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 13, padding: "0 2px", lineHeight: 1 }}
+                >
+                  ✕
+                </button>
+              </form>
+            )}
+          </span>
         </td>
         {show("date") && (
           <td style={{ color: "var(--ink-2)", fontVariantNumeric: "tabular-nums" }}>
@@ -105,7 +122,25 @@ export default function TradesTable({
             </Link>
           </td>
         )}
-        {show("account") && <td style={{ color: "var(--ink-2)" }}>{t.account}</td>}
+        {show("account") && (
+          <td style={{ color: "var(--ink-2)" }}>
+            {editableAccountIds?.has(t.id) ? (
+              <form action={setTradeAccount} style={{ display: "flex", gap: 4 }}>
+                <input type="hidden" name="tradeId" value={t.id} />
+                <input
+                  className="mini-select"
+                  name="account"
+                  defaultValue={t.account}
+                  title="This trade has no CSV executions behind it — type any account label (e.g. your real DeepCharts number)"
+                  style={{ width: 96 }}
+                />
+                <button className="btn ghost btn-sm" type="submit">set</button>
+              </form>
+            ) : (
+              t.account
+            )}
+          </td>
+        )}
         {show("instrument") && <td>{t.instrument}</td>}
         {show("dir") && <td>{t.direction === "LONG" ? "Long" : "Short"}</td>}
         {show("qty") && <td className="num">{t.quantity}</td>}

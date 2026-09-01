@@ -5,6 +5,8 @@ import TradesTable from "@/components/TradesTable";
 import AccountFilter from "@/components/AccountFilter";
 import ColumnsFilter from "@/components/ColumnsFilter";
 import { db } from "@/db";
+import { executions } from "@/db/schema";
+import { isNotNull } from "drizzle-orm";
 import { distinctAccounts, filterByAccounts, getAllIdeas, getAllTrades } from "@/lib/metrics";
 import { kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts, getVisibleTradeColumns } from "@/lib/prefs";
@@ -18,14 +20,17 @@ export default async function TradesPage({
   searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; from?: string; to?: string; unit?: string }>;
 }) {
   const sp = await searchParams;
-  const [allTrades, allIdeas, instruments, selectedAccounts, prefs, visibleCols] = await Promise.all([
+  const [allTrades, allIdeas, instruments, selectedAccounts, prefs, visibleCols, execTradeIds] = await Promise.all([
     getAllTrades(),
     getAllIdeas(),
     db.query.instruments.findMany(),
     getSelectedAccounts(),
     getSettings(),
     getVisibleTradeColumns(),
+    db.selectDistinct({ tradeId: executions.tradeId }).from(executions).where(isNotNull(executions.tradeId)),
   ]);
+  const linkedIds = new Set(execTradeIds.map((e) => e.tradeId));
+  const editableAccountIds = new Set(allTrades.filter((t) => !linkedIds.has(t.id)).map((t) => t.id));
   const tz = prefs.timezone;
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "usd") as PnlUnit;
   const specs = Object.fromEntries(
@@ -125,6 +130,7 @@ export default async function TradesPage({
             visibleCols={visibleCols}
             keyLevelOptions={prefs.keyLevelOptions}
             ofConfOptions={prefs.ofConfOptions}
+            editableAccountIds={editableAccountIds}
           />
         </div>
         <div className="section-note">
