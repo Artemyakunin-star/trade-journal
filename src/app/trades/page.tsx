@@ -55,6 +55,12 @@ export default async function TradesPage({
   const rogueCount = trades.filter((t) => !t.ideaId).length;
   const ideaIds = new Set(trades.map((t) => t.ideaId).filter(Boolean));
 
+  const todayIso = kyivDateOf(new Date(), tz);
+  const yesterdayIso = new Date(new Date(todayIso + "T12:00:00Z").getTime() - 24 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const dayLink = (d: string) => `/trades?date=${d}${sp.unit ? `&unit=${sp.unit}` : ""}`;
+
   const unitQs = (u: string) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) if (v && k !== "unit") p.set(k, v);
@@ -92,6 +98,10 @@ export default async function TradesPage({
           <option value="idea">With idea only</option>
         </select>
         <input type="text" name="q" placeholder="Search notes…" defaultValue={sp.q ?? ""} />
+        <span className="seg">
+          <Link href={dayLink(todayIso)} className={sp.date === todayIso ? "on" : ""}>Today</Link>
+          <Link href={dayLink(yesterdayIso)} className={sp.date === yesterdayIso ? "on" : ""}>Yesterday</Link>
+        </span>
         <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
           From
           <input className="tj-input" name="from" type="date" defaultValue={isDate(sp.from) ? sp.from : ""} style={{ width: 140 }} />
