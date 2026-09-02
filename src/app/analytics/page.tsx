@@ -26,9 +26,10 @@ import BeField from "@/components/BeField";
 
 export const dynamic = "force-dynamic";
 
-type RangeKey2 = RangeKey | "week";
+type RangeKey2 = RangeKey | "week" | "yesterday";
 const RANGES: { key: RangeKey2; label: string }[] = [
   { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
   { key: "week", label: "This week" },
   { key: "7d", label: "7d" },
   { key: "30d", label: "30d" },
@@ -93,6 +94,9 @@ export default async function AnalyticsPage({
       const d = kyivDateOf(t.entryTime, tz);
       return (!customFrom || d >= customFrom) && (!customTo || d <= customTo);
     });
+  } else if (range === "yesterday") {
+    const y = new Date(new Date(todayKyiv + "T12:00:00Z").getTime() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+    trades = trades.filter((t) => kyivDateOf(t.entryTime, tz) === y);
   } else if (range === "week") {
     const monday = mondayOf(todayKyiv);
     trades = trades.filter((t) => kyivDateOf(t.entryTime, tz) >= monday);
