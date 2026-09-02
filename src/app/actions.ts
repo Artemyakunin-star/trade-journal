@@ -307,7 +307,7 @@ export async function deleteManualTrade(fd: FormData) {
   if (linked) return; // imported trade — comes back on re-import anyway; don't allow
   await db.delete(trades).where(eq(trades.id, tradeId));
   revalidatePath("/", "layout");
-  redirect("/trades");
+  redirect(str(fd, "returnTo") || "/trades");
 }
 
 /** Change the account label of a trade that has no linked executions

@@ -7,11 +7,11 @@ import AttachTradesPicker from "@/components/AttachTradesPicker";
 import DocEditor from "@/components/DocEditor";
 import Tiles from "@/components/Tiles";
 import { db } from "@/db";
-import { attachTradesToIdea, deleteIdea } from "@/app/actions";
+import { attachTradesToIdea, deleteIdea, deleteManualTrade, setTradeIdea } from "@/app/actions";
 import { getAllIdeas, getAllTrades, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
 import { desc, isNotNull } from "drizzle-orm";
-import { docs } from "@/db/schema";
+import { docs, executions } from "@/db/schema";
 import { fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { loadTradeBars, simulateSequential } from "@/lib/whatif";
@@ -31,7 +31,7 @@ export default async function EditIdeaPage({
   const idea = allIdeas.find((i) => i.id === id);
   if (!idea) notFound();
   const tz = prefs.timezone;
-  const [instruments, planDocs] = await Promise.all([
+  const [instruments, planDocs, execTradeIds] = await Promise.all([
     db.query.instruments.findMany(),
     db
       .select({ id: docs.id, date: docs.date, title: docs.title })
@@ -39,7 +39,9 @@ export default async function EditIdeaPage({
       .where(isNotNull(docs.date))
       .orderBy(desc(docs.date))
       .limit(60),
+    db.selectDistinct({ tradeId: executions.tradeId }).from(executions).where(isNotNull(executions.tradeId)),
   ]);
+  const linkedIds = new Set(execTradeIds.map((e) => e.tradeId));
   const specs = Object.fromEntries(
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
   );
@@ -199,6 +201,9 @@ export default async function EditIdeaPage({
                 <th className="num" data-tip="Simulated net P&L under the current rules">Sim</th>
                 <th className="num" data-tip="Sim minus actual">Δ</th>
                 <th className="tip-r" data-tip="How the simulated position exited">Sim exit</th>
+                <th className="tip-r" data-tip="Detach removes the trade from this idea (it becomes rogue). ✕ deletes a manually added / trade-list trade entirely">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -243,12 +248,36 @@ export default async function EditIdeaPage({
                         </span>
                       )}
                     </td>
+                    <td>
+                      <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                        <form action={setTradeIdea} style={{ display: "inline" }}>
+                          <input type="hidden" name="tradeId" value={t.id} />
+                          <input type="hidden" name="ideaId" value="" />
+                          <button className="btn ghost btn-sm" type="submit" title="Remove this trade from the idea — the trade stays, it just becomes rogue">
+                            detach
+                          </button>
+                        </form>
+                        {!linkedIds.has(t.id) && (
+                          <form action={deleteManualTrade} style={{ display: "inline" }}>
+                            <input type="hidden" name="tradeId" value={t.id} />
+                            <input type="hidden" name="returnTo" value={`/ideas/${id}/edit`} />
+                            <button
+                              type="submit"
+                              title="Delete this trade entirely (manual / trade-list — no CSV executions behind it). Cannot be undone."
+                              style={{ background: "none", border: "none", color: "var(--neg)", cursor: "pointer", fontSize: 13, padding: "0 2px", lineHeight: 1 }}
+                            >
+                              ✕
+                            </button>
+                          </form>
+                        )}
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
               {simTrades.length === 0 && (
                 <tr>
-                  <td colSpan={10} style={{ color: "var(--muted)" }}>
+                  <td colSpan={11} style={{ color: "var(--muted)" }}>
                     No closed trades yet — attach trades below or add one with “+ Trade”.
                   </td>
                 </tr>
