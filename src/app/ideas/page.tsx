@@ -126,7 +126,7 @@ export default async function IdeasPage({
                       <Link href={`/ideas/${i.id}/edit`} className="linklike" style={{ fontWeight: 600 }}>
                         {i.title}
                       </Link>
-                      {!i.planId && <span className="badge rogue" style={{ marginLeft: 8 }}>outside plan</span>}
+                      {!i.planId && !i.docId && <span className="badge rogue" style={{ marginLeft: 8 }}>outside plan</span>}
                     </td>
                     <td>{i.instrument}</td>
                     <td>{i.direction === "LONG" ? "Long" : "Short"}</td>

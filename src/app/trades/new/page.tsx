@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function NewTradePage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; ideaId?: string }>;
 }) {
   const sp = await searchParams;
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : null;
@@ -115,7 +115,7 @@ export default async function NewTradePage({
           )}
           {field(
             "Idea",
-            <select className="tj-select" name="ideaId" defaultValue="">
+            <select className="tj-select" name="ideaId" defaultValue={sp.ideaId ?? ""}>
               <option value="">— rogue (no idea)</option>
               {ideasForSelect.map((i) => (
                 <option key={i.id} value={i.id}>{i.title}</option>

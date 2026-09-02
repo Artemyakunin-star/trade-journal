@@ -105,6 +105,18 @@ export async function deleteIdea(fd: FormData) {
   redirect("/ideas");
 }
 
+/** Attach several rogue trades to an idea (picker on the idea page). */
+export async function attachTradesToIdea(fd: FormData) {
+  const ideaId = str(fd, "ideaId");
+  const ids = fd.getAll("tradeIds").map(String).filter(Boolean);
+  if (!ideaId || !ids.length) return;
+  for (const tid of ids) {
+    await db.update(trades).set({ ideaId, updatedAt: new Date() }).where(eq(trades.id, tid));
+  }
+  revalidatePath("/", "layout");
+  redirect(`/ideas/${ideaId}/edit`);
+}
+
 /** Attach / detach a trade to an idea (from the Trades table inline select). */
 export async function setTradeIdea(fd: FormData) {
   const tradeId = str(fd, "tradeId");

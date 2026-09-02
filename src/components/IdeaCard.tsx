@@ -13,8 +13,9 @@ export default function IdeaCard({ idea, editable = true }: { idea: IdeaRow; edi
     return a + Math.max(0, potential - Number(t.pnl));
   }, 0);
 
+  // The whole card is a link to the idea page (trades + simulation + editing).
   return (
-    <div className="card idea-card">
+    <Link href={`/ideas/${idea.id}/edit`} className="card idea-card" style={{ display: "block", color: "inherit", textDecoration: "none", cursor: "pointer" }}>
       <div className="head">
         <div className="title">{idea.title}</div>
         {idea.grade && <span className={"grade " + gradeClass(idea.grade)}>{GRADE_LABEL[idea.grade]}</span>}
@@ -26,7 +27,7 @@ export default function IdeaCard({ idea, editable = true }: { idea: IdeaRow; edi
         <span className="status-chip">{idea.instrument} · {idea.direction === "LONG" ? "Long" : "Short"}</span>
         <span className={"badge " + (TRIGGER_LABEL[idea.trigger] ?? "")}>{TRIGGER_LABEL[idea.trigger] ?? idea.trigger.toLowerCase()}</span>
         <span className={"status-chip " + status.cls}>{status.text}</span>
-        {!idea.planId && <span className="badge rogue">outside plan</span>}
+        {!idea.planId && !idea.docId && <span className="badge rogue">outside plan</span>}
       </div>
       <div className="thesis">{idea.thesis}</div>
       <div className="inval">
@@ -48,11 +49,6 @@ export default function IdeaCard({ idea, editable = true }: { idea: IdeaRow; edi
         </div>
       </div>
       {idea.comment && <div className="comment">“{idea.comment}”</div>}
-      {editable && (
-        <div style={{ display: "flex", gap: 8 }}>
-          <Link href={`/ideas/${idea.id}/edit`} className="btn ghost btn-sm">Edit / grade</Link>
-        </div>
-      )}
-    </div>
+    </Link>
   );
 }
