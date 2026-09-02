@@ -6,7 +6,7 @@ import IdeaCard from "@/components/IdeaCard";
 import PriceChart from "@/components/charts/PriceChart";
 import { db } from "@/db";
 import { and, eq, gte, lt } from "drizzle-orm";
-import { bars, plans } from "@/db/schema";
+import { bars, docs, plans } from "@/db/schema";
 import { addScenario, deleteScenario, setScenarioOutcome } from "@/app/actions";
 import AccountFilter from "@/components/AccountFilter";
 import {
@@ -28,10 +28,29 @@ export const dynamic = "force-dynamic";
 export default async function DayPage({ params }: { params: Promise<{ date: string }> }) {
   const { date } = await params;
 
-  const plan = await db.query.plans.findFirst({
-    where: eq(plans.date, date),
-    with: { scenarios: true },
-  });
+  const [plan, planDoc] = await Promise.all([
+    db.query.plans.findFirst({
+      where: eq(plans.date, date),
+      with: { scenarios: true },
+    }),
+    // The written plan from the Plans menu (Notion-like daily document).
+    db.query.docs.findFirst({ where: eq(docs.date, date) }),
+  ]);
+
+  // Short plain-text preview of the TipTap document.
+  const docSnippet = (() => {
+    if (!planDoc?.content) return null;
+    const parts: string[] = [];
+    const walk = (n: unknown) => {
+      if (!n || typeof n !== "object" || parts.join(" ").length > 400) return;
+      const node = n as { text?: string; content?: unknown[] };
+      if (typeof node.text === "string") parts.push(node.text);
+      if (Array.isArray(node.content)) node.content.forEach(walk);
+    };
+    walk(planDoc.content);
+    const s = parts.join(" ").trim();
+    return s ? s.slice(0, 320) + (s.length > 320 ? "…" : "") : null;
+  })();
   const [rawTrades, allIdeas, selectedAccounts, prefs] = await Promise.all([
     getAllTrades(),
     getAllIdeas(),
@@ -112,12 +131,20 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
 
       <div className="grid2" style={{ gridTemplateColumns: "1.15fr 1fr", marginBottom: 14 }}>
         <div className="card">
-          <h3>Day plan {plan && <span className="sub">one plan per trading day</span>}</h3>
-          {plan ? (
-            <div className="plan-text">{plan.analysis}</div>
-          ) : (
+          <h3>Day plan {(plan || planDoc) && <span className="sub">one plan per trading day</span>}</h3>
+          {planDoc && (
+            <div style={{ marginBottom: plan ? 10 : 0 }}>
+              <Link className="linklike" href={`/plans/${planDoc.id}`} style={{ fontWeight: 600 }}>
+                {planDoc.title || "Plan"} — open the written plan →
+              </Link>
+              {docSnippet && <div className="plan-text" style={{ marginTop: 6 }}>{docSnippet}</div>}
+            </div>
+          )}
+          {plan && <div className="plan-text">{plan.analysis}</div>}
+          {!plan && !planDoc && (
             <div className="section-note">
-              No plan written for this day. <Link className="linklike" href={`/day/${date}/plan`}>Write it →</Link>
+              No plan written for this day. Write it in <Link className="linklike" href="/plans">Plans</Link> or as a{" "}
+              <Link className="linklike" href={`/day/${date}/plan`}>quick day note →</Link>
             </div>
           )}
           {plan?.news && plan.news.length > 0 && (
