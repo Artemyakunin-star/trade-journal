@@ -218,9 +218,14 @@ export function sweep(
   specs: Record<string, Spec>,
   values: number[],
   make: (v: number, spec: Spec) => SimParams,
+  /** Optional per-trade conversion of the simulated $ P&L (e.g. into ticks). */
+  convert?: (pnlUsd: number, t: TradeRow) => number,
 ): { value: number; pnl: number }[] {
   return values.map((v) => {
     const rs = simulateSequential(trades, tradeBars, specs, (spec) => make(v, spec), true);
-    return { value: v, pnl: Math.round(rs.reduce((a, r) => a + r.simPnl, 0)) };
+    return {
+      value: v,
+      pnl: Math.round(rs.reduce((a, r, i) => a + (convert ? convert(r.simPnl, trades[i]) : r.simPnl), 0)),
+    };
   });
 }

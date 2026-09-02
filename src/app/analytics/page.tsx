@@ -124,11 +124,28 @@ export default async function AnalyticsPage({
   );
   const sum = summarize(results);
 
+  // Everything money-like follows the $/Ticks/Points switch: dollars are
+  // translated per trade through ITS instrument's tick value, then summed.
+  const fallbackSpec = { tickSize: 0.25, tickValue: 5 };
+  const convTrade = (usd: number, t: { instrument: string }) => {
+    if (unit === "usd") return usd;
+    const spec = specs[t.instrument] ?? fallbackSpec;
+    const ticks = usd / spec.tickValue;
+    return unit === "ticks" ? ticks : ticks * spec.tickSize;
+  };
+  const fmtU = (v: number) =>
+    unit === "usd"
+      ? fmtMoney(Math.round(v))
+      : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(unit === "ticks" ? Math.round(v) : Number(v.toFixed(2))).toLocaleString("en-US")}${unitSuffix}`;
+  const actualU = results.reduce((a, r, i) => a + convTrade(r.actualPnl, trades[i]), 0);
+  const simU = results.reduce((a, r, i) => a + convTrade(r.simPnl, trades[i]), 0);
+  const diffU = simU - actualU;
+
   const diff = sum.simTotal - sum.actualTotal;
   const tiles: Tile[] = [
-    { lbl: "Actual net P&L", val: fmtMoney(Math.round(sum.actualTotal)), cls: sum.actualTotal > 0 ? "pos" : sum.actualTotal < 0 ? "neg" : "", delta: `${sum.total} closed trades` },
-    { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
-    { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
+    { lbl: "Actual net P&L", val: fmtU(actualU), cls: sum.actualTotal > 0 ? "pos" : sum.actualTotal < 0 ? "neg" : "", delta: `${sum.total} closed trades` },
+    { lbl: "What-if P&L", val: fmtU(simU), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
+    { lbl: "Difference", val: fmtU(diffU), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
     { lbl: "Win rate: actual → sim", val: `${Math.round(sum.actualWinRate * 100)}% → ${Math.round(sum.simWinRate * 100)}%` },
     { lbl: "Trades re-routed", val: `${sum.changed} of ${sum.covered}`, delta: (() => {
       const skipped = results.filter((r) => r.exitReason === "skipped").length;
@@ -152,14 +169,14 @@ export default async function AnalyticsPage({
     beTriggerTicks: toTicks(beVal, spec),
     slippageTicks,
     ignoreActualExit: true,
-  })).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
+  }), convTrade).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
   const targetSweep = sweep(trades, tradeBars, specs, SWEEP_VALUES[unit].target, (v, spec) => ({
     stopTicks: toTicks(stopVal, spec),
     targetTicks: toTicks(v, spec),
     beTriggerTicks: toTicks(beVal, spec),
     slippageTicks,
     ignoreActualExit: true,
-  })).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
+  }), convTrade).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
 
   // MAE scatter: x = MAE ticks, y = per-contract result in ticks.
   const scatterPts = trades
@@ -183,8 +200,8 @@ export default async function AnalyticsPage({
   const planned = trades.filter((t) => !!t.ideaId);
   const disciplineTiles: Tile[] = [
     { lbl: "Median re-entry after invalidation", val: medGap === null ? "—" : `${Math.round(medGap)} min`, cls: medGap !== null && medGap < 15 ? "neg" : "", delta: "rule: 15-min pause" },
-    { lbl: "Planned trades P&L", val: fmtMoney(Math.round(planned.reduce((a, t) => a + tradePnl(t), 0))), delta: `${planned.length} trades with an idea` },
-    { lbl: "Rogue trades P&L", val: fmtMoney(Math.round(rogue.reduce((a, t) => a + tradePnl(t), 0))), cls: rogue.length ? "neg" : "", delta: `${rogue.length} rogue` },
+    { lbl: "Planned trades P&L", val: fmtU(planned.reduce((a, t) => a + convTrade(tradePnl(t), t), 0)), delta: `${planned.length} trades with an idea` },
+    { lbl: "Rogue trades P&L", val: fmtU(rogue.reduce((a, t) => a + convTrade(tradePnl(t), t), 0)), cls: rogue.length ? "neg" : "", delta: `${rogue.length} rogue` },
     { lbl: "Trading days", val: String(dayAggregates(trades, tz).length) },
   ];
 
@@ -305,7 +322,9 @@ export default async function AnalyticsPage({
             <tbody>
               {trades.map((t, i) => {
                 const r = results[i];
-                const d = r.simPnl - r.actualPnl;
+                const actualV = convTrade(r.actualPnl, t);
+                const simV = convTrade(r.simPnl, t);
+                const d = simV - actualV;
                 const reason =
                   r.exitReason === "asTraded"
                     ? { text: "as traded", cls: "" }
@@ -331,13 +350,13 @@ export default async function AnalyticsPage({
                     <td className="num neg">{fmtExcursion(t.maeTicks, unit, specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 }, 1)}</td>
                     <td className="num pos">{fmtExcursion(t.mfeTicks, unit, specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 }, 1)}</td>
                     <td className={"num " + (r.actualPnl > 0 ? "pos" : r.actualPnl < 0 ? "neg" : "")}>
-                      {fmtMoney(Math.round(r.actualPnl))}
+                      {fmtU(actualV)}
                     </td>
                     <td className={"num " + (r.simPnl > 0 ? "pos" : r.simPnl < 0 ? "neg" : "")}>
-                      {fmtMoney(Math.round(r.simPnl))}
+                      {fmtU(simV)}
                     </td>
                     <td className={"num " + (d > 0 ? "pos" : d < 0 ? "neg" : "")} style={{ fontWeight: 600 }}>
-                      {fmtMoney(Math.round(d))}
+                      {fmtU(d)}
                     </td>
                     <td>
                       <span className={"status-chip " + reason.cls}>{reason.text}</span>
@@ -368,14 +387,14 @@ export default async function AnalyticsPage({
           <h3>
             Stop optimization <span className="sub">total P&L if the stop were N {unitSuffix} (target/BE as selected)</span>
           </h3>
-          <BarsChart bars={stopSweep} />
+          <BarsChart bars={stopSweep} unitLabel={unit === "usd" ? "$" : unitSuffix} />
           <div className="section-note">Where the bars stop growing, extra stop room no longer pays for itself.</div>
         </div>
         <div className="card">
           <h3>
             Target optimization <span className="sub">total P&L if the target were N {unitSuffix} (stop/BE as selected)</span>
           </h3>
-          <BarsChart bars={targetSweep} />
+          <BarsChart bars={targetSweep} unitLabel={unit === "usd" ? "$" : unitSuffix} />
           <div className="section-note">Compare with your actual exits — are you cutting winners too early?</div>
         </div>
       </div>

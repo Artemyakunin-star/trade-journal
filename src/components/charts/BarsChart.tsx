@@ -6,11 +6,15 @@ type Bar = { lbl: string; pnl: number };
 const POS = "#0ca30c";
 const NEG = "#d03b3b";
 
-function fmt(v: number) {
-  return (v > 0 ? "+$" : v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US");
+function fmtWith(unitLabel: string) {
+  return (v: number) =>
+    unitLabel === "$"
+      ? (v > 0 ? "+$" : v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US")
+      : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toLocaleString("en-US") + unitLabel;
 }
 
-export default function BarsChart({ bars }: { bars: Bar[] }) {
+export default function BarsChart({ bars, unitLabel = "$" }: { bars: Bar[]; unitLabel?: string }) {
+  const fmt = fmtWith(unitLabel);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(420);
   const [hover, setHover] = useState<number | null>(null);
