@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { executions } from "@/db/schema";
 import { isNotNull } from "drizzle-orm";
 import { distinctAccounts, filterByAccounts, getAllIdeas, getAllTrades } from "@/lib/metrics";
-import { kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { fmtDate, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts, getVisibleTradeColumns } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
 
@@ -123,7 +123,7 @@ export default async function TradesPage({
 
       <div className="card">
         <h3>
-          {sp.date ? `Trades — ${sp.date}` : "All trades"}{" "}
+          {sp.date ? `Trades — ${fmtDate(sp.date, prefs.dateFormat)}` : "All trades"}{" "}
           <span className="sub">
             grouped by idea · {trades.length} trades, {ideaIds.size} ideas, {rogueCount} rogue
             {unit !== "usd" && " · P&L per contract, MAE/MFE for the position"}
@@ -141,6 +141,7 @@ export default async function TradesPage({
             keyLevelOptions={prefs.keyLevelOptions}
             ofConfOptions={prefs.ofConfOptions}
             editableAccountIds={editableAccountIds}
+            dateFormat={prefs.dateFormat}
           />
         </div>
         <div className="section-note">

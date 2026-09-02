@@ -504,6 +504,8 @@ export async function saveDisplaySettings(fd: FormData) {
   if (TIMEZONES.includes(tz)) await setSetting("timezone", tz);
   if (TIMEZONES.includes(importTz)) await setSetting("importTimezone", importTz);
   await setSetting("theme", theme);
+  const df = str(fd, "dateFormat");
+  if (df === "eu" || df === "us") await setSetting("dateFormat", df);
   revalidatePath("/", "layout");
 }
 

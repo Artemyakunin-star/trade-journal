@@ -2,7 +2,7 @@
 import Link from "next/link";
 import IdeaCard from "@/components/IdeaCard";
 import { getAllIdeas, ideaPnl } from "@/lib/metrics";
-import { fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
+import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -120,7 +120,7 @@ export default async function IdeasPage({
                 return (
                   <tr key={i.id}>
                     <td style={{ fontVariantNumeric: "tabular-nums", color: "var(--ink-2)" }}>
-                      <Link href={`/day/${dayOf(i)}`} className="linklike" title="Open this day">{dayOf(i)}</Link>
+                      <Link href={`/day/${dayOf(i)}`} className="linklike" title="Open this day">{fmtDate(dayOf(i), prefs.dateFormat)}</Link>
                     </td>
                     <td style={{ whiteSpace: "normal", maxWidth: 340 }}>
                       <Link href={`/ideas/${i.id}/edit`} className="linklike" style={{ fontWeight: 600 }}>
@@ -148,7 +148,7 @@ export default async function IdeasPage({
       ) : (
         <div className="grid2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))" }}>
           {ideas.map((i) => (
-            <IdeaCard key={i.id} idea={i} />
+            <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} />
           ))}
         </div>
       )}

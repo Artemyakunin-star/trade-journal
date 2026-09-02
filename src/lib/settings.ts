@@ -1,10 +1,13 @@
 // App settings (single user), stored in the `settings` table.
 import { db } from "@/db";
 
+export type DateFmt = "eu" | "us";
+
 export type AppSettings = {
   timezone: string; // IANA zone used for ALL display + day grouping (chart timezone)
   importTimezone: string; // zone the NinjaTrader exporter CSVs are written in
   theme: "dark" | "light";
+  dateFormat: DateFmt; // eu = 31.12.2026, us = 12/31/2026
   keyLevelOptions: string[]; // dropdown vocabulary, grows as the user types new values
   ofConfOptions: string[];
 };
@@ -13,6 +16,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   timezone: "Europe/Kyiv",
   importTimezone: "America/Chicago",
   theme: "dark",
+  dateFormat: "eu",
   keyLevelOptions: ["POC", "VAH", "VAL", "ONH", "ONL", "Asia High", "Asia Low", "IB High", "IB Low", "Open"],
   ofConfOptions: ["Absorption", "Delta divergence", "Big prints", "Imbalance", "Exhaustion", "Iceberg", "Stops run"],
 };
@@ -41,6 +45,7 @@ export async function getSettings(): Promise<AppSettings> {
     timezone,
     importTimezone,
     theme,
+    dateFormat: map.get("dateFormat") === "us" ? "us" : "eu",
     keyLevelOptions: strArr("keyLevelOptions", DEFAULT_SETTINGS.keyLevelOptions),
     ofConfOptions: strArr("ofConfOptions", DEFAULT_SETTINGS.ofConfOptions),
   };

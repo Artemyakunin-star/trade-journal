@@ -45,6 +45,17 @@ export default async function SettingsPage() {
             </select>
           </div>
           <div className="tj-field">
+            <label className="tj-label">Date format — used everywhere dates are shown</label>
+            <div style={{ display: "flex", gap: 14 }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, color: "var(--ink-2)" }}>
+                <input type="radio" name="dateFormat" value="eu" defaultChecked={prefs.dateFormat === "eu"} /> European — 31.12.2026
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, color: "var(--ink-2)" }}>
+                <input type="radio" name="dateFormat" value="us" defaultChecked={prefs.dateFormat === "us"} /> American — 12/31/2026
+              </label>
+            </div>
+          </div>
+          <div className="tj-field">
             <label className="tj-label">Color scheme</label>
             <div style={{ display: "flex", gap: 14 }}>
               <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, color: "var(--ink-2)" }}>

@@ -30,22 +30,22 @@ export function fmtPrice(v: number | string | null | undefined): string {
 }
 
 /** "16:42:07" in the given display timezone (defaults to Kyiv). */
-export function fmtTimeKyiv(d: Date | null | undefined, withSeconds = true, tz: string = KYIV): string {
+export function fmtTimeKyiv(
+  d: Date | null | undefined,
+  withSeconds = true,
+  tz: string = KYIV,
+  fmt: "eu" | "us" = "eu",
+): string {
   if (!d) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(fmt === "us" ? "en-US" : "en-GB", {
     timeZone: tz,
-    hour: "2-digit",
+    hour: fmt === "us" ? "numeric" : "2-digit",
     minute: "2-digit",
     ...(withSeconds ? { second: "2-digit" } : {}),
-    hour12: false,
+    hour12: fmt === "us",
   }).format(d);
 }
 
-/** "Aug 10" from ISO date string or Date. */
-export function fmtDateShort(d: string | Date): string {
-  const date = typeof d === "string" ? new Date(d + "T12:00:00Z") : d;
-  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(date);
-}
 
 /** "Mon, Aug 10, 2026" from ISO date string. */
 export function fmtDateLong(iso: string): string {
@@ -79,6 +79,24 @@ export function kyivHourOf(d: Date, tz: string = KYIV): number {
  * Parse a wall-clock timestamp ("2026-08-10 08:33:38.334" or with "T") that is
  * local to `timeZone`, into a real UTC Date. Handles DST via Intl round-trip.
  */
+export type DateFmt = "eu" | "us";
+
+/** "2026-09-02" → "02.09.2026" (eu) or "09/02/2026" (us). Falls through non-ISO input. */
+export function fmtDate(iso: string | null | undefined, f: DateFmt = "eu"): string {
+  if (!iso) return "—";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  return f === "us" ? `${m[2]}/${m[3]}/${m[1]}` : `${m[3]}.${m[2]}.${m[1]}`;
+}
+
+/** "2026-09-02" → "02.09" (eu) or "09/02" (us) — for compact table cells. */
+export function fmtDateShort(iso: string | null | undefined, f: DateFmt = "eu"): string {
+  if (!iso) return "—";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  return f === "us" ? `${m[2]}/${m[3]}` : `${m[3]}.${m[2]}`;
+}
+
 export function parseInTimeZone(ts: string, timeZone: string): Date {
   const clean = ts.trim().replace(" ", "T");
   const m = clean.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/);

@@ -12,7 +12,7 @@ import { getAllIdeas, getAllTrades, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
 import { desc, isNotNull } from "drizzle-orm";
 import { docs, executions } from "@/db/schema";
-import { fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { loadTradeBars, simulateSequential } from "@/lib/whatif";
 
@@ -123,7 +123,7 @@ export default async function EditIdeaPage({
     .map((t) => ({
       id: t.id,
       date: kyivDateOf(t.entryTime, tz),
-      time: fmtTimeKyiv(t.entryTime, true, tz),
+      time: fmtTimeKyiv(t.entryTime, true, tz, prefs.dateFormat),
       instrument: t.instrument,
       direction: t.direction,
       quantity: t.quantity,
@@ -136,7 +136,7 @@ export default async function EditIdeaPage({
       <div className="topbar">
         <h1>
           {idea.title}{" "}
-          {idea.date && <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {idea.date}</span>}
+          {idea.date && <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {fmtDate(idea.date, prefs.dateFormat)}</span>}
         </h1>
         <Link href={`/trades/new?ideaId=${idea.id}${idea.date ? `&date=${idea.date}` : ""}`} className="btn">+ Trade</Link>
         <form action={deleteIdea}>
@@ -229,7 +229,7 @@ export default async function EditIdeaPage({
                   <tr key={t.id}>
                     <td>
                       <Link href={`/trades/${t.id}?unit=${unit}${simQ}`} className="linklike">
-                        {kyivDateOf(t.entryTime, tz).slice(5)} {fmtTimeKyiv(t.entryTime, false, tz)}
+                        {fmtDateShort(kyivDateOf(t.entryTime, tz), prefs.dateFormat)} {fmtTimeKyiv(t.entryTime, false, tz, prefs.dateFormat)}
                       </Link>
                     </td>
                     <td>{t.instrument}</td>

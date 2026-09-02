@@ -188,7 +188,7 @@ export default async function TradeDetailPage({
               <tbody>
                 {fills.map((f) => (
                   <tr key={f.id}>
-                    <td>{fmtTimeKyiv(f.time, true, tz)}</td>
+                    <td>{fmtTimeKyiv(f.time, true, tz, prefs.dateFormat)}</td>
                     <td>{f.action.toLowerCase()}</td>
                     <td className="num">{f.quantity}</td>
                     <td className="num">{fmtPrice(f.price)}</td>
@@ -202,8 +202,8 @@ export default async function TradeDetailPage({
             </table>
           )}
           <div className="section-note">
-            Entry {fmtTimeKyiv(trade.entryTime, true, tz)} @ {fmtPrice(trade.avgEntryPrice)} · exit{" "}
-            {trade.exitTime ? `${fmtTimeKyiv(trade.exitTime, true, tz)} @ ${fmtPrice(trade.avgExitPrice)}` : "still open"} · avg
+            Entry {fmtTimeKyiv(trade.entryTime, true, tz, prefs.dateFormat)} @ {fmtPrice(trade.avgEntryPrice)} · exit{" "}
+            {trade.exitTime ? `${fmtTimeKyiv(trade.exitTime, true, tz, prefs.dateFormat)} @ ${fmtPrice(trade.avgExitPrice)}` : "still open"} · avg
             prices are volume-weighted across fills, so several take-profits stay one round-trip trade.
           </div>
         </div>

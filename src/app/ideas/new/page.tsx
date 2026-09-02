@@ -38,7 +38,7 @@ export default async function NewIdeaPage({
     .map((t) => ({
       id: t.id,
       date: kyivDateOf(t.entryTime, tz),
-      time: fmtTimeKyiv(t.entryTime, true, tz),
+      time: fmtTimeKyiv(t.entryTime, true, tz, prefs.dateFormat),
       instrument: t.instrument,
       direction: t.direction,
       quantity: t.quantity,

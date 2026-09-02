@@ -234,7 +234,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
           </h3>
           <div className="grid2" style={{ gridTemplateColumns: "1fr" }}>
             {dayIdeas.map((i) => (
-              <IdeaCard key={i.id} idea={i} />
+              <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} />
             ))}
             {dayIdeas.length === 0 && <div className="section-note">No ideas linked to this day yet.</div>}
           </div>
@@ -245,7 +245,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
             const p = t.pnl === null ? null : tradePnl(t);
             return (
               <div className="timeline-item" key={t.id}>
-                <span className="t">{fmtTimeKyiv(t.entryTime, false, tz)}</span>
+                <span className="t">{fmtTimeKyiv(t.entryTime, false, tz, prefs.dateFormat)}</span>
                 <span className="what">
                   <b style={{ color: "var(--ink)" }}>#{n}</b> {t.instrument} {t.direction === "LONG" ? "Long" : "Short"} ×{t.quantity}
                   {idea ? <> · {idea.title}</> : <> · <span style={{ color: "var(--crit)" }}>rogue</span></>}

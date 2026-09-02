@@ -67,7 +67,7 @@ export default async function Dashboard({
   let cum = 0;
   const equityPts = days.map((d) => {
     cum += d.pnl;
-    return { d: d.date, label: fmtDateShort(d.date), day: Math.round(d.pnl), cum: Math.round(cum) };
+    return { d: d.date, label: fmtDateShort(d.date, prefs.dateFormat), day: Math.round(d.pnl), cum: Math.round(cum) };
   });
 
   const rangeLabel = RANGES.find((r) => r.key === range)!.label.toLowerCase();
@@ -142,7 +142,7 @@ export default async function Dashboard({
 
       <div className="card">
         <h3>
-          Recent trades {lastDay && <span className="sub">{fmtDateShort(lastDay)}</span>}
+          Recent trades {lastDay && <span className="sub">{fmtDateShort(lastDay, prefs.dateFormat)}</span>}
           <Link className="linklike" style={{ float: "right", fontSize: 12 }} href="/trades">
             All trades →
           </Link>
@@ -154,6 +154,7 @@ export default async function Dashboard({
           showAttach={false}
           specs={specs}
           tz={tz}
+          dateFormat={prefs.dateFormat}
         />
       </div>
     </>

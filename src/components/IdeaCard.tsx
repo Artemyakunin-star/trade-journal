@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { fmtMoney, GRADE_LABEL, gradeClass, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
+import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, STATUS_LABEL, TRIGGER_LABEL, type DateFmt } from "@/lib/format";
 import type { IdeaRow } from "@/lib/metrics";
 import { ideaPnl } from "@/lib/metrics";
 
-export default function IdeaCard({ idea, editable = true }: { idea: IdeaRow; editable?: boolean }) {
+export default function IdeaCard({ idea, editable = true, dateFormat = "eu" }: { idea: IdeaRow; editable?: boolean; dateFormat?: DateFmt }) {
   const pnl = ideaPnl(idea);
   const status = STATUS_LABEL[idea.status] ?? { text: idea.status.toLowerCase(), cls: "" };
   const mfeLeft = idea.trades.reduce((a, t) => {
@@ -22,7 +22,7 @@ export default function IdeaCard({ idea, editable = true }: { idea: IdeaRow; edi
       </div>
       <div className="meta">
         {(idea.date ?? null) && (
-          <span className="status-chip" style={{ fontVariantNumeric: "tabular-nums" }}>{idea.date}</span>
+          <span className="status-chip" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtDate(idea.date, dateFormat)}</span>
         )}
         <span className="status-chip">{idea.instrument} · {idea.direction === "LONG" ? "Long" : "Short"}</span>
         <span className={"badge " + (TRIGGER_LABEL[idea.trigger] ?? "")}>{TRIGGER_LABEL[idea.trigger] ?? idea.trigger.toLowerCase()}</span>

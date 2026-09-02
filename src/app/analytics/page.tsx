@@ -18,7 +18,7 @@ import {
   type RangeKey,
   type Tile,
 } from "@/lib/metrics";
-import { fmtExcursion, fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { fmtDateShort, fmtExcursion, fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
 import { loadTradeBars, simulateSequential, summarize, sweep } from "@/lib/whatif";
@@ -341,7 +341,7 @@ export default async function AnalyticsPage({
                   <tr key={t.id}>
                     <td>
                       <Link href={`/trades/${t.id}?unit=${unit}${simQ}`} className="linklike">
-                        {kyivDateOf(t.entryTime, tz).slice(5)} {fmtTimeKyiv(t.entryTime, false, tz)}
+                        {fmtDateShort(kyivDateOf(t.entryTime, tz), prefs.dateFormat)} {fmtTimeKyiv(t.entryTime, false, tz, prefs.dateFormat)}
                       </Link>
                     </td>
                     <td>{t.instrument}</td>

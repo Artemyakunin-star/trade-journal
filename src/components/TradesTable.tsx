@@ -4,12 +4,14 @@ import Link from "next/link";
 import ComboInput from "@/components/ComboInput";
 import { deleteManualTrade, setTradeAccount, setTradeField, setTradeIdea, setTradeStop } from "@/app/actions";
 import {
+  fmtDate,
   fmtExcursion,
   fmtMoney,
   fmtPerContract,
   fmtPrice,
   fmtTimeKyiv,
   kyivDateOf,
+  type DateFmt,
   GRADE_LABEL,
   gradeClass,
   TRIGGER_LABEL,
@@ -65,6 +67,7 @@ export default function TradesTable({
   keyLevelOptions = [],
   ofConfOptions = [],
   editableAccountIds = null,
+  dateFormat = "eu",
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
@@ -79,6 +82,7 @@ export default function TradesTable({
   ofConfOptions?: string[];
   /** Trades whose account label can be edited inline (no CSV executions behind them). */
   editableAccountIds?: Set<string> | null;
+  dateFormat?: DateFmt;
 }) {
   const show = (key: string) => visibleCols === null || visibleCols.has(key);
   const showIdeaCol = showAttach && show("idea");
@@ -108,7 +112,7 @@ export default function TradesTable({
         <td>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Link href={`/trades/${t.id}?unit=${unit}`} className="linklike" title="Open trade details">
-              {fmtTimeKyiv(t.entryTime, true, tz)}
+              {fmtTimeKyiv(t.entryTime, true, tz, dateFormat)}
             </Link>
             {editableAccountIds?.has(t.id) && (
               <form action={deleteManualTrade} style={{ display: "inline" }}>
@@ -127,7 +131,7 @@ export default function TradesTable({
         {show("date") && (
           <td style={{ color: "var(--ink-2)", fontVariantNumeric: "tabular-nums" }}>
             <Link href={`/day/${kyivDateOf(t.entryTime, tz)}`} className="linklike" title="Open this day">
-              {kyivDateOf(t.entryTime, tz)}
+              {fmtDate(kyivDateOf(t.entryTime, tz), dateFormat)}
             </Link>
           </td>
         )}
