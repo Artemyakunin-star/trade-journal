@@ -27,6 +27,8 @@ export type TradeRow = {
 export type IdeaRow = {
   id: string;
   planId: string | null;
+  date: string | null; // trading day (YYYY-MM-DD), Chart timezone
+  journal?: unknown | null;
   instrument: string;
   direction: "LONG" | "SHORT";
   title: string;

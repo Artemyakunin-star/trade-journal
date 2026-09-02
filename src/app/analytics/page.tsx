@@ -133,10 +133,11 @@ export default async function AnalyticsPage({
     const ticks = usd / spec.tickValue;
     return unit === "ticks" ? ticks : ticks * spec.tickSize;
   };
+  // No t/pt suffixes in table cells — same convention as the trades table.
   const fmtU = (v: number) =>
     unit === "usd"
       ? fmtMoney(Math.round(v))
-      : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(unit === "ticks" ? Math.round(v) : Number(v.toFixed(2))).toLocaleString("en-US")}${unitSuffix}`;
+      : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(unit === "ticks" ? Math.round(v) : Number(v.toFixed(2))).toLocaleString("en-US")}`;
   const diff = sum.simTotal - sum.actualTotal;
   // Tiles stay in DOLLARS always: summing ticks across instruments with
   // different tick values flips signs and reads as nonsense. The per-trade

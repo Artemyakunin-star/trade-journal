@@ -9,12 +9,17 @@ export default function IdeaForm({
   planDate,
   unattachedTrades = [],
   returnTo,
+  plans = [],
+  defaultDate,
 }: {
   idea?: IdeaRow;
   instruments: string[];
   planDate?: string; // when creating from a Day screen
   unattachedTrades?: TradeRow[];
   returnTo?: string;
+  /** Existing day plans, newest first — for the "link to plan" select. */
+  plans?: { id: string; date: string }[];
+  defaultDate?: string;
 }) {
   const editing = !!idea;
   return (
@@ -26,6 +31,22 @@ export default function IdeaForm({
       <div className="tj-field">
         <label className="tj-label">Title — short, like “NQ short after Asia-high sweep”</label>
         <input className="tj-input" style={{ width: "100%" }} name="title" required defaultValue={idea?.title ?? ""} />
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="tj-field">
+          <label className="tj-label">Date — trading day the idea is for</label>
+          <input className="tj-input" name="date" type="date" defaultValue={idea?.date ?? defaultDate ?? ""} />
+        </div>
+        <div className="tj-field">
+          <label className="tj-label">Plan — link to a written day plan</label>
+          <select className="tj-select" name="planId" defaultValue={idea?.planId ?? ""}>
+            <option value="">— no plan</option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>Plan {p.date}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 10 }}>

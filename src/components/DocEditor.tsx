@@ -7,14 +7,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import { saveDoc, saveTradeJournal } from "@/app/actions";
+import { saveDoc, saveIdeaJournal, saveTradeJournal } from "@/app/actions";
 
 type Props = {
   docId: string;
   initialTitle: string;
   initialContent: unknown | null;
-  /** "doc" (Plans document, has a title) or "trade" (per-trade journal). */
-  kind?: "doc" | "trade";
+  /** "doc" (Plans document, has a title), "trade" (per-trade journal) or "idea" (per-idea write-up). */
+  kind?: "doc" | "trade" | "idea";
 };
 
 /** Downscale + recompress a pasted image so the DB stays small. */
@@ -102,6 +102,7 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
     // serialization silently drops them. Deep-clone to plain JSON first.
     const json = JSON.parse(JSON.stringify(editor.getJSON()));
     if (kind === "trade") await saveTradeJournal(docId, json);
+    else if (kind === "idea") await saveIdeaJournal(docId, json);
     else await saveDoc(docId, title, json);
     setStatus("saved");
   }, [editor, docId, title, kind]);
@@ -155,7 +156,7 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
   );
 
   return (
-    <div className={"doc-editor card" + (kind === "trade" ? " full" : "")}>
+    <div className={"doc-editor card" + (kind !== "doc" ? " full" : "")}>
       {kind === "doc" && (
         <input
           className="doc-title"

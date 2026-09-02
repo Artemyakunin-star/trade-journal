@@ -24,17 +24,20 @@ function str(fd: FormData, name: string): string {
 }
 
 export async function createIdea(fd: FormData) {
-  const planDate = str(fd, "planDate"); // optional: link to that day's plan
-  let planId: string | null = null;
-  if (planDate) {
+  // Plan link: explicit select wins; fall back to "the plan of that day".
+  const planDate = str(fd, "planDate");
+  let planId: string | null = str(fd, "planId") || null;
+  if (!planId && planDate) {
     const plan = await db.query.plans.findFirst({ where: eq(plans.date, planDate) });
     planId = plan?.id ?? null;
   }
+  const dateRaw = str(fd, "date");
   const trigger = str(fd, "trigger");
   const [idea] = await db
     .insert(ideas)
     .values({
       planId,
+      date: /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null,
       instrument: str(fd, "instrument"),
       direction: str(fd, "direction") === "SHORT" ? "SHORT" : "LONG",
       title: str(fd, "title"),
@@ -52,7 +55,8 @@ export async function createIdea(fd: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect(str(fd, "returnTo") || "/ideas");
+  // Straight to the idea page — the write-up editor (screenshots) lives there.
+  redirect(`/ideas/${idea.id}/edit`);
 }
 
 export async function updateIdea(fd: FormData) {
@@ -65,10 +69,14 @@ export async function updateIdea(fd: FormData) {
   if (!existing) return;
 
   const becameInvalidated = status === "INVALIDATED" && existing.status !== "INVALIDATED";
+  const dateRaw = str(fd, "date");
+  const planIdRaw = str(fd, "planId");
 
   await db
     .update(ideas)
     .set({
+      date: /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : existing.date,
+      planId: fd.has("planId") ? planIdRaw || null : existing.planId,
       title: str(fd, "title") || existing.title,
       instrument: str(fd, "instrument") || existing.instrument,
       direction: str(fd, "direction") === "SHORT" ? "SHORT" : "LONG",
@@ -138,6 +146,13 @@ export async function setTradeStop(fd: FormData) {
     .set({ stopPrice: price === null ? null : price.toFixed(4), updatedAt: new Date() })
     .where(eq(trades.id, tradeId));
   revalidatePath("/", "layout");
+}
+
+/** Autosave for the rich per-idea write-up (screenshots + description). */
+export async function saveIdeaJournal(id: string, content: unknown) {
+  if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  await db.update(ideas).set({ journal: content, updatedAt: new Date() }).where(eq(ideas.id, id));
+  revalidatePath(`/ideas/${id}/edit`);
 }
 
 /** Autosave for the rich per-trade journal (Notion-like editor on trade page). */

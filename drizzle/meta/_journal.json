@@ -64,6 +64,13 @@
       "when": 1787738429684,
       "tag": "0008_watery_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788376031505,
+      "tag": "0009_steep_gideon",
+      "breakpoints": true
     }
   ]
 }

@@ -20,6 +20,9 @@ export default function IdeaCard({ idea, editable = true }: { idea: IdeaRow; edi
         {idea.grade && <span className={"grade " + gradeClass(idea.grade)}>{GRADE_LABEL[idea.grade]}</span>}
       </div>
       <div className="meta">
+        {(idea.date ?? null) && (
+          <span className="status-chip" style={{ fontVariantNumeric: "tabular-nums" }}>{idea.date}</span>
+        )}
         <span className="status-chip">{idea.instrument} · {idea.direction === "LONG" ? "Long" : "Short"}</span>
         <span className={"badge " + (TRIGGER_LABEL[idea.trigger] ?? "")}>{TRIGGER_LABEL[idea.trigger] ?? idea.trigger.toLowerCase()}</span>
         <span className={"status-chip " + status.cls}>{status.text}</span>

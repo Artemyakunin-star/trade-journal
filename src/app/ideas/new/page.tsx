@@ -13,7 +13,11 @@ export default async function NewIdeaPage({
 }) {
   const sp = await searchParams;
   const instruments = await db.query.instruments.findMany();
-  const [allTrades, prefs] = await Promise.all([getAllTrades(), getSettings()]);
+  const [allTrades, prefs, planRows] = await Promise.all([
+    getAllTrades(),
+    getSettings(),
+    db.query.plans.findMany({ orderBy: (p, { desc }) => [desc(p.date)], limit: 60 }),
+  ]);
   const date = sp.date;
   const rogue = allTrades.filter((t) => !t.ideaId && (!date || kyivDateOf(t.entryTime, prefs.timezone) === date));
 
@@ -27,7 +31,12 @@ export default async function NewIdeaPage({
         planDate={date}
         unattachedTrades={rogue}
         returnTo={sp.returnTo ?? (date ? `/day/${date}` : "/ideas")}
+        plans={planRows.map((p) => ({ id: p.id, date: p.date }))}
+        defaultDate={date ?? kyivDateOf(new Date(), prefs.timezone)}
       />
+      <div className="section-note" style={{ maxWidth: 640 }}>
+        Screenshots and a full write-up can be added right after creating — the idea page has a Notion-like editor.
+      </div>
     </>
   );
 }

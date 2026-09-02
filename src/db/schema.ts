@@ -162,6 +162,8 @@ export const ideas = pgTable(
   {
     id: text("id").primaryKey().$defaultFn(createId),
     planId: text("plan_id").references(() => plans.id, { onDelete: "set null" }),
+    /** Trading day the idea is for (YYYY-MM-DD, Chart timezone). */
+    date: text("date"),
     instrument: text("instrument")
       .notNull()
       .references(() => instruments.symbol),
@@ -173,6 +175,8 @@ export const ideas = pgTable(
     trigger: ideaTriggerEnum("trigger").notNull(),
     comment: text("comment"), // psychological state, free text
     status: ideaStatusEnum("status").notNull().default("ACTIVE"),
+    /** Notion-like write-up with pasted screenshots (TipTap JSON), like plans/trades. */
+    journal: jsonb("journal"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     /** Set when status becomes INVALIDATED — used for the tilt metric

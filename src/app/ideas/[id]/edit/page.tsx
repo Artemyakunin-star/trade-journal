@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import IdeaForm from "@/components/IdeaForm";
 import TradesTable from "@/components/TradesTable";
+import DocEditor from "@/components/DocEditor";
 import { db } from "@/db";
 import { deleteIdea } from "@/app/actions";
 import { getAllIdeas } from "@/lib/metrics";
@@ -13,7 +14,10 @@ export default async function EditIdeaPage({ params }: { params: Promise<{ id: s
   const allIdeas = await getAllIdeas();
   const idea = allIdeas.find((i) => i.id === id);
   if (!idea) notFound();
-  const instruments = await db.query.instruments.findMany();
+  const [instruments, planRows] = await Promise.all([
+    db.query.instruments.findMany(),
+    db.query.plans.findMany({ orderBy: (p, { desc }) => [desc(p.date)], limit: 60 }),
+  ]);
   const specs = Object.fromEntries(
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
   );
@@ -28,8 +32,24 @@ export default async function EditIdeaPage({ params }: { params: Promise<{ id: s
         </form>
       </div>
       <div className="grid2" style={{ gridTemplateColumns: "minmax(0,640px) 1fr", alignItems: "start" }}>
-        <IdeaForm idea={idea as IdeaRow} instruments={instruments.map((i) => i.symbol)} returnTo="/ideas" />
-        <div className="card">
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+          <IdeaForm
+            idea={idea as IdeaRow}
+            instruments={instruments.map((i) => i.symbol)}
+            returnTo="/ideas"
+            plans={planRows.map((p) => ({ id: p.id, date: p.date }))}
+          />
+          <div>
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", margin: "0 0 10px 2px" }}>
+              Idea write-up{" "}
+              <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 11.5 }}>
+                — setup description and chart screenshots (paste with Ctrl+V), like a day plan
+              </span>
+            </h3>
+            <DocEditor kind="idea" docId={idea.id} initialTitle="" initialContent={idea.journal ?? null} />
+          </div>
+        </div>
+        <div className="card" style={{ minWidth: 0 }}>
           <h3>Entries of this idea <span className="sub">{idea.trades.length} trades</span></h3>
           <div style={{ overflowX: "auto" }}>
             <TradesTable

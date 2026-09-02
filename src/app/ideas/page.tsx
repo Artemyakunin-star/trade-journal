@@ -2,19 +2,33 @@
 import Link from "next/link";
 import IdeaCard from "@/components/IdeaCard";
 import { getAllIdeas, ideaPnl } from "@/lib/metrics";
-import { fmtMoney, GRADE_LABEL, gradeClass, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
+import { fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function IdeasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; trigger?: string; grade?: string; view?: string }>;
+  searchParams: Promise<{ status?: string; trigger?: string; grade?: string; view?: string; date?: string; from?: string; to?: string; instrument?: string }>;
 }) {
   const sp = await searchParams;
   const view = sp.view === "list" ? "list" : "cards";
+  const prefs = await getSettings();
+  const tz = prefs.timezone;
   let ideas = await getAllIdeas();
+  const instruments = [...new Set(ideas.map((i) => i.instrument))].sort();
 
+  // The idea's trading day: the explicit date field, or the day it was written.
+  const dayOf = (i: (typeof ideas)[number]) => i.date ?? kyivDateOf(i.createdAt, tz);
+  const isDate = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const todayIso = kyivDateOf(new Date(), tz);
+  const yesterdayIso = new Date(new Date(todayIso + "T12:00:00Z").getTime() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+
+  if (isDate(sp.date)) ideas = ideas.filter((i) => dayOf(i) === sp.date);
+  if (isDate(sp.from)) ideas = ideas.filter((i) => dayOf(i) >= sp.from!);
+  if (isDate(sp.to)) ideas = ideas.filter((i) => dayOf(i) <= sp.to!);
+  if (sp.instrument) ideas = ideas.filter((i) => i.instrument === sp.instrument);
   if (sp.status) ideas = ideas.filter((i) => i.status === sp.status);
   if (sp.trigger) ideas = ideas.filter((i) => i.trigger === sp.trigger);
   if (sp.grade === "A") ideas = ideas.filter((i) => i.grade?.startsWith("A"));
@@ -37,6 +51,22 @@ export default async function IdeasPage({
 
       <form className="filters" method="get">
         {sp.view && <input type="hidden" name="view" value={sp.view} />}
+        <span className="seg">
+          <Link href={`/ideas?date=${todayIso}${sp.view ? `&view=${sp.view}` : ""}`} className={sp.date === todayIso ? "on" : ""}>Today</Link>
+          <Link href={`/ideas?date=${yesterdayIso}${sp.view ? `&view=${sp.view}` : ""}`} className={sp.date === yesterdayIso ? "on" : ""}>Yesterday</Link>
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
+          From
+          <input className="tj-input" name="from" type="date" defaultValue={isDate(sp.from) ? sp.from : ""} style={{ width: 140 }} />
+          to
+          <input className="tj-input" name="to" type="date" defaultValue={isDate(sp.to) ? sp.to : ""} style={{ width: 140 }} />
+        </span>
+        <select name="instrument" defaultValue={sp.instrument ?? ""} className="tj-select">
+          <option value="">All instruments</option>
+          {instruments.map((i) => (
+            <option key={i} value={i}>{i}</option>
+          ))}
+        </select>
         <select name="status" defaultValue={sp.status ?? ""} className="tj-select">
           <option value="">All statuses</option>
           <option value="PLAYED_OUT">Played out</option>
@@ -60,7 +90,9 @@ export default async function IdeasPage({
           <option value="DF">D–F</option>
         </select>
         <button className="btn ghost" type="submit">Filter</button>
-        {(sp.status || sp.trigger || sp.grade) && <Link href="/ideas" className="btn ghost">Reset</Link>}
+        {(sp.status || sp.trigger || sp.grade || sp.date || sp.from || sp.to || sp.instrument) && (
+          <Link href="/ideas" className="btn ghost">Reset</Link>
+        )}
       </form>
 
       {ideas.length === 0 ? (
@@ -70,6 +102,7 @@ export default async function IdeasPage({
           <table className="tj">
             <thead>
               <tr>
+                <th>Date</th>
                 <th>Idea</th>
                 <th>Instr</th>
                 <th>Dir</th>
@@ -86,6 +119,9 @@ export default async function IdeasPage({
                 const st = STATUS_LABEL[i.status] ?? { text: i.status.toLowerCase(), cls: "" };
                 return (
                   <tr key={i.id}>
+                    <td style={{ fontVariantNumeric: "tabular-nums", color: "var(--ink-2)" }}>
+                      <Link href={`/day/${dayOf(i)}`} className="linklike" title="Open this day">{dayOf(i)}</Link>
+                    </td>
                     <td style={{ whiteSpace: "normal", maxWidth: 340 }}>
                       <Link href={`/ideas/${i.id}/edit`} className="linklike" style={{ fontWeight: 600 }}>
                         {i.title}
