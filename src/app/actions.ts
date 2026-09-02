@@ -37,6 +37,7 @@ export async function createIdea(fd: FormData) {
     .insert(ideas)
     .values({
       planId,
+      docId: str(fd, "docId") || null,
       date: /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null,
       instrument: str(fd, "instrument"),
       direction: str(fd, "direction") === "SHORT" ? "SHORT" : "LONG",
@@ -77,6 +78,7 @@ export async function updateIdea(fd: FormData) {
     .set({
       date: /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : existing.date,
       planId: fd.has("planId") ? planIdRaw || null : existing.planId,
+      docId: fd.has("docId") ? str(fd, "docId") || null : existing.docId,
       title: str(fd, "title") || existing.title,
       instrument: str(fd, "instrument") || existing.instrument,
       direction: str(fd, "direction") === "SHORT" ? "SHORT" : "LONG",

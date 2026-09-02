@@ -71,6 +71,13 @@
       "when": 1788376031505,
       "tag": "0009_steep_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788377117979,
+      "tag": "0010_cynical_meggan",
+      "breakpoints": true
     }
   ]
 }

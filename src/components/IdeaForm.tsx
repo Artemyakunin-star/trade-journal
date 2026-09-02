@@ -1,24 +1,30 @@
-// Shared form for creating / editing an idea (server-action driven, no client JS).
+// Shared form for creating / editing an idea (server-action driven).
+import Link from "next/link";
 import { createIdea, updateIdea } from "@/app/actions";
-import type { IdeaRow, TradeRow } from "@/lib/metrics";
-import { fmtMoney, fmtPrice, fmtTimeKyiv } from "@/lib/format";
+import AttachTradesPicker, { type PickTrade } from "@/components/AttachTradesPicker";
+import type { IdeaRow } from "@/lib/metrics";
 
 export default function IdeaForm({
   idea,
   instruments,
   planDate,
-  unattachedTrades = [],
+  pickTrades = [],
+  todayIso = "",
+  yesterdayIso = "",
   returnTo,
-  plans = [],
+  planDocs = [],
   defaultDate,
 }: {
   idea?: IdeaRow;
   instruments: string[];
   planDate?: string; // when creating from a Day screen
-  unattachedTrades?: TradeRow[];
+  /** Rogue trades offered for attaching, preformatted in the Chart timezone. */
+  pickTrades?: PickTrade[];
+  todayIso?: string;
+  yesterdayIso?: string;
   returnTo?: string;
-  /** Existing day plans, newest first — for the "link to plan" select. */
-  plans?: { id: string; date: string }[];
+  /** Written plans (Plans menu documents), newest first — for the plan link. */
+  planDocs?: { id: string; date: string | null; title: string }[];
   defaultDate?: string;
 }) {
   const editing = !!idea;
@@ -39,11 +45,20 @@ export default function IdeaForm({
           <input className="tj-input" name="date" type="date" defaultValue={idea?.date ?? defaultDate ?? ""} />
         </div>
         <div className="tj-field">
-          <label className="tj-label">Plan — link to a written day plan</label>
-          <select className="tj-select" name="planId" defaultValue={idea?.planId ?? ""}>
+          <label className="tj-label">
+            Plan — the plan you wrote in Plans{" "}
+            {idea?.docId && (
+              <Link href={`/plans/${idea.docId}`} className="linklike" style={{ fontWeight: 400 }}>
+                open ↗
+              </Link>
+            )}
+          </label>
+          <select className="tj-select" name="docId" defaultValue={idea?.docId ?? ""}>
             <option value="">— no plan</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>Plan {p.date}</option>
+            {planDocs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.date ? `${p.date} — ${p.title}` : p.title}
+              </option>
             ))}
           </select>
         </div>
@@ -117,19 +132,8 @@ export default function IdeaForm({
         <textarea className="tj-textarea" name="comment" defaultValue={idea?.comment ?? ""} />
       </div>
 
-      {!editing && unattachedTrades.length > 0 && (
-        <div className="tj-field">
-          <label className="tj-label">Attach rogue trades to this idea (optional)</label>
-          {unattachedTrades.map((t) => (
-            <label key={t.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, color: "var(--ink-2)", padding: "3px 0" }}>
-              <input type="checkbox" name="tradeIds" value={t.id} />
-              {fmtTimeKyiv(t.entryTime)} · {t.instrument} {t.direction === "LONG" ? "Long" : "Short"} @ {fmtPrice(t.avgEntryPrice)} ·{" "}
-              <span className={Number(t.pnl) >= 0 ? "pos" : "neg"} style={{ color: Number(t.pnl) >= 0 ? "var(--pos)" : "var(--neg)" }}>
-                {fmtMoney(t.pnl)}
-              </span>
-            </label>
-          ))}
-        </div>
+      {!editing && pickTrades.length > 0 && (
+        <AttachTradesPicker trades={pickTrades} todayIso={todayIso} yesterdayIso={yesterdayIso} initialDate={planDate} />
       )}
 
       <div style={{ display: "flex", gap: 10, marginTop: 6 }}>

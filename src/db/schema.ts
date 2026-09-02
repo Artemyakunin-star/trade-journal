@@ -162,6 +162,8 @@ export const ideas = pgTable(
   {
     id: text("id").primaryKey().$defaultFn(createId),
     planId: text("plan_id").references(() => plans.id, { onDelete: "set null" }),
+    /** Link to a written plan document (the Plans menu, Notion-like). */
+    docId: text("doc_id").references(() => docs.id, { onDelete: "set null" }),
     /** Trading day the idea is for (YYYY-MM-DD, Chart timezone). */
     date: text("date"),
     instrument: text("instrument")

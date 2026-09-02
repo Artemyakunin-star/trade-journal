@@ -6,6 +6,8 @@ import { db } from "@/db";
 import { deleteIdea } from "@/app/actions";
 import { getAllIdeas } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
+import { desc, isNotNull } from "drizzle-orm";
+import { docs } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +16,14 @@ export default async function EditIdeaPage({ params }: { params: Promise<{ id: s
   const allIdeas = await getAllIdeas();
   const idea = allIdeas.find((i) => i.id === id);
   if (!idea) notFound();
-  const [instruments, planRows] = await Promise.all([
+  const [instruments, planDocs] = await Promise.all([
     db.query.instruments.findMany(),
-    db.query.plans.findMany({ orderBy: (p, { desc }) => [desc(p.date)], limit: 60 }),
+    db
+      .select({ id: docs.id, date: docs.date, title: docs.title })
+      .from(docs)
+      .where(isNotNull(docs.date))
+      .orderBy(desc(docs.date))
+      .limit(60),
   ]);
   const specs = Object.fromEntries(
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
@@ -32,23 +39,7 @@ export default async function EditIdeaPage({ params }: { params: Promise<{ id: s
         </form>
       </div>
       <div className="grid2" style={{ gridTemplateColumns: "minmax(0,640px) 1fr", alignItems: "start" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          <IdeaForm
-            idea={idea as IdeaRow}
-            instruments={instruments.map((i) => i.symbol)}
-            returnTo="/ideas"
-            plans={planRows.map((p) => ({ id: p.id, date: p.date }))}
-          />
-          <div>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", margin: "0 0 10px 2px" }}>
-              Idea write-up{" "}
-              <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 11.5 }}>
-                — setup description and chart screenshots (paste with Ctrl+V), like a day plan
-              </span>
-            </h3>
-            <DocEditor kind="idea" docId={idea.id} initialTitle="" initialContent={idea.journal ?? null} />
-          </div>
-        </div>
+        <IdeaForm idea={idea as IdeaRow} instruments={instruments.map((i) => i.symbol)} returnTo="/ideas" planDocs={planDocs} />
         <div className="card" style={{ minWidth: 0 }}>
           <h3>Entries of this idea <span className="sub">{idea.trades.length} trades</span></h3>
           <div style={{ overflowX: "auto" }}>
@@ -61,6 +52,17 @@ export default async function EditIdeaPage({ params }: { params: Promise<{ id: s
           </div>
           <div className="section-note">Deleting the idea detaches its trades (they become rogue) — it does not delete the trades.</div>
         </div>
+      </div>
+
+      {/* Full-width write-up, styled like a day plan: description + screenshots. */}
+      <div style={{ marginTop: 14 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", margin: "0 0 10px 2px" }}>
+          Idea write-up{" "}
+          <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 11.5 }}>
+            — setup description and chart screenshots (paste with Ctrl+V), autosaved like a plan
+          </span>
+        </h3>
+        <DocEditor kind="idea" docId={idea.id} initialTitle="" initialContent={idea.journal ?? null} />
       </div>
     </>
   );
