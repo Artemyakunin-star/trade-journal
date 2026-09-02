@@ -140,12 +140,19 @@ export default async function AnalyticsPage({
   const actualU = results.reduce((a, r, i) => a + convTrade(r.actualPnl, trades[i]), 0);
   const simU = results.reduce((a, r, i) => a + convTrade(r.simPnl, trades[i]), 0);
   const diffU = simU - actualU;
+  const mixedInstruments = new Set(trades.map((t) => t.instrument)).size > 1;
+  const mixedNote =
+    unit !== "usd" && mixedInstruments
+      ? ` · mixed instruments: ${unitSuffix} summed per trade, so the sign can differ from $`
+      : "";
 
   const diff = sum.simTotal - sum.actualTotal;
   const tiles: Tile[] = [
-    { lbl: "Actual net P&L", val: fmtU(actualU), cls: sum.actualTotal > 0 ? "pos" : sum.actualTotal < 0 ? "neg" : "", delta: `${sum.total} closed trades` },
-    { lbl: "What-if P&L", val: fmtU(simU), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
-    { lbl: "Difference", val: fmtU(diffU), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
+    // Colors follow the DISPLAYED value: with mixed instruments the tick sum
+    // can differ in sign from the dollar sum (an ES tick is worth 2.5 NQ ticks).
+    { lbl: "Actual net P&L", val: fmtU(actualU), cls: actualU > 0 ? "pos" : actualU < 0 ? "neg" : "", delta: `${sum.total} closed trades${mixedNote}` },
+    { lbl: "What-if P&L", val: fmtU(simU), cls: simU > 0 ? "pos" : simU < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
+    { lbl: "Difference", val: fmtU(diffU), cls: diffU > 0 ? "pos" : diffU < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
     { lbl: "Win rate: actual → sim", val: `${Math.round(sum.actualWinRate * 100)}% → ${Math.round(sum.simWinRate * 100)}%` },
     { lbl: "Trades re-routed", val: `${sum.changed} of ${sum.covered}`, delta: (() => {
       const skipped = results.filter((r) => r.exitReason === "skipped").length;
