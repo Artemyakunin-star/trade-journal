@@ -319,7 +319,9 @@ function IdeaGroup({
     <>
       <tr className="group-head">
         <td colSpan={colSpan}>
-          {idea.title}{" "}
+          <Link href={`/ideas/${idea.id}/edit`} className="linklike" title="Open this idea" style={{ fontWeight: 600 }}>
+            {idea.title}
+          </Link>{" "}
           <span className={"badge " + (TRIGGER_LABEL[idea.trigger] ?? "")} style={{ marginLeft: 8 }}>
             {TRIGGER_LABEL[idea.trigger] ?? idea.trigger.toLowerCase()}
           </span>{" "}
