@@ -137,22 +137,14 @@ export default async function AnalyticsPage({
     unit === "usd"
       ? fmtMoney(Math.round(v))
       : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(unit === "ticks" ? Math.round(v) : Number(v.toFixed(2))).toLocaleString("en-US")}${unitSuffix}`;
-  const actualU = results.reduce((a, r, i) => a + convTrade(r.actualPnl, trades[i]), 0);
-  const simU = results.reduce((a, r, i) => a + convTrade(r.simPnl, trades[i]), 0);
-  const diffU = simU - actualU;
-  const mixedInstruments = new Set(trades.map((t) => t.instrument)).size > 1;
-  const mixedNote =
-    unit !== "usd" && mixedInstruments
-      ? ` · mixed instruments: ${unitSuffix} summed per trade, so the sign can differ from $`
-      : "";
-
   const diff = sum.simTotal - sum.actualTotal;
+  // Tiles stay in DOLLARS always: summing ticks across instruments with
+  // different tick values flips signs and reads as nonsense. The per-trade
+  // table below follows the $/t/pt switch instead.
   const tiles: Tile[] = [
-    // Colors follow the DISPLAYED value: with mixed instruments the tick sum
-    // can differ in sign from the dollar sum (an ES tick is worth 2.5 NQ ticks).
-    { lbl: "Actual net P&L", val: fmtU(actualU), cls: actualU > 0 ? "pos" : actualU < 0 ? "neg" : "", delta: `${sum.total} closed trades${mixedNote}` },
-    { lbl: "What-if P&L", val: fmtU(simU), cls: simU > 0 ? "pos" : simU < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
-    { lbl: "Difference", val: fmtU(diffU), cls: diffU > 0 ? "pos" : diffU < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
+    { lbl: "Actual net P&L", val: fmtMoney(Math.round(sum.actualTotal)), cls: sum.actualTotal > 0 ? "pos" : sum.actualTotal < 0 ? "neg" : "", delta: `${sum.total} closed trades` },
+    { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
+    { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
     { lbl: "Win rate: actual → sim", val: `${Math.round(sum.actualWinRate * 100)}% → ${Math.round(sum.simWinRate * 100)}%` },
     { lbl: "Trades re-routed", val: `${sum.changed} of ${sum.covered}`, delta: (() => {
       const skipped = results.filter((r) => r.exitReason === "skipped").length;
@@ -176,14 +168,14 @@ export default async function AnalyticsPage({
     beTriggerTicks: toTicks(beVal, spec),
     slippageTicks,
     ignoreActualExit: true,
-  }), convTrade).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
+  })).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
   const targetSweep = sweep(trades, tradeBars, specs, SWEEP_VALUES[unit].target, (v, spec) => ({
     stopTicks: toTicks(stopVal, spec),
     targetTicks: toTicks(v, spec),
     beTriggerTicks: toTicks(beVal, spec),
     slippageTicks,
     ignoreActualExit: true,
-  }), convTrade).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
+  })).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
 
   // MAE scatter: x = MAE ticks, y = per-contract result in ticks.
   const scatterPts = trades
@@ -207,8 +199,8 @@ export default async function AnalyticsPage({
   const planned = trades.filter((t) => !!t.ideaId);
   const disciplineTiles: Tile[] = [
     { lbl: "Median re-entry after invalidation", val: medGap === null ? "—" : `${Math.round(medGap)} min`, cls: medGap !== null && medGap < 15 ? "neg" : "", delta: "rule: 15-min pause" },
-    { lbl: "Planned trades P&L", val: fmtU(planned.reduce((a, t) => a + convTrade(tradePnl(t), t), 0)), delta: `${planned.length} trades with an idea` },
-    { lbl: "Rogue trades P&L", val: fmtU(rogue.reduce((a, t) => a + convTrade(tradePnl(t), t), 0)), cls: rogue.length ? "neg" : "", delta: `${rogue.length} rogue` },
+    { lbl: "Planned trades P&L", val: fmtMoney(Math.round(planned.reduce((a, t) => a + tradePnl(t), 0))), delta: `${planned.length} trades with an idea` },
+    { lbl: "Rogue trades P&L", val: fmtMoney(Math.round(rogue.reduce((a, t) => a + tradePnl(t), 0))), cls: rogue.length ? "neg" : "", delta: `${rogue.length} rogue` },
     { lbl: "Trading days", val: String(dayAggregates(trades, tz).length) },
   ];
 
@@ -236,13 +228,6 @@ export default async function AnalyticsPage({
       <div className="topbar">
         <h1>Analytics</h1>
         <AccountFilter accounts={distinctAccounts(rawTrades)} selected={selectedAccounts} />
-        <span className="seg">
-          {PNL_UNITS.map((u) => (
-            <Link key={u.key} href={qs({ unit: u.key })} className={unit === u.key ? "on" : ""}>
-              {u.label}
-            </Link>
-          ))}
-        </span>
         <div className="range">
           {RANGES.map((r) => (
             <Link
@@ -263,8 +248,29 @@ export default async function AnalyticsPage({
             replay every trade on real 5-sec bars with virtual exits, running PAST your actual exits · ties inside a bar count as stop
           </span>
         </h3>
-        <form className="filters" method="get" style={{ marginBottom: 4 }}>
+        <Tiles tiles={tiles} />
+        <div className="section-note">
+          Empty stop/target = keep that side as you actually traded it. Trades without imported bars are counted with
+          their real result.
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3>
+          Per-trade simulation{" "}
+          <span className="sub">
+            what the current rule set does to each trade · click the time to open the trade
+          </span>
+        </h3>
+        <form className="filters" method="get" style={{ marginBottom: 10 }}>
           <input type="hidden" name="range" value={range} />
+          <span className="seg" title="Units for the table and the rule inputs">
+            {PNL_UNITS.map((u) => (
+              <Link key={u.key} href={qs({ unit: u.key })} className={unit === u.key ? "on" : ""}>
+                {u.label}
+              </Link>
+            ))}
+          </span>
           <input type="hidden" name="unit" value={unit} />
           <select name="instrument" defaultValue={sp.instrument ?? ""} className="tj-select">
             <option value="">All instruments</option>
@@ -296,20 +302,6 @@ export default async function AnalyticsPage({
             <Link href={`/analytics?range=${range}&unit=${unit}`} className="btn ghost">Reset</Link>
           )}
         </form>
-        <Tiles tiles={tiles} />
-        <div className="section-note">
-          Empty stop/target = keep that side as you actually traded it. Trades without imported bars are counted with
-          their real result.
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <h3>
-          Per-trade simulation{" "}
-          <span className="sub">
-            what the current rule set does to each trade · click the time to open the trade
-          </span>
-        </h3>
         <div style={{ overflowX: "auto" }}>
           <table className="tj">
             <thead>
@@ -394,14 +386,14 @@ export default async function AnalyticsPage({
           <h3>
             Stop optimization <span className="sub">total P&L if the stop were N {unitSuffix} (target/BE as selected)</span>
           </h3>
-          <BarsChart bars={stopSweep} unitLabel={unit === "usd" ? "$" : unitSuffix} />
+          <BarsChart bars={stopSweep} />
           <div className="section-note">Where the bars stop growing, extra stop room no longer pays for itself.</div>
         </div>
         <div className="card">
           <h3>
             Target optimization <span className="sub">total P&L if the target were N {unitSuffix} (stop/BE as selected)</span>
           </h3>
-          <BarsChart bars={targetSweep} unitLabel={unit === "usd" ? "$" : unitSuffix} />
+          <BarsChart bars={targetSweep} />
           <div className="section-note">Compare with your actual exits — are you cutting winners too early?</div>
         </div>
       </div>
