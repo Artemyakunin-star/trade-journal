@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, STATUS_LABEL, TRIGGER_LABEL, type DateFmt } from "@/lib/format";
 import type { IdeaRow } from "@/lib/metrics";
-import { ideaPnl } from "@/lib/metrics";
+import { ideaPnl, rrStats } from "@/lib/metrics";
 
 export default function IdeaCard({ idea, editable = true, dateFormat = "eu" }: { idea: IdeaRow; editable?: boolean; dateFormat?: DateFmt }) {
   const pnl = ideaPnl(idea);
+  const rr = rrStats(idea.trades);
   const status = STATUS_LABEL[idea.status] ?? { text: idea.status.toLowerCase(), cls: "" };
   const mfeLeft = idea.trades.reduce((a, t) => {
     if (t.mfeTicks === null || t.pnl === null) return a;
@@ -42,6 +43,16 @@ export default function IdeaCard({ idea, editable = true, dateFormat = "eu" }: {
         <div>
           <div className="k">Entries</div>
           <div className="v">{idea.trades.length}</div>
+        </div>
+        <div>
+          <div className="k">Avg RR</div>
+          <div className={"v " + (rr.avgRR !== null && rr.avgRR > 0 ? "pos" : rr.avgRR !== null && rr.avgRR < 0 ? "neg" : "")}>
+            {rr.avgRR === null ? "—" : `${rr.avgRR > 0 ? "+" : ""}${rr.avgRR.toFixed(2)}R`}
+          </div>
+        </div>
+        <div>
+          <div className="k">WR</div>
+          <div className="v">{rr.winRate === null ? "—" : `${Math.round(rr.winRate * 100)}%`}</div>
         </div>
         <div>
           <div className="k">Left on table</div>

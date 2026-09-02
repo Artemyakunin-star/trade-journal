@@ -1,7 +1,7 @@
 // Ideas screen: cards grid or list with filters + "new idea".
 import Link from "next/link";
 import IdeaCard from "@/components/IdeaCard";
-import { getAllIdeas, ideaPnl } from "@/lib/metrics";
+import { getAllIdeas, ideaPnl, rrStats } from "@/lib/metrics";
 import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 
@@ -110,6 +110,8 @@ export default async function IdeasPage({
                 <th>Status</th>
                 <th>Grade</th>
                 <th className="num">P&L</th>
+                <th className="num" data-tip="Mean R-multiple: risk = the trade’s own SL when set, else the average stop of this idea’s trades; break-even trades excluded">Avg RR</th>
+                <th className="num" data-tip="Wins / closed trades — break-even counts as a loss">WR</th>
                 <th className="num">Entries</th>
               </tr>
             </thead>
@@ -117,6 +119,7 @@ export default async function IdeasPage({
               {ideas.map((i) => {
                 const pnl = ideaPnl(i);
                 const st = STATUS_LABEL[i.status] ?? { text: i.status.toLowerCase(), cls: "" };
+                const irr = rrStats(i.trades);
                 return (
                   <tr key={i.id}>
                     <td style={{ fontVariantNumeric: "tabular-nums", color: "var(--ink-2)" }}>
@@ -138,6 +141,10 @@ export default async function IdeasPage({
                     <td><span className={"status-chip " + st.cls}>{st.text}</span></td>
                     <td>{i.grade ? <span className={"grade " + gradeClass(i.grade)}>{GRADE_LABEL[i.grade]}</span> : "—"}</td>
                     <td className={"num " + (pnl > 0 ? "pos" : pnl < 0 ? "neg" : "")}>{fmtMoney(pnl)}</td>
+                    <td className={"num " + (irr.avgRR !== null && irr.avgRR > 0 ? "pos" : irr.avgRR !== null && irr.avgRR < 0 ? "neg" : "")}>
+                      {irr.avgRR === null ? "—" : `${irr.avgRR > 0 ? "+" : ""}${irr.avgRR.toFixed(2)}R`}
+                    </td>
+                    <td className="num">{irr.winRate === null ? "—" : `${Math.round(irr.winRate * 100)}%`}</td>
                     <td className="num">{i.trades.length}</td>
                   </tr>
                 );

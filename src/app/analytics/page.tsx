@@ -14,6 +14,7 @@ import {
   getAllIdeas,
   getAllTrades,
   reentryAfterInvalidation,
+  rrStats,
   tradePnl,
   type RangeKey,
   type Tile,
@@ -48,7 +49,7 @@ export default async function AnalyticsPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    range?: string; from?: string; to?: string; instrument?: string;
+    range?: string; from?: string; to?: string; tfrom?: string; tto?: string; instrument?: string;
     stop?: string; target?: string; be?: string; nobe?: string; slip?: string; unit?: string;
   }>;
 }) {
@@ -104,6 +105,11 @@ export default async function AnalyticsPage({
     trades = filterTradesByRange(trades, range as RangeKey, todayKyiv, tz);
   }
   if (sp.instrument) trades = trades.filter((t) => t.instrument === sp.instrument);
+  // Time-of-day interval (entry time in the Chart timezone), e.g. 15:30-17:00.
+  const isTime = (s?: string) => !!s && /^\d{2}:\d{2}$/.test(s);
+  const todOf = (d: Date) => fmtTimeKyiv(d, false, tz, "eu"); // 24h HH:MM for comparison
+  if (isTime(sp.tfrom)) trades = trades.filter((t) => todOf(t.entryTime) >= sp.tfrom!);
+  if (isTime(sp.tto)) trades = trades.filter((t) => todOf(t.entryTime) <= sp.tto!);
 
   const tradeBars = await loadTradeBars(trades, 8); // extend past exits: sims are not cut by early real-life outs
   const anyRule = stopVal !== null || targetVal !== null || beVal !== null;
@@ -123,6 +129,7 @@ export default async function AnalyticsPage({
     anyRule,
   );
   const sum = summarize(results);
+  const rr = rrStats(trades);
 
   // Everything money-like follows the $/Ticks/Points switch: dollars are
   // translated per trade through ITS instrument's tick value, then summed.
@@ -155,6 +162,8 @@ export default async function AnalyticsPage({
       if (noBars) parts.push(`${noBars} without bar data`);
       return parts.length ? parts.join(" · ") : "all trades have bar coverage";
     })() },
+    { lbl: "Avg RR", val: rr.avgRR === null ? "—" : `${rr.avgRR > 0 ? "+" : ""}${rr.avgRR.toFixed(2)}R`, cls: rr.avgRR !== null && rr.avgRR > 0 ? "pos" : rr.avgRR !== null && rr.avgRR < 0 ? "neg" : "", delta: `risk = own SL when set (${rr.withOwnSl} of ${rr.rrCounted}), else the period's avg stop per instrument · BE trades excluded${rr.noRiskRef ? ` · ${rr.noRiskRef} skipped (no SL reference)` : ""}` },
+    { lbl: "Win rate", val: rr.winRate === null ? "—" : `${Math.round(rr.winRate * 100)}%`, delta: `${rr.wins}W / ${rr.losses}L / ${rr.be} BE — break-even counts as a loss` },
   ];
 
   // Optimization sweeps in the ACTIVE unit (converted per instrument).
@@ -216,7 +225,7 @@ export default async function AnalyticsPage({
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
-      range, from: sp.from, to: sp.to, instrument: sp.instrument,
+      range, from: sp.from, to: sp.to, tfrom: sp.tfrom, tto: sp.tto, instrument: sp.instrument,
       stop: sp.stop, target: sp.target, be: sp.be, nobe: sp.nobe, slip: sp.slip, unit: sp.unit,
       ...patch,
     };
@@ -298,8 +307,14 @@ export default async function AnalyticsPage({
             to
             <input className="tj-input" name="to" type="date" defaultValue={customTo ?? ""} style={{ width: 140 }} />
           </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }} title="Only trades entered between these times of day (Chart timezone)">
+            Time
+            <input className="tj-input" name="tfrom" type="time" defaultValue={isTime(sp.tfrom) ? sp.tfrom : ""} style={{ width: 110 }} />
+            –
+            <input className="tj-input" name="tto" type="time" defaultValue={isTime(sp.tto) ? sp.tto : ""} style={{ width: 110 }} />
+          </span>
           <button className="btn" type="submit">Simulate</button>
-          {(anyRule || noBe || customFrom || customTo) && (
+          {(anyRule || noBe || customFrom || customTo || sp.tfrom || sp.tto) && (
             <Link href={`/analytics?range=${range}&unit=${unit}`} className="btn ghost">Reset</Link>
           )}
         </form>

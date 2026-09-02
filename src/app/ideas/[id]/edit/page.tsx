@@ -8,7 +8,7 @@ import DocEditor from "@/components/DocEditor";
 import Tiles from "@/components/Tiles";
 import { db } from "@/db";
 import { attachTradesToIdea, deleteIdea, deleteManualTrade, setTradeIdea } from "@/app/actions";
-import { getAllIdeas, getAllTrades, type Tile } from "@/lib/metrics";
+import { getAllIdeas, getAllTrades, rrStats, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
 import { desc, isNotNull } from "drizzle-orm";
 import { docs, executions } from "@/db/schema";
@@ -79,6 +79,7 @@ export default async function EditIdeaPage({
     }),
     anyRule,
   );
+  const rr = rrStats(simTrades);
   const actualTotal = results.reduce((a, r) => a + r.actualPnl, 0);
   const simTotal = results.reduce((a, r) => a + r.simPnl, 0);
   const diff = simTotal - actualTotal;
@@ -86,6 +87,8 @@ export default async function EditIdeaPage({
     { lbl: "Actual net P&L", val: fmtMoney(Math.round(actualTotal)), cls: actualTotal > 0 ? "pos" : actualTotal < 0 ? "neg" : "", delta: `${simTrades.length} closed trades` },
     { lbl: "What-if P&L", val: fmtMoney(Math.round(simTotal)), cls: simTotal > 0 ? "pos" : simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix}` },
     { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your exits" : diff < 0 ? "your exits were better" : undefined },
+    { lbl: "Avg RR", val: rr.avgRR === null ? "—" : `${rr.avgRR > 0 ? "+" : ""}${rr.avgRR.toFixed(2)}R`, cls: rr.avgRR !== null && rr.avgRR > 0 ? "pos" : rr.avgRR !== null && rr.avgRR < 0 ? "neg" : "", delta: `risk = own SL when set (${rr.withOwnSl} of ${rr.rrCounted}), else avg stop of this idea's trades · BE excluded${rr.noRiskRef ? ` · ${rr.noRiskRef} skipped (no SL reference)` : ""}` },
+    { lbl: "Win rate", val: rr.winRate === null ? "—" : `${Math.round(rr.winRate * 100)}%`, delta: `${rr.wins}W / ${rr.losses}L / ${rr.be} BE — break-even counts as a loss` },
   ];
 
   const convTrade = (usd: number, t: { instrument: string }) => {

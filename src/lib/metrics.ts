@@ -44,6 +44,72 @@ export type IdeaRow = {
   trades: TradeRow[];
 };
 
+export type RrStats = {
+  closed: number;
+  wins: number;
+  be: number; // break-even trades (net P&L exactly 0)
+  losses: number;
+  /** wins / closed — break-even counts as a LOSS (in the denominator, not in wins). */
+  winRate: number | null;
+  /** Mean R-multiple. Risk per trade = its own SL distance when set; otherwise the
+   *  period's average SL distance for that instrument. BE trades are excluded. */
+  avgRR: number | null;
+  rrCounted: number; // trades included in the RR average
+  withOwnSl: number; // of those, how many used their own SL
+  noRiskRef: number; // skipped: no own SL and no average stop for the instrument
+};
+
+/** RR & win-rate stats over a set of trades (see field docs for the rules). */
+export function rrStats(trades: TradeRow[]): RrStats {
+  const closedTrades = trades.filter((t) => t.pnl !== null && t.avgExitPrice !== null);
+  const riskOf = (t: TradeRow): number | null => {
+    if (!t.stopPrice) return null;
+    const dir = t.direction === "LONG" ? 1 : -1;
+    const r = (Number(t.avgEntryPrice) - Number(t.stopPrice)) * dir;
+    return r > 0 ? r : null; // a stop on the winning side is not a risk reference
+  };
+
+  // Average stop distance per instrument over THIS period (price points).
+  const byInst: Record<string, number[]> = {};
+  for (const t of closedTrades) {
+    const r = riskOf(t);
+    if (r) (byInst[t.instrument] ??= []).push(r);
+  }
+  const avgStop: Record<string, number> = {};
+  for (const [k, v] of Object.entries(byInst)) avgStop[k] = v.reduce((a, b) => a + b, 0) / v.length;
+
+  let wins = 0, be = 0, losses = 0, withOwnSl = 0, noRiskRef = 0;
+  const rs: number[] = [];
+  for (const t of closedTrades) {
+    const pnl = Number(t.pnl);
+    if (pnl > 0) wins++;
+    else if (pnl === 0) be++;
+    else losses++;
+    if (pnl === 0) continue; // break-even trades are excluded from RR
+    const own = riskOf(t);
+    const risk = own ?? avgStop[t.instrument] ?? null;
+    if (risk === null) {
+      noRiskRef++;
+      continue;
+    }
+    if (own) withOwnSl++;
+    const dir = t.direction === "LONG" ? 1 : -1;
+    const pts = (Number(t.avgExitPrice) - Number(t.avgEntryPrice)) * dir;
+    rs.push(pts / risk);
+  }
+  return {
+    closed: closedTrades.length,
+    wins,
+    be,
+    losses,
+    winRate: closedTrades.length ? wins / closedTrades.length : null,
+    avgRR: rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null,
+    rrCounted: rs.length,
+    withOwnSl,
+    noRiskRef,
+  };
+}
+
 export type DayAgg = {
   date: string; // Kyiv calendar date
   pnl: number;
