@@ -20,6 +20,15 @@ import { tradePnl, ideaPnl } from "@/lib/metrics";
 
 type Spec = { tickSize: number; tickValue: number };
 
+/** Net P&L for the whole position in the active unit: $ as recorded; ticks /
+ *  points = the dollar result translated through the instrument's tick value. */
+function fmtNet(net: number, unit: PnlUnit, spec: Spec): string {
+  if (unit === "usd") return fmtMoney(net);
+  const ticks = net / spec.tickValue;
+  const v = unit === "ticks" ? Math.round(ticks) : Number((ticks * spec.tickSize).toFixed(2));
+  return `${v > 0 ? "+" : ""}${v.toLocaleString("en-US")}`;
+}
+
 /** Existing stop size shown in the active unit ($ risk / ticks / points per contract). */
 function slDisplay(t: TradeRow, unit: PnlUnit, spec: Spec): number | "" {
   if (!t.stopPrice) return "";
@@ -148,7 +157,7 @@ export default function TradesTable({
         {show("exitPrice") && <td className="num">{t.avgExitPrice ? fmtPrice(t.avgExitPrice) : "open"}</td>}
         {show("netPnl") && (
           <td className={"num " + (net === null ? "" : net > 0 ? "pos" : net < 0 ? "neg" : "")}>
-            {net === null ? "—" : fmtMoney(net)}
+            {net === null ? "—" : fmtNet(net, unit, spec)}
           </td>
         )}
         {show("perContract") && (
@@ -247,7 +256,7 @@ export default function TradesTable({
           {show("qty") && <th className="num" data-tip="Maximum position size during the trade, in contracts">Qty</th>}
           {show("entryPrice") && <th className="num" data-tip="Volume-weighted average entry price across all entry fills">Avg entry</th>}
           {show("exitPrice") && <th className="num" data-tip="Volume-weighted average exit price across all exit fills (partial take-profits included)">Avg exit</th>}
-          {show("netPnl") && <th className="num" data-tip="Realized P&L in USD for the WHOLE position, net of commission">Net P&L</th>}
+          {show("netPnl") && <th className="num" data-tip="Realized P&L for the WHOLE position, net of commission, in the selected unit ($ / ticks / points — ticks and points are the dollar result translated through the tick value)">Net P&L</th>}
           {show("perContract") && <th className="num" data-tip="Price move for ONE contract in the selected unit ($ / ticks / points). In $ it is gross, before commission">P&L/contract</th>}
           {show("mae") && <th className="num" data-tip="Maximum Adverse Excursion — the worst the price went AGAINST you while the trade was open, per contract, in the selected unit. Computed from 5-sec bars">MAE</th>}
           {show("mfe") && <th className="num" data-tip="Maximum Favorable Excursion — the best the price went IN YOUR FAVOR while open, per contract, in the selected unit. Computed from 5-sec bars">MFE</th>}
