@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import IdeaForm from "@/components/IdeaForm";
+import TradesTable from "@/components/TradesTable";
+import ColumnsFilter from "@/components/ColumnsFilter";
 import AttachTradesPicker from "@/components/AttachTradesPicker";
 import DocEditor from "@/components/DocEditor";
 import Tiles from "@/components/Tiles";
@@ -14,6 +16,7 @@ import { desc, isNotNull } from "drizzle-orm";
 import { docs, executions } from "@/db/schema";
 import { fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
+import { getVisibleTradeColumns } from "@/lib/prefs";
 import { loadTradeBars, simulateSequential } from "@/lib/whatif";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +30,7 @@ export default async function EditIdeaPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const [allIdeas, allTrades, prefs] = await Promise.all([getAllIdeas(), getAllTrades(), getSettings()]);
+  const [allIdeas, allTrades, prefs, visibleCols] = await Promise.all([getAllIdeas(), getAllTrades(), getSettings(), getVisibleTradeColumns()]);
   const idea = allIdeas.find((i) => i.id === id);
   if (!idea) notFound();
   const tz = prefs.timezone;
@@ -287,6 +290,36 @@ export default async function EditIdeaPage({
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span>
+            Full trades table <span className="sub">same columns and inline editing as the Trades screen</span>
+          </span>
+          <span style={{ marginLeft: "auto" }}>
+            <ColumnsFilter visible={visibleCols} />
+          </span>
+        </h3>
+        <div style={{ overflowX: "auto" }}>
+          <TradesTable
+            trades={idea.trades}
+            ideas={[idea as IdeaRow]}
+            allIdeasForSelect={allIdeas.map((i) => ({ id: i.id, title: i.title }))}
+            unit={unit === "points" ? "points" : unit === "usd" ? "usd" : "ticks"}
+            specs={specs}
+            tz={tz}
+            visibleCols={visibleCols}
+            keyLevelOptions={prefs.keyLevelOptions}
+            ofConfOptions={prefs.ofConfOptions}
+            editableAccountIds={new Set(idea.trades.filter((t) => !linkedIds.has(t.id)).map((t) => t.id))}
+            dateFormat={prefs.dateFormat}
+          />
+        </div>
+        <div className="section-note">
+          Key Level, OF confirmation, SL and Account are editable inline; the Columns menu adds or removes columns
+          (shared with the Trades screen). Units follow the $/Ticks/Points switch above.
         </div>
       </div>
 
