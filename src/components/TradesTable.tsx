@@ -68,6 +68,9 @@ export default function TradesTable({
   ofConfOptions = [],
   editableAccountIds = null,
   dateFormat = "eu",
+  sim = null,
+  actionsFor = null,
+  entryHrefSuffix = "",
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
@@ -83,6 +86,12 @@ export default function TradesTable({
   /** Trades whose account label can be edited inline (no CSV executions behind them). */
   editableAccountIds?: Set<string> | null;
   dateFormat?: DateFmt;
+  /** Per-trade simulation cells (idea page): keyed by trade id. */
+  sim?: Map<string, { sim: string; simCls: string; d: string; dCls: string; exitText: string; exitCls: string; noBars?: boolean }> | null;
+  /** Extra last-column content per row (e.g. detach / delete buttons). */
+  actionsFor?: ((t: TradeRow) => React.ReactNode) | null;
+  /** Appended to the Entry link (e.g. current sim params). */
+  entryHrefSuffix?: string;
 }) {
   const show = (key: string) => visibleCols === null || visibleCols.has(key);
   const showIdeaCol = showAttach && show("idea");
@@ -100,7 +109,9 @@ export default function TradesTable({
   const colCount =
     1 +
     ["date", "account", "instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "note"].filter(show).length +
-    (showIdeaCol ? 1 : 0);
+    (showIdeaCol ? 1 : 0) +
+    (sim ? 3 : 0) +
+    (actionsFor ? 1 : 0);
 
   const row = (t: TradeRow) => {
     const spec = specs[t.instrument] ?? { tickSize: 0.25, tickValue: 5 };
@@ -111,7 +122,7 @@ export default function TradesTable({
       <tr key={t.id} className="in-group">
         <td>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Link href={`/trades/${t.id}?unit=${unit}`} className="linklike" title="Open trade details">
+            <Link href={`/trades/${t.id}?unit=${unit}${entryHrefSuffix}`} className="linklike" title="Open trade details">
               {fmtTimeKyiv(t.entryTime, true, tz, dateFormat)}
             </Link>
             {editableAccountIds?.has(t.id) && (
@@ -164,6 +175,24 @@ export default function TradesTable({
             {net === null ? "—" : fmtNet(net, unit, spec)}
           </td>
         )}
+        {sim && (() => {
+          const r = sim.get(t.id);
+          if (!r) return <><td className="num">—</td><td className="num">—</td><td>—</td></>;
+          return (
+            <>
+              <td className={"num " + r.simCls}>{r.sim}</td>
+              <td className={"num " + r.dCls} style={{ fontWeight: 600 }}>{r.d}</td>
+              <td>
+                <span className={"status-chip " + r.exitCls}>{r.exitText}</span>
+                {r.noBars && (
+                  <span className="section-note" style={{ marginLeft: 6 }} title="No imported bars for this trade — kept as traded">
+                    no bars
+                  </span>
+                )}
+              </td>
+            </>
+          );
+        })()}
         {show("perContract") && (
           <td className={"num " + (per.sign > 0 ? "pos" : per.sign < 0 ? "neg" : "")}>{per.text}</td>
         )}
@@ -243,6 +272,7 @@ export default function TradesTable({
             </form>
           </td>
         )}
+        {actionsFor && <td>{actionsFor(t)}</td>}
       </tr>
     );
   };
@@ -261,6 +291,9 @@ export default function TradesTable({
           {show("entryPrice") && <th className="num" data-tip="Volume-weighted average entry price across all entry fills">Avg entry</th>}
           {show("exitPrice") && <th className="num" data-tip="Volume-weighted average exit price across all exit fills (partial take-profits included)">Avg exit</th>}
           {show("netPnl") && <th className="num" data-tip="Realized P&L for the WHOLE position, net of commission, in the selected unit ($ / ticks / points — ticks and points are the dollar result translated through the tick value)">Net P&L</th>}
+          {sim && <th className="num" data-tip="Simulated net P&L under the current what-if rules">Sim</th>}
+          {sim && <th className="num" data-tip="Sim minus actual">Δ</th>}
+          {sim && <th data-tip="How the simulated position exited">Sim exit</th>}
           {show("perContract") && <th className="num" data-tip="Price move for ONE contract in the selected unit ($ / ticks / points). In $ it is gross, before commission">P&L/contract</th>}
           {show("mae") && <th className="num" data-tip="Maximum Adverse Excursion — the worst the price went AGAINST you while the trade was open, per contract, in the selected unit. Computed from 5-sec bars">MAE</th>}
           {show("mfe") && <th className="num" data-tip="Maximum Favorable Excursion — the best the price went IN YOUR FAVOR while open, per contract, in the selected unit. Computed from 5-sec bars">MFE</th>}
@@ -270,6 +303,7 @@ export default function TradesTable({
           {show("rr") && <th className="num tip-r" data-tip="Realized R-multiple: result divided by the initial risk (needs SL). +2R means you made twice your risk; −1R is a full stop">RR</th>}
           {show("note") && <th className="tip-r" data-tip="Free-text note for the trade">Note</th>}
           {showIdeaCol && <th className="tip-r" data-tip="Idea this trade belongs to. Trades without an idea are counted as rogue">Idea</th>}
+          {actionsFor && <th className="tip-r" data-tip="Detach removes the trade from this idea (it becomes rogue). ✕ deletes a manually added / trade-list trade entirely">Actions</th>}
         </tr>
       </thead>
       <tbody>

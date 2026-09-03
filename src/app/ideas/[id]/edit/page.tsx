@@ -109,6 +109,64 @@ export default async function EditIdeaPage({
     (sp.target ? `&wtarget=${sp.target}` : "") +
     (sp.be ? `&be=${sp.be}` : "") +
     (noBe ? "&nobe=1" : "");
+  // One combined table: sim cells + row actions plugged into the shared TradesTable.
+  const simMap = new Map(
+    simTrades.map((t, i) => {
+      const r = results[i];
+      const actualV = convTrade(r.actualPnl, t);
+      const simV = convTrade(r.simPnl, t);
+      const d = simV - actualV;
+      const reason =
+        r.exitReason === "asTraded"
+          ? { text: "as traded", cls: "" }
+          : r.exitReason === "target"
+            ? { text: "target", cls: "done" }
+            : r.exitReason === "breakeven"
+              ? { text: "break-even", cls: "active" }
+              : r.exitReason === "sessionEnd"
+                ? { text: "session end", cls: "" }
+                : r.exitReason === "skipped"
+                  ? { text: "skipped — in position", cls: "invalid" }
+                  : { text: "stop", cls: "invalid" };
+      return [
+        t.id,
+        {
+          sim: fmtU(simV),
+          simCls: r.simPnl > 0 ? "pos" : r.simPnl < 0 ? "neg" : "",
+          d: fmtU(d),
+          dCls: d > 0 ? "pos" : d < 0 ? "neg" : "",
+          exitText: reason.text,
+          exitCls: reason.cls,
+          noBars: !r.simulated,
+        },
+      ] as const;
+    }),
+  );
+  const rowActions = (t: { id: string }) => (
+    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+      <form action={setTradeIdea} style={{ display: "inline" }}>
+        <input type="hidden" name="tradeId" value={t.id} />
+        <input type="hidden" name="ideaId" value="" />
+        <button className="btn ghost btn-sm" type="submit" title="Remove this trade from the idea — the trade stays, it just becomes rogue">
+          detach
+        </button>
+      </form>
+      {!linkedIds.has(t.id) && (
+        <form action={deleteManualTrade} style={{ display: "inline" }}>
+          <input type="hidden" name="tradeId" value={t.id} />
+          <input type="hidden" name="returnTo" value={`/ideas/${id}/edit`} />
+          <button
+            type="submit"
+            title="Delete this trade entirely (manual / trade-list — no CSV executions behind it). Cannot be undone."
+            style={{ background: "none", border: "none", color: "var(--neg)", cursor: "pointer", fontSize: 13, padding: "0 2px", lineHeight: 1 }}
+          >
+            ✕
+          </button>
+        </form>
+      )}
+    </span>
+  );
+
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
@@ -193,121 +251,16 @@ export default async function EditIdeaPage({
           )}
         </form>
         <Tiles tiles={tiles} />
-        <div style={{ overflowX: "auto", marginTop: 10 }}>
-          <table className="tj">
-            <thead>
-              <tr>
-                <th data-tip="Entry time — opens the trade with the current simulation applied">Entry</th>
-                <th>Instr</th>
-                <th>Dir</th>
-                <th className="num">Qty</th>
-                <th className="num" data-tip="Worst move against you, per contract, in the selected unit">MAE</th>
-                <th className="num" data-tip="Best move in your favor, per contract, in the selected unit">MFE</th>
-                <th className="num" data-tip="Recorded net P&L">Actual</th>
-                <th className="num" data-tip="Simulated net P&L under the current rules">Sim</th>
-                <th className="num" data-tip="Sim minus actual">Δ</th>
-                <th className="tip-r" data-tip="How the simulated position exited">Sim exit</th>
-                <th className="tip-r" data-tip="Detach removes the trade from this idea (it becomes rogue). ✕ deletes a manually added / trade-list trade entirely">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {simTrades.map((t, i) => {
-                const r = results[i];
-                const spec = specs[t.instrument] ?? fallbackSpec;
-                const actualV = convTrade(r.actualPnl, t);
-                const simV = convTrade(r.simPnl, t);
-                const d = simV - actualV;
-                const reason =
-                  r.exitReason === "asTraded"
-                    ? { text: "as traded", cls: "" }
-                    : r.exitReason === "target"
-                      ? { text: "target", cls: "done" }
-                      : r.exitReason === "breakeven"
-                        ? { text: "break-even", cls: "active" }
-                        : r.exitReason === "sessionEnd"
-                          ? { text: "session end", cls: "" }
-                          : r.exitReason === "skipped"
-                            ? { text: "skipped — in position", cls: "invalid" }
-                            : { text: "stop", cls: "invalid" };
-                return (
-                  <tr key={t.id}>
-                    <td>
-                      <Link href={`/trades/${t.id}?unit=${unit}${simQ}`} className="linklike">
-                        {fmtDateShort(kyivDateOf(t.entryTime, tz), prefs.dateFormat)} {fmtTimeKyiv(t.entryTime, false, tz, prefs.dateFormat)}
-                      </Link>
-                    </td>
-                    <td>{t.instrument}</td>
-                    <td>{t.direction === "LONG" ? "Long" : "Short"}</td>
-                    <td className="num">{t.quantity}</td>
-                    <td className="num neg">{fmtExcursion(t.maeTicks, unit, spec, 1)}</td>
-                    <td className="num pos">{fmtExcursion(t.mfeTicks, unit, spec, 1)}</td>
-                    <td className={"num " + (r.actualPnl > 0 ? "pos" : r.actualPnl < 0 ? "neg" : "")}>{fmtU(actualV)}</td>
-                    <td className={"num " + (r.simPnl > 0 ? "pos" : r.simPnl < 0 ? "neg" : "")}>{fmtU(simV)}</td>
-                    <td className={"num " + (d > 0 ? "pos" : d < 0 ? "neg" : "")} style={{ fontWeight: 600 }}>{fmtU(d)}</td>
-                    <td>
-                      <span className={"status-chip " + reason.cls}>{reason.text}</span>
-                      {!r.simulated && (
-                        <span className="section-note" style={{ marginLeft: 6 }} title="No imported bars for this trade — kept as traded">
-                          no bars
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                        <form action={setTradeIdea} style={{ display: "inline" }}>
-                          <input type="hidden" name="tradeId" value={t.id} />
-                          <input type="hidden" name="ideaId" value="" />
-                          <button className="btn ghost btn-sm" type="submit" title="Remove this trade from the idea — the trade stays, it just becomes rogue">
-                            detach
-                          </button>
-                        </form>
-                        {!linkedIds.has(t.id) && (
-                          <form action={deleteManualTrade} style={{ display: "inline" }}>
-                            <input type="hidden" name="tradeId" value={t.id} />
-                            <input type="hidden" name="returnTo" value={`/ideas/${id}/edit`} />
-                            <button
-                              type="submit"
-                              title="Delete this trade entirely (manual / trade-list — no CSV executions behind it). Cannot be undone."
-                              style={{ background: "none", border: "none", color: "var(--neg)", cursor: "pointer", fontSize: 13, padding: "0 2px", lineHeight: 1 }}
-                            >
-                              ✕
-                            </button>
-                          </form>
-                        )}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-              {simTrades.length === 0 && (
-                <tr>
-                  <td colSpan={11} style={{ color: "var(--muted)" }}>
-                    No closed trades yet — attach trades below or add one with “+ Trade”.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div style={{ display: "flex", justifyContent: "flex-end", margin: "10px 0 6px" }}>
+          <ColumnsFilter visible={visibleCols} />
         </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <h3 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span>
-            Full trades table <span className="sub">same columns and inline editing as the Trades screen</span>
-          </span>
-          <span style={{ marginLeft: "auto" }}>
-            <ColumnsFilter visible={visibleCols} />
-          </span>
-        </h3>
         <div style={{ overflowX: "auto" }}>
           <TradesTable
-            trades={idea.trades}
+            trades={simTrades}
             ideas={[idea as IdeaRow]}
             allIdeasForSelect={allIdeas.map((i) => ({ id: i.id, title: i.title }))}
-            unit={unit === "points" ? "points" : unit === "usd" ? "usd" : "ticks"}
+            showAttach={false}
+            unit={unit}
             specs={specs}
             tz={tz}
             visibleCols={visibleCols}
@@ -315,11 +268,15 @@ export default async function EditIdeaPage({
             ofConfOptions={prefs.ofConfOptions}
             editableAccountIds={new Set(idea.trades.filter((t) => !linkedIds.has(t.id)).map((t) => t.id))}
             dateFormat={prefs.dateFormat}
+            sim={simMap}
+            actionsFor={rowActions}
+            entryHrefSuffix={simQ}
           />
         </div>
         <div className="section-note">
-          Key Level, OF confirmation, SL and Account are editable inline; the Columns menu adds or removes columns
-          (shared with the Trades screen). Units follow the $/Ticks/Points switch above.
+          One table for everything: Net P&L is the actual result, Sim / Δ / Sim exit come from the rule set above,
+          Key Level, OF conf, SL and Account are editable inline, and the Columns menu adds or removes columns
+          (shared with the Trades screen). Click a time to open the trade with the simulation applied.
         </div>
       </div>
 
