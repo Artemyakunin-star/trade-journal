@@ -268,7 +268,7 @@ export default async function EditIdeaPage({
             ofConfOptions={prefs.ofConfOptions}
             editableAccountIds={new Set(idea.trades.filter((t) => !linkedIds.has(t.id)).map((t) => t.id))}
             dateFormat={prefs.dateFormat}
-            sim={simMap}
+            sim={anyRule ? simMap : null}
             actionsFor={rowActions}
             entryHrefSuffix={simQ}
           />
