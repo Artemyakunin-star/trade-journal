@@ -96,6 +96,15 @@ export default async function TradeDetailPage({
         }
       : null;
 
+  // Whole-position result in the active unit ($ as recorded; ticks/points via
+  // the instrument's tick value — same convention as the trades table).
+  const fmtWhole = (usd: number): string => {
+    if (unit === "usd") return fmtMoney2(usd);
+    const ticks = usd / spec.tickValue;
+    const v = unit === "ticks" ? Math.round(ticks) : Number((ticks * spec.tickSize).toFixed(2));
+    return `${v > 0 ? "+" : ""}${v.toLocaleString("en-US")}`;
+  };
+
   const stat = (lbl: string, val: React.ReactNode, cls = "") => (
     <div className="card tile">
       <div className="lbl">{lbl}</div>
@@ -122,8 +131,8 @@ export default async function TradeDetailPage({
       </div>
 
       <div className="tiles" style={{ marginBottom: 14 }}>
-        {stat("Net P&L (after commission)", net === null ? "open" : fmtMoney2(net), net === null ? "" : net > 0 ? "pos" : net < 0 ? "neg" : "")}
-        {stat("Gross P&L", gross === null ? "—" : fmtMoney2(gross), "")}
+        {stat("Net P&L (after commission)", net === null ? "open" : fmtWhole(net), net === null ? "" : net > 0 ? "pos" : net < 0 ? "neg" : "")}
+        {stat("Gross P&L", gross === null ? "—" : fmtWhole(gross), "")}
         {stat("Commission", comm > 0 ? "$" + comm.toFixed(2) : "$0")}
         {stat(
           "MAE (worst against you, per contract)",
