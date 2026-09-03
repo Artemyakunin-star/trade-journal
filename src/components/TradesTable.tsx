@@ -238,6 +238,9 @@ export default function TradesTable({
               <input type="hidden" name="tradeId" value={t.id} />
               <input type="hidden" name="unit" value={unit} />
               <input
+                // Remount when the unit changes — an uncontrolled input keeps its
+                // old DOM value otherwise, showing ticks after switching to $.
+                key={unit}
                 className="mini-select"
                 name="stopValue"
                 type="number"
