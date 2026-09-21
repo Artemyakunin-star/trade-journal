@@ -722,3 +722,43 @@ export async function uploadPlatformSample(fd: FormData) {
   await db.insert(platformSamples).values({ userId: uid, platform, filename: file.name, content: text, note });
   revalidatePath("/import");
 }
+
+// ---------- sandbox mode (owner only) ----------
+
+/** Switch the owner into the sandbox journal: a scratch account for testing
+ *  sample imports without touching the owner's own statistics. */
+export async function enterSandbox() {
+  const { realUserId, ownerUserId, SANDBOX_COOKIE, SANDBOX_EMAIL } = await import("@/lib/auth");
+  const real = await realUserId();
+  if (!real || real !== (await ownerUserId())) return;
+  const { users } = await import("@/db/schema");
+  const existing = await db.query.users.findFirst({ where: eq(users.email, SANDBOX_EMAIL) });
+  if (!existing) {
+    // Not loginable: the hash matches no password.
+    await db.insert(users).values({ email: SANDBOX_EMAIL, passwordHash: "-" }).onConflictDoNothing();
+  }
+  const jar = await cookies();
+  jar.set(SANDBOX_COOKIE, "1", { httpOnly: true, sameSite: "lax", path: "/" });
+  revalidatePath("/", "layout");
+  redirect("/import");
+}
+
+export async function exitSandbox() {
+  const { SANDBOX_COOKIE } = await import("@/lib/auth");
+  const jar = await cookies();
+  jar.delete(SANDBOX_COOKIE);
+  revalidatePath("/", "layout");
+  redirect("/admin");
+}
+
+// ---------- feedback ----------
+
+/** Any signed-in user: complaints, missing features, suggestions. */
+export async function sendFeedback(fd: FormData) {
+  const uid = await requireUserId();
+  const message = str(fd, "message");
+  if (!message) return;
+  const { feedback } = await import("@/db/schema");
+  await db.insert(feedback).values({ userId: uid, message: message.slice(0, 5000), page: str(fd, "page") || null });
+  redirect("/feedback?sent=1");
+}

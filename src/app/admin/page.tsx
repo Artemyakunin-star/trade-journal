@@ -2,8 +2,9 @@
 // who registered, how active they are, and platform samples people sent.
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { requireUserId } from "@/lib/auth";
-import { imports, platformSamples, trades, users } from "@/db/schema";
+import { realUserId, SANDBOX_EMAIL } from "@/lib/auth";
+import { enterSandbox } from "@/app/actions";
+import { feedback, imports, platformSamples, trades, users } from "@/db/schema";
 import { asc, desc, sql } from "drizzle-orm";
 import { getSettings } from "@/lib/settings";
 import { fmtDate } from "@/lib/format";
@@ -11,12 +12,12 @@ import { fmtDate } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const uid = await requireUserId();
+  const uid = await realUserId();
   const firstUser = await db.query.users.findFirst({ orderBy: (u, { asc: asc_ }) => [asc_(u.createdAt)] });
-  if (!firstUser || firstUser.id !== uid) redirect("/");
+  if (!uid || !firstUser || firstUser.id !== uid) redirect("/");
   const prefs = await getSettings(uid);
 
-  const [allUsers, tradeCounts, importStats, samples] = await Promise.all([
+  const [allUsers, tradeCounts, importStats, samples, feedbackRows] = await Promise.all([
     db.select().from(users).orderBy(asc(users.createdAt)),
     db
       .select({ userId: trades.userId, n: sql<number>`count(*)` })
@@ -27,7 +28,9 @@ export default async function AdminPage() {
       .from(imports)
       .groupBy(imports.userId),
     db.select().from(platformSamples).orderBy(desc(platformSamples.createdAt)).limit(100),
+    db.select().from(feedback).orderBy(desc(feedback.createdAt)).limit(200),
   ]);
+  const visibleUsers = allUsers.filter((u) => u.email !== SANDBOX_EMAIL);
   const nTrades = new Map(tradeCounts.map((r) => [r.userId, Number(r.n)]));
   const imp = new Map(importStats.map((r) => [r.userId, { n: Number(r.n), last: r.last }]));
   const emailById = new Map(allUsers.map((u) => [u.id, u.email]));
@@ -43,7 +46,7 @@ export default async function AdminPage() {
 
       <div className="card" style={{ maxWidth: 760 }}>
         <h3>
-          Users <span className="sub">{allUsers.length} registered · newest last</span>
+          Users <span className="sub">{visibleUsers.length} registered · newest last</span>
         </h3>
         <table className="tj">
           <thead>
@@ -56,7 +59,7 @@ export default async function AdminPage() {
             </tr>
           </thead>
           <tbody>
-            {allUsers.map((u) => (
+            {visibleUsers.map((u) => (
               <tr key={u.id}>
                 <td style={{ whiteSpace: "normal", wordBreak: "break-all" }}>
                   {u.email}
@@ -110,6 +113,45 @@ export default async function AdminPage() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card" style={{ maxWidth: 760, marginTop: 14 }}>
+        <h3>
+          Feedback <span className="sub">{feedbackRows.length ? `${feedbackRows.length} messages` : "none yet"}</span>
+        </h3>
+        {feedbackRows.length === 0 ? (
+          <div className="section-note">Messages from the Feedback page will appear here.</div>
+        ) : (
+          <table className="tj">
+            <thead>
+              <tr>
+                <th>From</th>
+                <th>Message</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {feedbackRows.map((f) => (
+                <tr key={f.id}>
+                  <td style={{ whiteSpace: "normal", wordBreak: "break-all" }}>{f.userId ? emailById.get(f.userId) ?? "?" : "?"}</td>
+                  <td style={{ whiteSpace: "pre-wrap", maxWidth: 420 }}>{f.message}</td>
+                  <td>{d(f.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="card" style={{ maxWidth: 760, marginTop: 14 }}>
+        <h3>Sandbox <span className="sub">test imports without touching your journal</span></h3>
+        <div className="section-note">
+          Switches you into a separate scratch journal: import the sample files people send, look at the result,
+          then come back. Nothing you do there appears in your own statistics.
+        </div>
+        <form action={enterSandbox} style={{ marginTop: 8 }}>
+          <button className="btn" type="submit">Enter sandbox</button>
+        </form>
       </div>
     </>
   );

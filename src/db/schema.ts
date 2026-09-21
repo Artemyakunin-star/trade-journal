@@ -395,3 +395,12 @@ export const executionsRelations = relations(executions, ({ one }) => ({
 export const importsRelations = relations(imports, ({ many }) => ({
   executions: many(executions),
 }));
+
+/** Free-form user feedback (what's missing, what's broken, suggestions). */
+export const feedback = pgTable("feedback", {
+  id: text("id").primaryKey().$defaultFn(createId),
+  userId: text("user_id"),
+  message: text("message").notNull(),
+  page: text("page"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

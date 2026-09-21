@@ -12,6 +12,7 @@ const ITEMS = [
   { href: "/day", ico: "☀", label: "Day" },
   { href: "/import", ico: "⇪", label: "Import" },
   { href: "/faq", ico: "?", label: "Help / FAQ" },
+  { href: "/feedback", ico: "✉", label: "Feedback" },
   { href: "/settings", ico: "⚙", label: "Settings" },
 ];
 
