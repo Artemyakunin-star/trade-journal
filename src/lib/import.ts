@@ -567,15 +567,23 @@ async function importTradeList(filename: string, text: string, tz: string, accou
   const from = new Date(Math.min(...parsed.map((t) => t.entryTime.getTime())) - 60_000);
   const to = new Date(Math.max(...parsed.map((t) => t.entryTime.getTime())) + 60_000);
   const existing = await db
-    .select({ account: trades.account, instrument: trades.instrument, entryTime: trades.entryTime, quantity: trades.quantity, avgEntryPrice: trades.avgEntryPrice })
+    .select({ account: trades.account, instrument: trades.instrument, entryTime: trades.entryTime, quantity: trades.quantity, avgEntryPrice: trades.avgEntryPrice, exitTime: trades.exitTime, avgExitPrice: trades.avgExitPrice })
     .from(trades)
     .where(and(gte(trades.entryTime, from), lte(trades.entryTime, to)));
-  const keyOf = (a: string, s: string, t: Date, q: number, p: number) => `${a}|${s}|${Math.floor(t.getTime() / 1000)}|${q}|${p.toFixed(4)}`;
-  const seen = new Set(existing.map((e) => keyOf(e.account, e.instrument, e.entryTime, e.quantity, Number(e.avgEntryPrice))));
+  // Exit time+price are part of the key so partial exits (same entry, different exits,
+  // e.g. scaling out half at T2 and holding the rest) import as separate trades
+  // instead of being collapsed as duplicates.
+  const keyOf = (a: string, s: string, t: Date, q: number, p: number, xt: Date | null, xp: number | null) =>
+    `${a}|${s}|${Math.floor(t.getTime() / 1000)}|${q}|${p.toFixed(4)}|${xt ? Math.floor(xt.getTime() / 1000) : ""}|${xp === null ? "" : xp.toFixed(4)}`;
+  const seen = new Set(
+    existing.map((e) =>
+      keyOf(e.account, e.instrument, e.entryTime, e.quantity, Number(e.avgEntryPrice), e.exitTime, e.avgExitPrice === null ? null : Number(e.avgExitPrice))
+    )
+  );
 
   let inserted = 0;
   for (const t of parsed) {
-    const key = keyOf(t.account, t.symbol, t.entryTime, t.quantity, t.entry);
+    const key = keyOf(t.account, t.symbol, t.entryTime, t.quantity, t.entry, t.exitTime, t.exit);
     if (seen.has(key)) continue;
     seen.add(key);
     const sp = spec[t.symbol] ?? { pv: 20, perSide: 0 };
