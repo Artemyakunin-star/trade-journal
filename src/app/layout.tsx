@@ -26,9 +26,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </html>
     );
   }
-  const [prefs, user] = await Promise.all([
+  const [prefs, user, firstUser] = await Promise.all([
     getSettings(uid),
     db.query.users.findFirst({ where: eq(users.id, uid) }),
+    db.query.users.findFirst({ orderBy: (u, { asc }) => [asc(u.createdAt)] }),
   ]);
   return (
     <html lang="en" data-theme={prefs.theme}>
@@ -37,6 +38,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <Sidebar
             footer={`Times shown in ${tzLabel(prefs.timezone)}. CSVs imported as ${tzLabel(prefs.importTimezone)}.`}
             userEmail={user?.email ?? ""}
+            showAdmin={firstUser?.id === uid}
           />
           <div className="main">{children}</div>
         </div>

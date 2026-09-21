@@ -15,10 +15,19 @@ const ITEMS = [
   { href: "/settings", ico: "⚙", label: "Settings" },
 ];
 
-export default function Sidebar({ footer, userEmail }: { footer?: string; userEmail?: string }) {
+export default function Sidebar({
+  footer,
+  userEmail,
+  showAdmin = false,
+}: {
+  footer?: string;
+  userEmail?: string;
+  showAdmin?: boolean;
+}) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+  const items = showAdmin ? [...ITEMS, { href: "/admin", ico: "◎", label: "Admin" }] : ITEMS;
 
   return (
     <aside className="sidebar">
@@ -26,7 +35,7 @@ export default function Sidebar({ footer, userEmail }: { footer?: string; userEm
         Trade<span className="accent">Journal</span>
         <span className="tag">futures edition</span>
       </div>
-      {ITEMS.map((it) => (
+      {items.map((it) => (
         <Link key={it.href} href={it.href} className={"nav-item" + (isActive(it.href) ? " active" : "")}>
           <span className="ico">{it.ico}</span>
           {it.label}
