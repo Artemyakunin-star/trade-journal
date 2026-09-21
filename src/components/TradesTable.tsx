@@ -71,6 +71,7 @@ export default function TradesTable({
   sim = null,
   actionsFor = null,
   entryHrefSuffix = "",
+  mergeForm = null,
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
@@ -92,6 +93,8 @@ export default function TradesTable({
   actionsFor?: ((t: TradeRow) => React.ReactNode) | null;
   /** Appended to the Entry link (e.g. current sim params). */
   entryHrefSuffix?: string;
+  /** id of an external <form>: renders a merge checkbox per closed trade that submits with it. */
+  mergeForm?: string | null;
 }) {
   const show = (key: string) => visibleCols === null || visibleCols.has(key);
   const showIdeaCol = showAttach && show("idea");
@@ -122,6 +125,16 @@ export default function TradesTable({
       <tr key={t.id} className="in-group">
         <td>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {mergeForm && t.exitTime && (
+              <input
+                type="checkbox"
+                name="mergeIds"
+                value={t.id}
+                form={mergeForm}
+                title="Select for merging (partial exits of one position)"
+                style={{ accentColor: "var(--accent)", margin: 0 }}
+              />
+            )}
             <Link href={`/trades/${t.id}?unit=${unit}${entryHrefSuffix}`} className="linklike" title="Open trade details">
               {fmtTimeKyiv(t.entryTime, true, tz, dateFormat)}
             </Link>

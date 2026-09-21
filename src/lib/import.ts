@@ -451,10 +451,10 @@ function parseLocaleNum(s: string): number {
   return Number(t);
 }
 
-/** Normalize a platform symbol to the root: "NQZ5"/"MNQZ25"/"NQ 12-25"/"NQ SEP26" → NQ/MNQ. */
+/** Normalize a platform symbol to the root: "NQZ5"/"MNQZ25"/"MESU2026"/"NQ 12-25"/"NQ SEP26" → NQ/MNQ/MES. */
 function normalizeSymbol(raw: string): string {
   const first = raw.trim().toUpperCase().split(/\s+/)[0];
-  const m = first.match(/^([A-Z]+?)[FGHJKMNQUVXZ]\d{1,2}$/);
+  const m = first.match(/^([A-Z]+?)[FGHJKMNQUVXZ](\d{1,2}|\d{4})$/);
   return m && m[1].length >= 1 ? m[1] : first;
 }
 
@@ -559,6 +559,27 @@ async function importTradeList(filename: string, text: string, tz: string, accou
     return { filename, kind: "TRADES", inserted: 0, skipped: 0, error: "No rows could be parsed" + (problems.length ? ` (first problem row: "${problems[0]}…")` : "") };
   }
 
+  // DeepCharts exports each partial exit as its own row. Rows opened at the
+  // same moment, price and direction are one position — merge them into one
+  // trade: contracts summed, exit = weighted average, P&L summed, exit time =
+  // last part. Parts are kept so dedup can recognize previously imported
+  // unmerged rows.
+  const partGroups = new Map<string, T[]>();
+  for (const t of parsed) {
+    const k = `${t.account}|${t.symbol}|${t.direction}|${Math.floor(t.entryTime.getTime() / 1000)}|${t.entry.toFixed(4)}`;
+    const g = partGroups.get(k);
+    if (g) g.push(t);
+    else partGroups.set(k, [t]);
+  }
+  const mergedParsed: (T & { parts: T[] })[] = [...partGroups.values()].map((g) => {
+    if (g.length === 1) return { ...g[0], parts: g };
+    const qty = g.reduce((a, x) => a + x.quantity, 0);
+    const exit = g.reduce((a, x) => a + x.exit * x.quantity, 0) / qty;
+    const pnl = g.every((x) => x.pnl !== null) ? g.reduce((a, x) => a + (x.pnl ?? 0), 0) : null;
+    const exitTime = new Date(Math.max(...g.map((x) => x.exitTime.getTime())));
+    return { ...g[0], quantity: qty, exit, exitTime, pnl, parts: g };
+  });
+
   const symbols = [...new Set(parsed.map((t) => t.symbol))];
   for (const s of symbols) await ensureInstrument(s);
   const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
@@ -583,9 +604,11 @@ async function importTradeList(filename: string, text: string, tz: string, accou
   );
 
   let inserted = 0;
-  for (const t of parsed) {
+  for (const t of mergedParsed) {
     const key = keyOf(t.account, t.symbol, t.entryTime, t.quantity, t.entry, t.exitTime, t.exit);
     if (seen.has(key)) continue;
+    // Already imported earlier as separate unmerged parts? Skip too.
+    if (t.parts.length > 1 && t.parts.every((p) => seen.has(keyOf(p.account, p.symbol, p.entryTime, p.quantity, p.entry, p.exitTime, p.exit)))) continue;
     seen.add(key);
     const sp = spec[t.symbol] ?? { pv: 20, perSide: 0 };
     const commission = sp.perSide * t.quantity * 2;
@@ -613,7 +636,7 @@ async function importTradeList(filename: string, text: string, tz: string, accou
     filename,
     kind: "TRADES",
     inserted,
-    skipped: parsed.length - inserted,
+    skipped: mergedParsed.length - inserted,
     maeMfeComputed,
     accounts: [...new Set(parsed.map((t) => t.account))],
   };

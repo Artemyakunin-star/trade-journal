@@ -8,7 +8,7 @@ import { ACCOUNTS_COOKIE_NAME, COLS_COOKIE_NAME } from "@/lib/prefs";
 import { TRADE_COLUMNS } from "@/lib/columns";
 import { db } from "@/db";
 import { docs, executions, ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { computeMaeMfeFor, importCsvFile, rebuildAll, type ImportResult } from "@/lib/import";
 import { parseInTimeZone } from "@/lib/format";
 import { TIMEZONES } from "@/lib/settings";
@@ -308,6 +308,66 @@ export async function deleteManualTrade(fd: FormData) {
   await db.delete(trades).where(eq(trades.id, tradeId));
   revalidatePath("/", "layout");
   redirect(str(fd, "returnTo") || "/trades");
+}
+
+/** Merge selected trades into one (partial exits imported as separate rows —
+ *  e.g. a DeepCharts position scaled out in parts). Contracts are summed,
+ *  entry/exit prices become weighted averages, P&L and commission are summed;
+ *  entry time = earliest, exit time = latest. SL / key level / OF / note /
+ *  journal / idea are taken from the first row that has them. The earliest
+ *  row survives (links keep working); the others are deleted. */
+export async function mergeTrades(fd: FormData) {
+  const ids = fd.getAll("mergeIds").map(String).filter(Boolean);
+  const returnTo = str(fd, "returnTo") || "/trades";
+  const fail = (msg: string) =>
+    redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}mergeError=${encodeURIComponent(msg)}`);
+  if (ids.length < 2) fail("Select at least two trades to merge");
+  const rows = await db.select().from(trades).where(inArray(trades.id, ids));
+  if (rows.length < 2) fail("Trades not found");
+  if (new Set(rows.map((r) => `${r.account}|${r.instrument}|${r.direction}`)).size > 1)
+    fail("Only trades with the same account, instrument and direction can be merged");
+  if (rows.some((r) => !r.exitTime || r.avgExitPrice === null)) fail("All trades must be closed to merge");
+  if (rows.some((r) => r.pnl === null)) fail("All trades must have a P&L to merge");
+
+  rows.sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
+  const keep = rows[0];
+  const qty = rows.reduce((a, r) => a + r.quantity, 0);
+  const avgEntry = rows.reduce((a, r) => a + Number(r.avgEntryPrice) * r.quantity, 0) / qty;
+  const avgExit = rows.reduce((a, r) => a + Number(r.avgExitPrice) * r.quantity, 0) / qty;
+  const exitTime = new Date(Math.max(...rows.map((r) => r.exitTime!.getTime())));
+  const pnl = rows.reduce((a, r) => a + Number(r.pnl), 0);
+  const commission = rows.reduce((a, r) => a + Number(r.commission), 0);
+  const first = <K extends "stopPrice" | "keyLevel" | "ofConfirmation" | "note" | "journal" | "ideaId">(k: K) =>
+    rows.map((r) => r[k]).find((v) => v !== null && v !== "") ?? null;
+
+  await db
+    .update(trades)
+    .set({
+      quantity: qty,
+      avgEntryPrice: avgEntry.toFixed(4),
+      avgExitPrice: avgExit.toFixed(4),
+      exitTime,
+      pnl: pnl.toFixed(2),
+      commission: commission.toFixed(2),
+      stopPrice: first("stopPrice") as string | null,
+      keyLevel: first("keyLevel") as string | null,
+      ofConfirmation: first("ofConfirmation") as string | null,
+      note: first("note") as string | null,
+      journal: first("journal"),
+      ideaId: first("ideaId") as string | null,
+      // Recomputed below for the widened time window.
+      maeTicks: null,
+      mfeTicks: null,
+      maePrice: null,
+      mfePrice: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(trades.id, keep.id));
+  await db.delete(trades).where(inArray(trades.id, rows.slice(1).map((r) => r.id)));
+  await computeMaeMfeFor(null, [keep.instrument]);
+
+  revalidatePath("/", "layout");
+  redirect(returnTo);
 }
 
 /** Change the account label of a trade that has no linked executions

@@ -2,6 +2,7 @@
 // P&L unit selector ($ / ticks / points / exit price), account filter.
 import Link from "next/link";
 import TradesTable from "@/components/TradesTable";
+import { mergeTrades } from "@/app/actions";
 import AccountFilter from "@/components/AccountFilter";
 import ColumnsFilter from "@/components/ColumnsFilter";
 import { db } from "@/db";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function TradesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; from?: string; to?: string; unit?: string }>;
+  searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; from?: string; to?: string; unit?: string; mergeError?: string }>;
 }) {
   const sp = await searchParams;
   const [allTrades, allIdeas, instruments, selectedAccounts, prefs, visibleCols, execTradeIds] = await Promise.all([
@@ -128,7 +129,24 @@ export default async function TradesPage({
             grouped by idea · {trades.length} trades, {ideaIds.size} ideas, {rogueCount} rogue
             {unit !== "usd" && " · P&L per contract, MAE/MFE for the position"}
           </span>
+          <form
+            id="merge-form"
+            action={mergeTrades}
+            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}
+          >
+            <input type="hidden" name="returnTo" value={"/trades" + (Object.keys(sp).length ? "?" + new URLSearchParams(Object.entries(sp).filter(([k, v]) => !!v && k !== "mergeError") as [string, string][]).toString() : "")} />
+            <button
+              className="btn ghost"
+              type="submit"
+              data-tip="Tick the checkboxes next to two or more parts of one position (same account, instrument and direction), then merge them into a single trade: contracts summed, exit = weighted average, P&L summed"
+            >
+              ⇥ Merge selected
+            </button>
+          </form>
         </h3>
+        {sp.mergeError && (
+          <div className="section-note" style={{ color: "var(--crit)" }}>Merge failed: {sp.mergeError}</div>
+        )}
         <div style={{ overflowX: "auto" }}>
           <TradesTable
             trades={trades}
@@ -142,6 +160,7 @@ export default async function TradesPage({
             ofConfOptions={prefs.ofConfOptions}
             editableAccountIds={editableAccountIds}
             dateFormat={prefs.dateFormat}
+            mergeForm="merge-form"
           />
         </div>
         <div className="section-note">
