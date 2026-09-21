@@ -11,6 +11,7 @@ const ITEMS = [
   { href: "/analytics", ico: "∿", label: "Analytics" },
   { href: "/day", ico: "☀", label: "Day" },
   { href: "/import", ico: "⇪", label: "Import" },
+  { href: "/faq", ico: "?", label: "Help / FAQ" },
   { href: "/settings", ico: "⚙", label: "Settings" },
 ];
 
