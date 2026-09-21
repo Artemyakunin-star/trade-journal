@@ -583,7 +583,7 @@ async function importTradeList(filename: string, text: string, tz: string, accou
   const symbols = [...new Set(parsed.map((t) => t.symbol))];
   for (const s of symbols) await ensureInstrument(s);
   const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
-  const spec = Object.fromEntries(instRows.map((i) => [i.symbol, { pv: Number(i.tickValue) / Number(i.tickSize), perSide: Number(i.commission ?? 0) }]));
+  const spec = Object.fromEntries(instRows.map((i) => [i.symbol, { pv: Number(i.tickValue) / Number(i.tickSize), rt: Number(i.commission ?? 0) }]));
 
   // Dedup: same account+symbol+entry second+qty+entry price = same trade.
   const from = new Date(Math.min(...parsed.map((t) => t.entryTime.getTime())) - 60_000);
@@ -610,8 +610,9 @@ async function importTradeList(filename: string, text: string, tz: string, accou
     // Already imported earlier as separate unmerged parts? Skip too.
     if (t.parts.length > 1 && t.parts.every((p) => seen.has(keyOf(p.account, p.symbol, p.entryTime, p.quantity, p.entry, p.exitTime, p.exit)))) continue;
     seen.add(key);
-    const sp = spec[t.symbol] ?? { pv: 20, perSide: 0 };
-    const commission = sp.perSide * t.quantity * 2;
+    const sp = spec[t.symbol] ?? { pv: 20, rt: 0 };
+    // Settings commission is USD per contract for the whole round trip.
+    const commission = sp.rt * t.quantity;
     const dir = t.direction === "LONG" ? 1 : -1;
     const gross = t.pnl !== null ? t.pnl : (t.exit - t.entry) * dir * t.quantity * sp.pv;
     await db.insert(trades).values({
@@ -770,10 +771,10 @@ async function importBars(filename: string, text: string, tz: string): Promise<I
 async function rebuildTradesFor(account: string, symbols: string[]): Promise<number> {
   const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
   const pointValues: PointValues = {};
-  const perSideCommission: Record<string, number> = {};
+  const rtCommission: Record<string, number> = {}; // USD per contract, round trip
   for (const i of instRows) {
     pointValues[i.symbol] = Number(i.tickValue) / Number(i.tickSize);
-    perSideCommission[i.symbol] = Number(i.commission ?? 0);
+    rtCommission[i.symbol] = Number(i.commission ?? 0);
   }
 
   const execRows = await db
@@ -825,9 +826,10 @@ async function rebuildTradesFor(account: string, symbols: string[]): Promise<num
   let count = 0;
   for (const b of built) {
     // Sim/eval exports carry Commission=0 — fall back to the per-contract
-    // commission configured in Settings.
-    if (b.commission === 0 && (perSideCommission[b.symbol] ?? 0) > 0) {
-      b.commission = perSideCommission[b.symbol] * b.filledQty;
+    // round-trip commission configured in Settings (filledQty counts both
+    // entry and exit fills, hence the /2).
+    if (b.commission === 0 && (rtCommission[b.symbol] ?? 0) > 0) {
+      b.commission = (rtCommission[b.symbol] * b.filledQty) / 2;
       if (b.pnl !== null) b.pnl -= b.commission;
     }
     const prev = oldByFirstExec.get(b.execIds[0]);

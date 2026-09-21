@@ -239,14 +239,14 @@ export async function createManualTrade(fd: FormData) {
   const inst = await db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, instrument) });
   const tickSize = inst ? Number(inst.tickSize) : 0.25;
   const tickValue = inst ? Number(inst.tickValue) : 5;
-  const perSide = inst ? Number(inst.commission ?? 0) : 0;
+  const rt = inst ? Number(inst.commission ?? 0) : 0; // USD per contract, round trip
 
-  // Commission: explicit value wins; blank = Settings per-contract commission
-  // for entry + exit fills.
+  // Commission: explicit value wins; blank = Settings round-trip commission
+  // (half of it while the trade is still open — only the entry side filled).
   const commission =
     commissionRaw !== "" && Number(commissionRaw) >= 0
       ? Number(commissionRaw)
-      : perSide * quantity * (closed ? 2 : 1);
+      : rt * quantity * (closed ? 1 : 0.5);
 
   const dir = direction === "LONG" ? 1 : -1;
   const pnl = closed ? (exitPrice - entryPrice) * dir * quantity * (tickValue / tickSize) - commission : null;
@@ -583,7 +583,7 @@ export async function saveInstrument(fd: FormData) {
   await rebuildAll(); // re-derive PnL net of the new commission (executions-built trades)
 
   // Trades without executions behind them (trade lists, manual entry, merges)
-  // are not covered by rebuildAll — re-apply the new per-side commission to
+  // are not covered by rebuildAll — re-apply the new round-trip commission to
   // them directly: P&L shifts by the commission delta, so it stays net.
   const execIds = await db
     .selectDistinct({ tradeId: executions.tradeId })
@@ -593,7 +593,7 @@ export async function saveInstrument(fd: FormData) {
   const rows = await db.select().from(trades).where(eq(trades.instrument, symbol));
   for (const t of rows) {
     if (linked.has(t.id)) continue;
-    const newCom = commission * t.quantity * 2;
+    const newCom = commission * t.quantity;
     const oldCom = Number(t.commission);
     if (Math.abs(newCom - oldCom) < 0.005) continue;
     await db

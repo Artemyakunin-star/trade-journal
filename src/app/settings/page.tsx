@@ -76,7 +76,7 @@ export default async function SettingsPage() {
         <div className="card">
           <h3>
             Instruments &amp; commissions{" "}
-            <span className="sub">commission is USD per contract per side, applied when the CSV reports 0</span>
+            <span className="sub">commission is USD per contract for the whole trade (entry + exit), applied when the CSV reports 0</span>
           </h3>
           <div style={{ overflowX: "auto" }}>
             <table className="tj">
