@@ -8,8 +8,8 @@ import { ACCOUNTS_COOKIE_NAME, COLS_COOKIE_NAME } from "@/lib/prefs";
 import { TRADE_COLUMNS } from "@/lib/columns";
 import { db } from "@/db";
 import { docs, executions, ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
-import { eq, inArray, isNotNull } from "drizzle-orm";
-import { computeMaeMfeFor, importCsvFile, rebuildAll, type ImportResult } from "@/lib/import";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { computeMaeMfeFor, importCsvFile, rebuildAll, rebuildSymbol, type ImportResult } from "@/lib/import";
 import { parseInTimeZone } from "@/lib/format";
 import { TIMEZONES } from "@/lib/settings";
 
@@ -580,31 +580,26 @@ export async function saveInstrument(fd: FormData) {
     .update(instruments)
     .set({ tickSize: String(tickSize), tickValue: String(tickValue), commission: String(commission) })
     .where(eq(instruments.symbol, symbol));
-  await rebuildAll(); // re-derive PnL net of the new commission (executions-built trades)
+  // Executions-built trades of this one symbol: rebuild from fills.
+  await rebuildSymbol(symbol);
 
-  // Trades without executions behind them (trade lists, manual entry, merges)
-  // are not covered by rebuildAll — re-apply the new round-trip commission to
-  // them directly: P&L shifts by the commission delta, so it stays net.
-  const execIds = await db
-    .selectDistinct({ tradeId: executions.tradeId })
-    .from(executions)
-    .where(isNotNull(executions.tradeId));
-  const linked = new Set(execIds.map((e) => e.tradeId));
-  const rows = await db.select().from(trades).where(eq(trades.instrument, symbol));
-  for (const t of rows) {
-    if (linked.has(t.id)) continue;
-    const newCom = commission * t.quantity;
-    const oldCom = Number(t.commission);
-    if (Math.abs(newCom - oldCom) < 0.005) continue;
-    await db
-      .update(trades)
-      .set({
-        commission: newCom.toFixed(2),
-        pnl: t.pnl === null ? null : (Number(t.pnl) + oldCom - newCom).toFixed(2),
-        updatedAt: new Date(),
-      })
-      .where(eq(trades.id, t.id));
-  }
+  // Trades without executions behind them (trade lists, manual entry, merges):
+  // one SQL update — P&L shifts by the commission delta, so it stays net.
+  const rate = commission;
+  await db
+    .update(trades)
+    .set({
+      pnl: sql`case when ${trades.pnl} is null then null else round((${trades.pnl} + ${trades.commission} - ${rate}::numeric * ${trades.quantity})::numeric, 2) end`,
+      commission: sql`round((${rate}::numeric * ${trades.quantity})::numeric, 2)`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(trades.instrument, symbol),
+        sql`abs(${trades.commission} - ${rate}::numeric * ${trades.quantity}) > 0.005`,
+        sql`${trades.id} not in (select trade_id from executions where trade_id is not null)`,
+      ),
+    );
 
   revalidatePath("/", "layout");
 }

@@ -859,6 +859,21 @@ async function rebuildTradesFor(account: string, symbols: string[]): Promise<num
   return count;
 }
 
+/** Rebuild executions-built trades of ONE symbol (e.g. after its commission
+ *  changed) — much cheaper than rebuildAll on a serverless database. */
+export async function rebuildSymbol(symbol: string): Promise<number> {
+  const accounts = await db
+    .selectDistinct({ account: executions.account })
+    .from(executions)
+    .where(eq(executions.instrument, symbol));
+  let total = 0;
+  for (const a of accounts) {
+    total += await rebuildTradesFor(a.account, [symbol]);
+    await computeMaeMfeFor(a.account, [symbol]); // rebuild resets MAE/MFE
+  }
+  return total;
+}
+
 /** Rebuild all trades from stored executions (e.g. after commission changes). */
 export async function rebuildAll(): Promise<number> {
   const pairs = await db
