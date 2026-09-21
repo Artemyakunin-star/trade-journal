@@ -26,7 +26,7 @@ export default async function EditIdeaPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string; stop?: string; target?: string; be?: string; nobe?: string; slip?: string }>;
+  searchParams: Promise<{ unit?: string; stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -56,6 +56,13 @@ export default async function EditIdeaPage({
   const num = (s?: string) => (s && Number(s) > 0 ? Number(s) : null);
   const stopVal = num(sp.stop);
   const targetVal = num(sp.target);
+  const targetSlots = [1, 2, 3]
+    .map((i) => ({
+      size: num((sp as Record<string, string | undefined>)[`t${i}`]),
+      qty: Math.max(1, Math.round(Number((sp as Record<string, string | undefined>)[`q${i}`] ?? 1) || 1)),
+    }))
+    .filter((x): x is { size: number; qty: number } => x.size !== null);
+  const beAfterT1 = sp.bet1 === "1";
   const noBe = sp.nobe === "1";
   const beVal = noBe ? null : num(sp.be);
   const slippageTicks = sp.slip && Number(sp.slip) >= 0 ? Number(sp.slip) : 1;
@@ -68,7 +75,7 @@ export default async function EditIdeaPage({
 
   const simTrades = idea.trades.filter((t) => t.pnl !== null).sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
   const tradeBars = await loadTradeBars(simTrades, 8);
-  const anyRule = stopVal !== null || targetVal !== null || beVal !== null;
+  const anyRule = stopVal !== null || targetVal !== null || targetSlots.length > 0 || beVal !== null;
   const results = simulateSequential(
     simTrades,
     tradeBars,
@@ -76,6 +83,8 @@ export default async function EditIdeaPage({
     (spec) => ({
       stopTicks: toTicks(stopVal, spec),
       targetTicks: toTicks(targetVal, spec),
+      targets: targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
+      beAfterFirstTarget: beAfterT1,
       beTriggerTicks: toTicks(beVal, spec),
       slippageTicks,
       ignoreActualExit: anyRule,
@@ -88,7 +97,7 @@ export default async function EditIdeaPage({
   const diff = simTotal - actualTotal;
   const tiles: Tile[] = [
     { lbl: "Actual net P&L", val: fmtMoney(Math.round(actualTotal)), cls: actualTotal > 0 ? "pos" : actualTotal < 0 ? "neg" : "", delta: `${simTrades.length} closed trades` },
-    { lbl: "What-if P&L", val: fmtMoney(Math.round(simTotal)), cls: simTotal > 0 ? "pos" : simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix}` },
+    { lbl: "What-if P&L", val: fmtMoney(Math.round(simTotal)), cls: simTotal > 0 ? "pos" : simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · ${targetSlots.length ? targetSlots.map((x, i) => `T${i + 1} ${x.size}${unitSuffix}×${x.qty}`).join(" ") : `target ${targetVal ?? "—"}${unitSuffix}`}${beAfterT1 ? " · BE after T1" : ""} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix}` },
     { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your exits" : diff < 0 ? "your exits were better" : undefined },
     { lbl: "Avg RR", val: rr.avgRR === null ? "—" : `${rr.avgRR > 0 ? "+" : ""}${rr.avgRR.toFixed(2)}R`, cls: rr.avgRR !== null && rr.avgRR > 0 ? "pos" : rr.avgRR !== null && rr.avgRR < 0 ? "neg" : "", delta: `risk from own SL in ${rr.withOwnSl} of ${rr.rrCounted} counted trades, else avg stop of this idea's trades · BE excluded${rr.noRiskRef ? ` · ${rr.noRiskRef} skipped (no SL reference)` : ""}` },
     { lbl: "Win rate", val: rr.winRate === null ? "—" : `${Math.round(rr.winRate * 100)}%`, delta: `${rr.wins}W / ${rr.losses}L / ${rr.be} BE — break-even counts as a loss` },
@@ -107,6 +116,12 @@ export default async function EditIdeaPage({
   const simQ =
     (sp.stop ? `&wstop=${sp.stop}` : "") +
     (sp.target ? `&wtarget=${sp.target}` : "") +
+    [1, 2, 3].map((i) => {
+      const v = (sp as Record<string, string | undefined>)[`t${i}`];
+      const q = (sp as Record<string, string | undefined>)[`q${i}`];
+      return v ? `&t${i}=${v}${q ? `&q${i}=${q}` : ""}` : "";
+    }).join("") +
+    (beAfterT1 ? "&bet1=1" : "") +
     (sp.be ? `&be=${sp.be}` : "") +
     (noBe ? "&nobe=1" : "");
   // One combined table: sim cells + row actions plugged into the shared TradesTable.
@@ -135,7 +150,7 @@ export default async function EditIdeaPage({
           simCls: r.simPnl > 0 ? "pos" : r.simPnl < 0 ? "neg" : "",
           d: fmtU(d),
           dCls: d > 0 ? "pos" : d < 0 ? "neg" : "",
-          exitText: reason.text,
+          exitText: r.exitLabel ?? reason.text,
           exitCls: reason.cls,
           noBars: !r.simulated,
         },
@@ -170,7 +185,7 @@ export default async function EditIdeaPage({
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
-      unit: sp.unit, stop: sp.stop, target: sp.target, be: sp.be, nobe: sp.nobe, slip: sp.slip,
+      unit: sp.unit, stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip,
       ...patch,
     };
     for (const [k, v] of Object.entries(cur)) if (v) p.set(k, v);
@@ -229,9 +244,17 @@ export default async function EditIdeaPage({
             Stop
             <input className="tj-input" name="stop" type="number" min={0} step="any" defaultValue={sp.stop ?? ""} placeholder={unitSuffix} style={{ width: 76 }} />
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
-            Target
-            <input className="tj-input" name="target" type="number" min={0} step="any" defaultValue={sp.target ?? ""} placeholder={unitSuffix} style={{ width: 76 }} />
+          {[1, 2, 3].map((i) => (
+            <label key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12.5, color: "var(--ink-2)" }} title={`Target ${i}: distance in ${unitSuffix} per contract × contracts to close there. Contracts beyond the targets ride until stop/BE/session end`}>
+              T{i}
+              <input className="tj-input" name={`t${i}`} type="number" min={0} step="any" defaultValue={(sp as Record<string, string | undefined>)[`t${i}`] ?? ""} placeholder={unitSuffix} style={{ width: 66 }} />
+              ×
+              <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 44 }} />
+            </label>
+          ))}
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)" }} title="Move the stop of the remaining contracts to break-even right after the first target fills">
+            <input type="checkbox" name="bet1" value="1" defaultChecked={beAfterT1} style={{ accentColor: "var(--s1)" }} />
+            BE after T1
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
             BE after
@@ -246,7 +269,7 @@ export default async function EditIdeaPage({
             <input className="tj-input" name="slip" type="number" min={0} step={1} defaultValue={slippageTicks} style={{ width: 58 }} />
           </label>
           <button className="btn btn-sm" type="submit">Simulate</button>
-          {(anyRule || noBe) && (
+          {(anyRule || noBe || beAfterT1) && (
             <Link href={`/ideas/${id}/edit?unit=${unit}`} className="btn ghost btn-sm">Reset</Link>
           )}
         </form>

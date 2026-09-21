@@ -6,9 +6,19 @@ import { bars } from "@/db/schema";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import type { TradeRow } from "@/lib/metrics";
 
+export type SimTarget = {
+  ticks: number; // distance from entry, in ticks
+  qty: number; // contracts to close at this target
+};
+
 export type SimParams = {
   stopTicks: number | null; // null = no virtual stop
   targetTicks: number | null; // null = no virtual target (exit as traded)
+  /** Multiple targets with per-target contracts (overrides targetTicks when set).
+   *  Contracts beyond the sum of target qtys ride until stop/BE/session end. */
+  targets?: SimTarget[] | null;
+  /** Move the remaining stop to break-even right after the FIRST target fills. */
+  beAfterFirstTarget?: boolean;
   slippageTicks: number; // extra ticks lost on stop fills
   /** Move the stop to break-even after price goes this many ticks in favor; null = no BE move. */
   beTriggerTicks?: number | null;
@@ -21,6 +31,8 @@ export type SimResult = {
   tradeId: string;
   simulated: boolean; // false = no bars coverage, actual result used
   exitReason: "stop" | "target" | "breakeven" | "sessionEnd" | "asTraded" | "skipped";
+  /** Human chip for multi-target fills, e.g. "T1 1 + T2 1" or "T1 1 + BE 1". */
+  exitLabel?: string;
   actualPnl: number; // net, USD (as recorded)
   simPnl: number; // net, USD
   /** When the simulated position actually closed (drives the one-position-at-a-time rule). */
@@ -53,7 +65,9 @@ export function simulateTrade(
 
   const beTrigger = p.beTriggerTicks ?? null;
   const ignoreExit = p.ignoreActualExit ?? false;
-  if (!tradeBars.length || (p.stopTicks === null && p.targetTicks === null && beTrigger === null && !ignoreExit)) {
+  const multi = (p.targets ?? []).filter((x) => x.ticks > 0 && x.qty > 0).sort((a, b) => a.ticks - b.ticks);
+  const hasRule = p.stopTicks !== null || p.targetTicks !== null || multi.length > 0 || beTrigger !== null;
+  if (!tradeBars.length || (!hasRule && !ignoreExit)) {
     return { ...base, exitReason: "asTraded", simPnl: actualPnl, exitTime: t.exitTime, exitPrice: null };
   }
 
@@ -63,9 +77,101 @@ export function simulateTrade(
   const activeBars = cutoff === null ? tradeBars : tradeBars.filter((b) => b.time.getTime() <= cutoff);
 
   let stopPrice = p.stopTicks === null ? null : entry - dir * p.stopTicks * spec.tickSize;
-  const targetPrice = p.targetTicks === null ? null : entry + dir * p.targetTicks * spec.tickSize;
   const beLevel = beTrigger === null ? null : entry + dir * beTrigger * spec.tickSize;
   let beArmed = false;
+
+  // ---------- multi-target mode: partial exits, contract by contract ----------
+  if (multi.length > 0) {
+    // Assign contracts to targets in order; anything beyond the sum is a runner.
+    let remaining = qty;
+    const legs = multi
+      .map((x) => {
+        const take = Math.min(x.qty, remaining);
+        remaining -= take;
+        return { price: entry + dir * x.ticks * spec.tickSize, qty: take, label: "" };
+      })
+      .filter((l) => l.qty > 0);
+    legs.forEach((l, i) => (l.label = `T${i + 1}`));
+
+    let open = qty;
+    let gross = 0;
+    const fills: string[] = [];
+    let lastTime: Date | null = null;
+    let lastPrice: number | null = null;
+    let nextLeg = 0;
+    let anyTargetFilled = false;
+
+    const closeAt = (price: number, n: number, label: string, time: Date) => {
+      gross += (price - entry) * dir * n * pv;
+      open -= n;
+      fills.push(`${label} ${n}`);
+      lastTime = time;
+      lastPrice = price;
+    };
+
+    for (const b of activeBars) {
+      if (open <= 0) break;
+      const stopHit = stopPrice !== null && (dir === 1 ? b.low <= stopPrice : b.high >= stopPrice);
+      if (stopHit) {
+        // conservative: stop wins ties; slippage worsens the fill
+        const isBe = Math.abs(stopPrice! - entry) < 1e-9;
+        const fill = stopPrice! - dir * p.slippageTicks * spec.tickSize;
+        closeAt(fill, open, isBe ? "BE" : "stop", b.time);
+        break;
+      }
+      // Targets inside this bar, nearest first (conservative order).
+      while (nextLeg < legs.length && open > 0) {
+        const leg = legs[nextLeg];
+        const hit = dir === 1 ? b.high >= leg.price : b.low <= leg.price;
+        if (!hit) break;
+        closeAt(leg.price, Math.min(leg.qty, open), leg.label, b.time);
+        nextLeg++;
+        if (!anyTargetFilled) {
+          anyTargetFilled = true;
+          if (p.beAfterFirstTarget) {
+            stopPrice = stopPrice === null ? entry : dir === 1 ? Math.max(stopPrice, entry) : Math.min(stopPrice, entry);
+          }
+        }
+      }
+      // BE trigger by favorable move (applies from the NEXT bar).
+      if (!beArmed && beLevel !== null && (dir === 1 ? b.high >= beLevel : b.low <= beLevel)) {
+        beArmed = true;
+        stopPrice = stopPrice === null ? entry : dir === 1 ? Math.max(stopPrice, entry) : Math.min(stopPrice, entry);
+      }
+    }
+
+    if (open > 0) {
+      if (ignoreExit && activeBars.length) {
+        const last = activeBars[activeBars.length - 1];
+        closeAt(last.close, open, "session end", last.time);
+      } else if (t.exitTime && t.avgExitPrice !== null) {
+        // replay window ended at the actual exit — close the rest as traded
+        closeAt(Number(t.avgExitPrice), open, "as traded", t.exitTime);
+      }
+    }
+
+    if (!fills.length) {
+      return { ...base, exitReason: "asTraded", simPnl: actualPnl, exitTime: t.exitTime, exitPrice: null };
+    }
+    const lastLabel = fills[fills.length - 1];
+    const exitReason: SimResult["exitReason"] = lastLabel.startsWith("stop")
+      ? "stop"
+      : lastLabel.startsWith("BE")
+        ? "breakeven"
+        : lastLabel.startsWith("session")
+          ? "sessionEnd"
+          : "target";
+    return {
+      ...base,
+      exitReason,
+      exitLabel: fills.join(" + "),
+      simPnl: gross - commission,
+      exitTime: lastTime,
+      exitPrice: lastPrice,
+    };
+  }
+
+  const targetPrice = p.targetTicks === null ? null : entry + dir * p.targetTicks * spec.tickSize;
 
   for (const b of activeBars) {
     const stopHit =

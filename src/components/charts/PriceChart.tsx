@@ -37,6 +37,8 @@ export type SimOverlay = {
   positive: boolean;
   stopPrice?: number | null;
   targetPrice?: number | null;
+  /** Multiple targets (multi-target simulation): dashed green lines. */
+  targetPrices?: { price: number; title: string }[];
 };
 
 const TIME_TFS = [
@@ -264,6 +266,9 @@ export default function PriceChart({
     }
     if (sim?.targetPrice) {
       candles.createPriceLine({ price: sim.targetPrice, color: "#0ca30c", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "SIM target" });
+    }
+    for (const tp of sim?.targetPrices ?? []) {
+      candles.createPriceLine({ price: tp.price, color: "#0ca30c", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: tp.title });
     }
 
     if (data.markers.length && agg.length) {

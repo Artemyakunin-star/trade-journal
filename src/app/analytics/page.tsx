@@ -50,7 +50,7 @@ export default async function AnalyticsPage({
 }: {
   searchParams: Promise<{
     range?: string; from?: string; to?: string; tfrom?: string; tto?: string; instrument?: string;
-    stop?: string; target?: string; be?: string; nobe?: string; slip?: string; unit?: string;
+    stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string; unit?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -63,6 +63,14 @@ export default async function AnalyticsPage({
   const num = (s?: string) => (s && Number(s) > 0 ? Number(s) : null);
   const stopVal = num(sp.stop);
   const targetVal = num(sp.target);
+  // Multiple targets: size in the active unit + contracts per target.
+  const targetSlots = [1, 2, 3]
+    .map((i) => ({
+      size: num((sp as Record<string, string | undefined>)[`t${i}`]),
+      qty: Math.max(1, Math.round(Number((sp as Record<string, string | undefined>)[`q${i}`] ?? 1) || 1)),
+    }))
+    .filter((x): x is { size: number; qty: number } => x.size !== null);
+  const beAfterT1 = sp.bet1 === "1";
   const noBe = sp.nobe === "1";
   const beVal = noBe ? null : num(sp.be);
   const slippageTicks = sp.slip && Number(sp.slip) >= 0 ? Number(sp.slip) : 1;
@@ -112,7 +120,7 @@ export default async function AnalyticsPage({
   if (isTime(sp.tto)) trades = trades.filter((t) => todOf(t.entryTime) <= sp.tto!);
 
   const tradeBars = await loadTradeBars(trades, 8); // extend past exits: sims are not cut by early real-life outs
-  const anyRule = stopVal !== null || targetVal !== null || beVal !== null;
+  const anyRule = stopVal !== null || targetVal !== null || targetSlots.length > 0 || beVal !== null;
   // One position at a time: while a simulated trade is still open, later real
   // re-entries are skipped (you would not have re-entered in that world).
   const results = simulateSequential(
@@ -122,6 +130,8 @@ export default async function AnalyticsPage({
     (spec) => ({
       stopTicks: toTicks(stopVal, spec),
       targetTicks: toTicks(targetVal, spec),
+      targets: targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
+      beAfterFirstTarget: beAfterT1,
       beTriggerTicks: toTicks(beVal, spec),
       slippageTicks,
       ignoreActualExit: anyRule,
@@ -151,7 +161,7 @@ export default async function AnalyticsPage({
   // table below follows the $/t/pt switch instead.
   const tiles: Tile[] = [
     { lbl: "Actual net P&L", val: fmtMoney(Math.round(sum.actualTotal)), cls: sum.actualTotal > 0 ? "pos" : sum.actualTotal < 0 ? "neg" : "", delta: `${sum.total} closed trades` },
-    { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · target ${targetVal ?? "—"}${unitSuffix} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
+    { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · ${targetSlots.length ? targetSlots.map((x, i) => `T${i + 1} ${x.size}${unitSuffix}×${x.qty}`).join(" ") : `target ${targetVal ?? "—"}${unitSuffix}`}${beAfterT1 ? " · BE after T1" : ""} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
     { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
     { lbl: "Win rate: actual → sim", val: `${Math.round(sum.actualWinRate * 100)}% → ${Math.round(sum.simWinRate * 100)}%` },
     { lbl: "Trades re-routed", val: `${sum.changed} of ${sum.covered}`, delta: (() => {
@@ -175,6 +185,8 @@ export default async function AnalyticsPage({
   const stopSweep = sweep(trades, tradeBars, specs, SWEEP_VALUES[unit].stop, (v, spec) => ({
     stopTicks: toTicks(v, spec),
     targetTicks: toTicks(targetVal, spec),
+    targets: targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
+    beAfterFirstTarget: beAfterT1,
     beTriggerTicks: toTicks(beVal, spec),
     slippageTicks,
     ignoreActualExit: true,
@@ -220,13 +232,19 @@ export default async function AnalyticsPage({
   const simQ =
     (sp.stop ? `&wstop=${sp.stop}` : "") +
     (sp.target ? `&wtarget=${sp.target}` : "") +
+    [1, 2, 3].map((i) => {
+      const v = (sp as Record<string, string | undefined>)[`t${i}`];
+      const q = (sp as Record<string, string | undefined>)[`q${i}`];
+      return v ? `&t${i}=${v}${q ? `&q${i}=${q}` : ""}` : "";
+    }).join("") +
+    (beAfterT1 ? "&bet1=1" : "") +
     (sp.be ? `&be=${sp.be}` : "") +
     (noBe ? "&nobe=1" : "");
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
       range, from: sp.from, to: sp.to, tfrom: sp.tfrom, tto: sp.tto, instrument: sp.instrument,
-      stop: sp.stop, target: sp.target, be: sp.be, nobe: sp.nobe, slip: sp.slip, unit: sp.unit,
+      stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip, unit: sp.unit,
       ...patch,
     };
     for (const [k, v] of Object.entries(cur)) if (v) p.set(k, v);
@@ -292,9 +310,17 @@ export default async function AnalyticsPage({
             Stop
             <input className="tj-input" name="stop" type="number" min={0} step="any" defaultValue={sp.stop ?? ""} placeholder={unitSuffix} style={{ width: 76 }} title={`Stop size per contract, ${unitSuffix}`} />
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
-            Target
-            <input className="tj-input" name="target" type="number" min={0} step="any" defaultValue={sp.target ?? ""} placeholder={unitSuffix} style={{ width: 76 }} title={`Target size per contract, ${unitSuffix}`} />
+          {[1, 2, 3].map((i) => (
+            <label key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12.5, color: "var(--ink-2)" }} title={`Target ${i}: distance in ${unitSuffix} per contract × contracts to close there. Contracts beyond the targets ride until stop/BE/session end`}>
+              T{i}
+              <input className="tj-input" name={`t${i}`} type="number" min={0} step="any" defaultValue={(sp as Record<string, string | undefined>)[`t${i}`] ?? ""} placeholder={unitSuffix} style={{ width: 66 }} />
+              ×
+              <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 44 }} />
+            </label>
+          ))}
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)" }} title="Move the stop of the remaining contracts to break-even right after the first target fills">
+            <input type="checkbox" name="bet1" value="1" defaultChecked={beAfterT1} style={{ accentColor: "var(--s1)" }} />
+            BE after T1
           </label>
           <BeField defaultBe={sp.be ?? ""} defaultNoBe={noBe} suffix={unitSuffix} />
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
@@ -314,7 +340,7 @@ export default async function AnalyticsPage({
             <input className="tj-input" name="tto" type="time" defaultValue={isTime(sp.tto) ? sp.tto : ""} style={{ width: 110 }} />
           </span>
           <button className="btn" type="submit">Simulate</button>
-          {(anyRule || noBe || customFrom || customTo || sp.tfrom || sp.tto) && (
+          {(anyRule || noBe || beAfterT1 || customFrom || customTo || sp.tfrom || sp.tto) && (
             <Link href={`/analytics?range=${range}&unit=${unit}`} className="btn ghost">Reset</Link>
           )}
         </form>
@@ -374,7 +400,7 @@ export default async function AnalyticsPage({
                       {fmtU(d)}
                     </td>
                     <td>
-                      <span className={"status-chip " + reason.cls}>{reason.text}</span>
+                      <span className={"status-chip " + reason.cls}>{r.exitLabel ?? reason.text}</span>
                       {!r.simulated && (
                         <span className="section-note" style={{ marginLeft: 6 }} title="No imported bars for this trade — kept as traded">
                           no bars
