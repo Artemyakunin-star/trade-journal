@@ -1,18 +1,23 @@
 // Settings: display timezone, color scheme, instrument specs & commissions.
 import { db } from "@/db";
+import { eq } from "drizzle-orm";
+import { requireUserId } from "@/lib/auth";
 import { addInstrument, renameAccount, saveDisplaySettings, saveInstrument } from "@/app/actions";
 import { getSettings, TIMEZONES } from "@/lib/settings";
-import { executions, trades } from "@/db/schema";
+import { executions, trades, userCommissions } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [prefs, instruments, tradeAccounts, execAccounts] = await Promise.all([
-    getSettings(),
+  const uid = await requireUserId();
+  const [prefs, instruments, tradeAccounts, execAccounts, myCommissions] = await Promise.all([
+    getSettings(uid),
     db.query.instruments.findMany({ orderBy: (i, { asc }) => [asc(i.symbol)] }),
-    db.selectDistinct({ account: trades.account }).from(trades),
-    db.selectDistinct({ account: executions.account }).from(executions),
+    db.selectDistinct({ account: trades.account }).from(trades).where(eq(trades.userId, uid)),
+    db.selectDistinct({ account: executions.account }).from(executions).where(eq(executions.userId, uid)),
+    db.select().from(userCommissions).where(eq(userCommissions.userId, uid)),
   ]);
+  const myCom = Object.fromEntries(myCommissions.map((c) => [c.symbol, c.commission]));
   // Accounts safe to rename: no executions behind them (trade lists / manual).
   const execSet = new Set(execAccounts.map((a) => a.account));
   const renamable = tradeAccounts.map((a) => a.account).filter((a) => !execSet.has(a)).sort();
@@ -95,14 +100,14 @@ export default async function SettingsPage() {
                   <tr key={i.symbol}>
                     <td style={{ fontWeight: 600, color: "var(--ink)" }}>{i.symbol}</td>
                     <td style={{ whiteSpace: "normal" }}>{i.name}</td>
-                    <SpecCells symbol={i.symbol} tickSize={i.tickSize} tickValue={i.tickValue} commission={i.commission} />
+                    <SpecCells symbol={i.symbol} tickSize={i.tickSize} tickValue={i.tickValue} commission={myCom[i.symbol] ?? "0"} />
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <div className="section-note">
-            Saving a row rebuilds all imported trades with the new commission (P&amp;L becomes net). Micro contracts
+            Commission is yours alone (other users have their own rates). Saving a row re-applies it to all your imported trades (P&amp;L becomes net). Micro contracts
             (MNQ, MES, MYM, M2K, MCL, MGC) are included by default.
           </div>
 

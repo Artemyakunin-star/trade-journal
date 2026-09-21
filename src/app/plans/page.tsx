@@ -1,5 +1,6 @@
 // Plans: Notion-style month calendar of daily plan notes + undated documents.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
 import { createDoc, openDailyDoc } from "@/app/actions";
 import { getSettings } from "@/lib/settings";
@@ -47,10 +48,11 @@ function monthTitle(ym: string): string {
 }
 
 export default async function PlansPage({ searchParams }: { searchParams: Promise<{ m?: string; view?: string }> }) {
+  const uid = await requireUserId();
   const sp = await searchParams;
   const [documents, prefs] = await Promise.all([
-    db.query.docs.findMany({ orderBy: (d, { desc }) => [desc(d.updatedAt)] }),
-    getSettings(),
+    db.query.docs.findMany({ where: (d, { eq: eq_ }) => eq_(d.userId, uid), orderBy: (d, { desc }) => [desc(d.updatedAt)] }),
+    getSettings(uid),
   ]);
 
   const today = kyivDateOf(new Date(), prefs.timezone);

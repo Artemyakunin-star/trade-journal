@@ -1,5 +1,6 @@
 // Write / edit the day plan (free text + news lines).
 import { db } from "@/db";
+import { requireUserId } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { plans } from "@/db/schema";
 import { upsertPlan } from "@/app/actions";
@@ -8,8 +9,9 @@ import { fmtDateLong } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function PlanPage({ params }: { params: Promise<{ date: string }> }) {
+  const uid = await requireUserId();
   const { date } = await params;
-  const plan = await db.query.plans.findFirst({ where: eq(plans.date, date) });
+  const plan = await db.query.plans.findFirst({ where: (pl, { and, eq: eq_ }) => and(eq_(pl.date, date), eq_(pl.userId, uid)) });
 
   const newsText = (plan?.news ?? [])
     .map((n) => `${n.time} | ${n.title} | ${n.importance}`)

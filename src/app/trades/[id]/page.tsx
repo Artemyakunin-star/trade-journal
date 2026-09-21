@@ -1,6 +1,7 @@
 // Trade detail: full round-trip info — every fill (partial TPs visible),
 // gross/commission/net, MAE/MFE in ticks and dollars, chart, note, idea link.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { eq, asc } from "drizzle-orm";
@@ -24,16 +25,17 @@ export default async function TradeDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string }>;
 }) {
+  const uid = await requireUserId();
   const { id } = await params;
   const sp = await searchParams;
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "usd") as PnlUnit;
-  const trade = await db.query.trades.findFirst({ where: eq(tradesTable.id, id) });
+  const trade = await db.query.trades.findFirst({ where: (t, { and: and_, eq: eq_ }) => and_(eq_(t.id, id), eq_(t.userId, uid)) });
   if (!trade) notFound();
 
   const [fills, allIdeas, prefs, instrument] = await Promise.all([
     db.select().from(executions).where(eq(executions.tradeId, id)).orderBy(asc(executions.time)),
-    getAllIdeas(),
-    getSettings(),
+    getAllIdeas(uid),
+    getSettings(uid),
     db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, trade.instrument) }),
   ]);
   const tz = prefs.timezone;

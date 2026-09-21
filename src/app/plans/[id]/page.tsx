@@ -1,5 +1,6 @@
 // Single Plans document: Notion-like editor.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { docs } from "@/db/schema";
@@ -10,8 +11,9 @@ import { deleteDoc } from "@/app/actions";
 export const dynamic = "force-dynamic";
 
 export default async function DocPage({ params }: { params: Promise<{ id: string }> }) {
+  const uid = await requireUserId();
   const { id } = await params;
-  const doc = await db.query.docs.findFirst({ where: eq(docs.id, id) });
+  const doc = await db.query.docs.findFirst({ where: (d, { and, eq: eq_ }) => and(eq_(d.id, id), eq_(d.userId, uid)) });
   if (!doc) notFound();
 
   return (

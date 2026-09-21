@@ -1,9 +1,10 @@
 import IdeaForm from "@/components/IdeaForm";
+import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
 import { getAllTrades } from "@/lib/metrics";
 import { fmtPrice, fmtTimeKyiv, kyivDateOf } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
-import { desc, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { docs } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -13,15 +14,16 @@ export default async function NewIdeaPage({
 }: {
   searchParams: Promise<{ date?: string; returnTo?: string }>;
 }) {
+  const uid = await requireUserId();
   const sp = await searchParams;
   const [instruments, allTrades, prefs, planDocs] = await Promise.all([
     db.query.instruments.findMany(),
-    getAllTrades(),
-    getSettings(),
+    getAllTrades(uid),
+    getSettings(uid),
     db
       .select({ id: docs.id, date: docs.date, title: docs.title })
       .from(docs)
-      .where(isNotNull(docs.date))
+      .where(and(isNotNull(docs.date), eq(docs.userId, uid)))
       .orderBy(desc(docs.date))
       .limit(60),
   ]);

@@ -3,12 +3,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { docImages } from "@/db/schema";
+import { currentUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 const MAX_BYTES = 4 * 1024 * 1024; // 4MB after client-side compression
 
 export async function POST(req: NextRequest) {
+  const uid = await currentUserId();
+  if (!uid) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const mimeType = req.headers.get("content-type") ?? "";
   if (!/^image\/(png|jpeg|webp|gif)$/.test(mimeType)) {
     return NextResponse.json({ error: "Only png/jpeg/webp/gif images are accepted" }, { status: 415 });
@@ -21,7 +24,7 @@ export async function POST(req: NextRequest) {
   const docId = req.nextUrl.searchParams.get("docId");
   const [row] = await db
     .insert(docImages)
-    .values({ docId: docId || null, mimeType, data: buf.toString("base64") })
+    .values({ userId: uid, docId: docId || null, mimeType, data: buf.toString("base64") })
     .returning({ id: docImages.id });
   return NextResponse.json({ id: row.id, url: `/api/images/${row.id}` });
 }

@@ -1,6 +1,7 @@
 // Day screen: plan + news + scenarios (gradeable), tilt flag, ideas of the day,
 // execution timeline. The day grade is derived from scenario outcomes.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import Tiles from "@/components/Tiles";
 import IdeaCard from "@/components/IdeaCard";
 import PriceChart from "@/components/charts/PriceChart";
@@ -26,6 +27,7 @@ import { getSettings, tzLabel } from "@/lib/settings";
 export const dynamic = "force-dynamic";
 
 export default async function DayPage({ params }: { params: Promise<{ date: string }> }) {
+  const uid = await requireUserId();
   const { date } = await params;
 
   const [plan, planDoc] = await Promise.all([
@@ -34,7 +36,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
       with: { scenarios: true },
     }),
     // The written plan from the Plans menu (Notion-like daily document).
-    db.query.docs.findFirst({ where: eq(docs.date, date) }),
+    db.query.docs.findFirst({ where: (d, { and, eq: eq_ }) => and(eq_(d.date, date), eq_(d.userId, uid)) }),
   ]);
 
   // Short plain-text preview of the TipTap document.
@@ -52,10 +54,10 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     return s ? s.slice(0, 320) + (s.length > 320 ? "…" : "") : null;
   })();
   const [rawTrades, allIdeas, selectedAccounts, prefs] = await Promise.all([
-    getAllTrades(),
-    getAllIdeas(),
+    getAllTrades(uid),
+    getAllIdeas(uid),
     getSelectedAccounts(),
-    getSettings(),
+    getSettings(uid),
   ]);
   const tz = prefs.timezone;
   const allTrades = filterByAccounts(rawTrades, selectedAccounts);

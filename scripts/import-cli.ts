@@ -12,7 +12,7 @@ async function main() {
     process.exit(1);
   }
   for (const f of files) {
-    const res = await importCsvFile(basename(f), readFileSync(f, "utf8"));
+    const res = await importCsvFile("legacy", basename(f), readFileSync(f, "utf8"));
     console.log(JSON.stringify(res));
   }
   process.exit(0);

@@ -15,7 +15,7 @@ const ITEMS = [
   { href: "/settings", ico: "⚙", label: "Settings" },
 ];
 
-export default function Sidebar({ footer }: { footer?: string }) {
+export default function Sidebar({ footer, userEmail }: { footer?: string; userEmail?: string }) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
@@ -32,7 +32,22 @@ export default function Sidebar({ footer }: { footer?: string }) {
           {it.label}
         </Link>
       ))}
-      <div className="foot">{footer ?? "NinjaTrader CSVs imported as Chicago time."}</div>
+      <div className="foot">
+        {userEmail && (
+          <div style={{ marginBottom: 6, wordBreak: "break-all" }}>
+            {userEmail}{" "}
+            <form action="/logout" method="post" style={{ display: "inline" }}>
+              <button
+                type="submit"
+                style={{ background: "none", border: "none", padding: 0, color: "var(--accent)", cursor: "pointer", font: "inherit" }}
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        )}
+        {footer ?? "NinjaTrader CSVs imported as Chicago time."}
+      </div>
     </aside>
   );
 }

@@ -1,6 +1,7 @@
 // Dashboard: tiles (trades/ideas mode), equity curve, mini calendar,
 // P&L by weekday & hour, recent trades.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import Tiles from "@/components/Tiles";
 import EquityChart from "@/components/charts/EquityChart";
 import BarsChart from "@/components/charts/BarsChart";
@@ -41,15 +42,16 @@ export default async function Dashboard({
 }: {
   searchParams: Promise<{ range?: string; mode?: string }>;
 }) {
+  const uid = await requireUserId();
   const sp = await searchParams;
   const range = (RANGES.find((r) => r.key === sp.range)?.key ?? "30d") as RangeKey;
   const mode = sp.mode === "ideas" ? "ideas" : "trades";
 
   const [rawTrades, rawIdeas, selectedAccounts, prefs, instrumentRows] = await Promise.all([
-    getAllTrades(),
-    getAllIdeas(),
+    getAllTrades(uid),
+    getAllIdeas(uid),
     getSelectedAccounts(),
-    getSettings(),
+    getSettings(uid),
     db.query.instruments.findMany(),
   ]);
   const specs = Object.fromEntries(

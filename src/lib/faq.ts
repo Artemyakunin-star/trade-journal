@@ -155,7 +155,11 @@ export const FAQ: FaqSection[] = [
     items: [
       {
         q: "Where is my data stored?",
-        a: "In the journal's own database — trades, bars, plans and screenshots. Nothing is sent to third parties. Note: the journal is currently a single-user beta without registration; user accounts and private workspaces are on the roadmap before any public product release.",
+        a: "In the journal's own database — trades, bars, plans and screenshots. Every account sees only its own journal; imported price bars are shared (they are public market data and everyone benefits from them). Nothing is sent to third parties.",
+      },
+      {
+        q: "My platform isn't supported. What can I do?",
+        a: "Upload a sample export from it on the Import screen (\"Your platform isn't supported?\") — a trade list, fills report or chart-data CSV, anonymized if you like. Importers are built from exactly these samples: that's how NinjaTrader, TradingView and DeepCharts support happened.",
       },
       {
         q: "Will there be automatic sync with my platform?",

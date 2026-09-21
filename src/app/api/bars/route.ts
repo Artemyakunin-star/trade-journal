@@ -7,6 +7,7 @@ import { bars, trades } from "@/db/schema";
 import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { parseInTimeZone, kyivDateOf } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
+import { currentUserId } from "@/lib/auth";
 import { siblingOf } from "@/lib/micro";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +43,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "instrument and date=YYYY-MM-DD required" }, { status: 400 });
   }
 
-  const { timezone: tz } = await getSettings();
+  const uid = await currentUserId();
+  if (!uid) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { timezone: tz } = await getSettings(uid);
   const dayStart = parseInTimeZone(`${date} 00:00:00`, tz);
   const nextDay = new Date(dayStart.getTime() + 25 * 3600 * 1000); // +25h, trimmed below
 
@@ -111,8 +114,8 @@ export async function GET(req: NextRequest) {
       .from(trades)
       .where(
         accounts.length
-          ? and(gte(trades.entryTime, dayStart), lt(trades.entryTime, nextDay), inArray(trades.account, accounts))
-          : and(gte(trades.entryTime, dayStart), lt(trades.entryTime, nextDay)),
+          ? and(eq(trades.userId, uid), gte(trades.entryTime, dayStart), lt(trades.entryTime, nextDay), inArray(trades.account, accounts))
+          : and(eq(trades.userId, uid), gte(trades.entryTime, dayStart), lt(trades.entryTime, nextDay)),
       )
       .orderBy(asc(trades.entryTime))
   ).filter((t) => kyivDateOf(t.entryTime, tz) === date);

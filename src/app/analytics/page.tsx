@@ -1,6 +1,7 @@
 // Analytics: what-if simulator across all trades, stop/target optimization
 // curves, MAE scatter and discipline tiles.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import AccountFilter from "@/components/AccountFilter";
 import Tiles from "@/components/Tiles";
 import BarsChart from "@/components/charts/BarsChart";
@@ -53,6 +54,7 @@ export default async function AnalyticsPage({
     stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string; unit?: string;
   }>;
 }) {
+  const uid = await requireUserId();
   const sp = await searchParams;
   const range = (RANGES.find((r) => r.key === sp.range)?.key ?? "all") as RangeKey2;
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "ticks") as PnlUnit;
@@ -85,10 +87,10 @@ export default async function AnalyticsPage({
   const unitSuffix = unit === "usd" ? "$" : unit === "ticks" ? "t" : "pt";
 
   const [rawTrades, allIdeas, selectedAccounts, prefs, instrumentRows] = await Promise.all([
-    getAllTrades(),
-    getAllIdeas(),
+    getAllTrades(uid),
+    getAllIdeas(uid),
     getSelectedAccounts(),
-    getSettings(),
+    getSettings(uid),
     db.query.instruments.findMany(),
   ]);
   const tz = prefs.timezone;

@@ -1,6 +1,7 @@
 // Calendar: Notion-style full month grid with ← Today → navigation.
 // Day cells show P&L, trade count, plan chip and rogue flags; click → Day screen.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import AccountFilter from "@/components/AccountFilter";
 import { db } from "@/db";
 import { dayAggregates, distinctAccounts, filterByAccounts, getAllTrades } from "@/lib/metrics";
@@ -28,12 +29,13 @@ export default async function CalendarPage({
 }: {
   searchParams: Promise<{ m?: string }>;
 }) {
+  const uid = await requireUserId();
   const sp = await searchParams;
   const [rawTrades, selectedAccounts, prefs, plansRows] = await Promise.all([
-    getAllTrades(),
+    getAllTrades(uid),
     getSelectedAccounts(),
-    getSettings(),
-    db.query.plans.findMany({ columns: { date: true } }),
+    getSettings(uid),
+    db.query.plans.findMany({ where: (pl, { eq: eq_ }) => eq_(pl.userId, uid), columns: { date: true } }),
   ]);
   const tz = prefs.timezone;
   const trades = filterByAccounts(rawTrades, selectedAccounts);

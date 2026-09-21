@@ -7,9 +7,10 @@ import { redirect } from "next/navigation";
 import { ACCOUNTS_COOKIE_NAME, COLS_COOKIE_NAME } from "@/lib/prefs";
 import { TRADE_COLUMNS } from "@/lib/columns";
 import { db } from "@/db";
-import { docs, executions, ideas, instruments, plans, scenarios, settings, trades } from "@/db/schema";
+import { docs, executions, ideas, instruments, plans, scenarios, settings, trades, userCommissions } from "@/db/schema";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { computeMaeMfeFor, importCsvFile, rebuildAll, rebuildSymbol, type ImportResult } from "@/lib/import";
+import { computeMaeMfeFor, importCsvFile, rebuildSymbol, type ImportResult } from "@/lib/import";
+import { requireUserId } from "@/lib/auth";
 import { parseInTimeZone } from "@/lib/format";
 import { TIMEZONES } from "@/lib/settings";
 
@@ -24,11 +25,12 @@ function str(fd: FormData, name: string): string {
 }
 
 export async function createIdea(fd: FormData) {
+  const uid = await requireUserId();
   // Plan link: explicit select wins; fall back to "the plan of that day".
   const planDate = str(fd, "planDate");
   let planId: string | null = str(fd, "planId") || null;
   if (!planId && planDate) {
-    const plan = await db.query.plans.findFirst({ where: eq(plans.date, planDate) });
+    const plan = await db.query.plans.findFirst({ where: (pl, { and: and_, eq: eq_ }) => and_(eq_(pl.date, planDate), eq_(pl.userId, uid)) });
     planId = plan?.id ?? null;
   }
   const dateRaw = str(fd, "date");
@@ -36,6 +38,7 @@ export async function createIdea(fd: FormData) {
   const [idea] = await db
     .insert(ideas)
     .values({
+      userId: uid,
       planId,
       docId: str(fd, "docId") || null,
       date: /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null,
@@ -52,7 +55,7 @@ export async function createIdea(fd: FormData) {
   // Optionally attach pre-selected trades.
   const tradeIds = fd.getAll("tradeIds").map(String).filter(Boolean);
   for (const tid of tradeIds) {
-    await db.update(trades).set({ ideaId: idea.id }).where(eq(trades.id, tid));
+    await db.update(trades).set({ ideaId: idea.id }).where(and(eq(trades.id, tid), eq(trades.userId, uid)));
   }
 
   revalidatePath("/", "layout");
@@ -61,12 +64,13 @@ export async function createIdea(fd: FormData) {
 }
 
 export async function updateIdea(fd: FormData) {
+  const uid = await requireUserId();
   const id = str(fd, "id");
   const status = str(fd, "status");
   const grade = str(fd, "grade");
   const trigger = str(fd, "trigger");
 
-  const existing = await db.query.ideas.findFirst({ where: eq(ideas.id, id) });
+  const existing = await db.query.ideas.findFirst({ where: (i, { and: and_, eq: eq_ }) => and_(eq_(i.id, id), eq_(i.userId, uid)) });
   if (!existing) return;
 
   const becameInvalidated = status === "INVALIDATED" && existing.status !== "INVALIDATED";
@@ -98,20 +102,22 @@ export async function updateIdea(fd: FormData) {
 }
 
 export async function deleteIdea(fd: FormData) {
+  const uid = await requireUserId();
   const id = str(fd, "id");
-  await db.update(trades).set({ ideaId: null }).where(eq(trades.ideaId, id));
-  await db.delete(ideas).where(eq(ideas.id, id));
+  await db.update(trades).set({ ideaId: null }).where(and(eq(trades.ideaId, id), eq(trades.userId, uid)));
+  await db.delete(ideas).where(and(eq(ideas.id, id), eq(ideas.userId, uid)));
   revalidatePath("/", "layout");
   redirect("/ideas");
 }
 
 /** Attach several rogue trades to an idea (picker on the idea page). */
 export async function attachTradesToIdea(fd: FormData) {
+  const uid = await requireUserId();
   const ideaId = str(fd, "ideaId");
   const ids = fd.getAll("tradeIds").map(String).filter(Boolean);
   if (!ideaId || !ids.length) return;
   for (const tid of ids) {
-    await db.update(trades).set({ ideaId, updatedAt: new Date() }).where(eq(trades.id, tid));
+    await db.update(trades).set({ ideaId, updatedAt: new Date() }).where(and(eq(trades.id, tid), eq(trades.userId, uid)));
   }
   revalidatePath("/", "layout");
   redirect(`/ideas/${ideaId}/edit`);
@@ -119,12 +125,13 @@ export async function attachTradesToIdea(fd: FormData) {
 
 /** Attach / detach a trade to an idea (from the Trades table inline select). */
 export async function setTradeIdea(fd: FormData) {
+  const uid = await requireUserId();
   const tradeId = str(fd, "tradeId");
   const ideaId = str(fd, "ideaId");
   await db
     .update(trades)
     .set({ ideaId: ideaId === "" ? null : ideaId, updatedAt: new Date() })
-    .where(eq(trades.id, tradeId));
+    .where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
   revalidatePath("/", "layout");
 }
 
@@ -134,6 +141,7 @@ export async function setTradeIdea(fd: FormData) {
  * laid off from avg entry on the losing side and stored as a price.
  */
 export async function setTradeStop(fd: FormData) {
+  const uid = await requireUserId();
   const tradeId = str(fd, "tradeId");
   const raw = str(fd, "stopValue");
   const unit = str(fd, "unit"); // usd | ticks | points
@@ -142,7 +150,7 @@ export async function setTradeStop(fd: FormData) {
 
   let price: number | null = null;
   if (value !== null) {
-    const trade = await db.query.trades.findFirst({ where: eq(trades.id, tradeId) });
+    const trade = await db.query.trades.findFirst({ where: (t, { and: and_, eq: eq_ }) => and_(eq_(t.id, tradeId), eq_(t.userId, uid)) });
     if (!trade) return;
     const inst = await db.query.instruments.findFirst({
       where: (i, { eq: eq_ }) => eq_(i.symbol, trade.instrument),
@@ -158,27 +166,30 @@ export async function setTradeStop(fd: FormData) {
   await db
     .update(trades)
     .set({ stopPrice: price === null ? null : price.toFixed(4), updatedAt: new Date() })
-    .where(eq(trades.id, tradeId));
+    .where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
   revalidatePath("/", "layout");
 }
 
 /** Autosave for the rich per-idea write-up (screenshots + description). */
 export async function saveIdeaJournal(id: string, content: unknown) {
+  const uid = await requireUserId();
   if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
-  await db.update(ideas).set({ journal: content, updatedAt: new Date() }).where(eq(ideas.id, id));
+  await db.update(ideas).set({ journal: content, updatedAt: new Date() }).where(and(eq(ideas.id, id), eq(ideas.userId, uid)));
   revalidatePath(`/ideas/${id}/edit`);
 }
 
 /** Autosave for the rich per-trade journal (Notion-like editor on trade page). */
 export async function saveTradeJournal(id: string, content: unknown) {
+  const uid = await requireUserId();
   if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
-  await db.update(trades).set({ journal: content, updatedAt: new Date() }).where(eq(trades.id, id));
+  await db.update(trades).set({ journal: content, updatedAt: new Date() }).where(and(eq(trades.id, id), eq(trades.userId, uid)));
   revalidatePath(`/trades/${id}`);
 }
 
 /** Inline single-field updates from the trades table (keyLevel / ofConfirmation).
  *  New values are added to the dropdown vocabulary in settings automatically. */
 export async function setTradeField(fd: FormData) {
+  const uid = await requireUserId();
   const tradeId = str(fd, "tradeId");
   const field = str(fd, "field");
   const value = str(fd, "value") || null;
@@ -186,15 +197,15 @@ export async function setTradeField(fd: FormData) {
   await db
     .update(trades)
     .set({ [field]: value, updatedAt: new Date() })
-    .where(eq(trades.id, tradeId));
+    .where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
 
   if (value) {
     const { getSettings } = await import("@/lib/settings");
-    const prefs = await getSettings();
+    const prefs = await getSettings(uid);
     const key = field === "keyLevel" ? "keyLevelOptions" : "ofConfOptions";
     const list = field === "keyLevel" ? prefs.keyLevelOptions : prefs.ofConfOptions;
     if (!list.some((v) => v.toLowerCase() === value.toLowerCase())) {
-      await setSetting(key, [...list, value]);
+      await setSetting(uid, key, [...list, value]);
     }
   }
   revalidatePath("/", "layout");
@@ -208,6 +219,7 @@ export async function setTradeField(fd: FormData) {
  * trades); MAE/MFE fills in automatically if bars for that day are imported.
  */
 export async function createManualTrade(fd: FormData) {
+  const uid = await requireUserId();
   const account = str(fd, "account");
   const instrument = str(fd, "instrument");
   const direction = str(fd, "direction") === "SHORT" ? ("SHORT" as const) : ("LONG" as const);
@@ -230,7 +242,7 @@ export async function createManualTrade(fd: FormData) {
   if (exitPrice !== null && !(exitPrice > 0)) return;
 
   const { getSettings } = await import("@/lib/settings");
-  const prefs = await getSettings();
+  const prefs = await getSettings(uid);
   const toDate = (s: string) => parseInTimeZone(s.replace("T", " ").slice(0, 16) + ":00", prefs.timezone);
   const entryTime = toDate(entryAt);
   const exitTime = dtOk(exitAt) && exitPrice !== null ? toDate(exitAt) : null;
@@ -239,7 +251,10 @@ export async function createManualTrade(fd: FormData) {
   const inst = await db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, instrument) });
   const tickSize = inst ? Number(inst.tickSize) : 0.25;
   const tickValue = inst ? Number(inst.tickValue) : 5;
-  const rt = inst ? Number(inst.commission ?? 0) : 0; // USD per contract, round trip
+  const rtRow = await db.query.userCommissions.findFirst({
+    where: (c, { and: and_, eq: eq_ }) => and_(eq_(c.userId, uid), eq_(c.symbol, instrument)),
+  });
+  const rt = rtRow ? Number(rtRow.commission) : 0; // USD per contract, round trip
 
   // Commission: explicit value wins; blank = Settings round-trip commission
   // (half of it while the trade is still open — only the entry side filled).
@@ -264,6 +279,7 @@ export async function createManualTrade(fd: FormData) {
   const [ins] = await db
     .insert(trades)
     .values({
+      userId: uid,
       ideaId,
       account,
       instrument,
@@ -289,7 +305,7 @@ export async function createManualTrade(fd: FormData) {
     [ofConfirmation, "ofConfOptions", prefs.ofConfOptions],
   ] as const) {
     if (val && !list.some((v) => v.toLowerCase() === val.toLowerCase())) {
-      await setSetting(key, [...list, val]);
+      await setSetting(uid, key, [...list, val]);
     }
   }
 
@@ -302,10 +318,11 @@ export async function createManualTrade(fd: FormData) {
 
 /** Delete a manually added trade. Trades built from CSV executions are protected. */
 export async function deleteManualTrade(fd: FormData) {
+  const uid = await requireUserId();
   const tradeId = str(fd, "tradeId");
   const linked = await db.query.executions.findFirst({ where: eq(executions.tradeId, tradeId) });
   if (linked) return; // imported trade — comes back on re-import anyway; don't allow
-  await db.delete(trades).where(eq(trades.id, tradeId));
+  await db.delete(trades).where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
   revalidatePath("/", "layout");
   redirect(str(fd, "returnTo") || "/trades");
 }
@@ -317,12 +334,13 @@ export async function deleteManualTrade(fd: FormData) {
  *  journal / idea are taken from the first row that has them. The earliest
  *  row survives (links keep working); the others are deleted. */
 export async function mergeTrades(fd: FormData) {
+  const uid = await requireUserId();
   const ids = fd.getAll("mergeIds").map(String).filter(Boolean);
   const returnTo = str(fd, "returnTo") || "/trades";
   const fail = (msg: string) =>
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}mergeError=${encodeURIComponent(msg)}`);
   if (ids.length < 2) fail("Select at least two trades to merge");
-  const rows = await db.select().from(trades).where(inArray(trades.id, ids));
+  const rows = await db.select().from(trades).where(and(inArray(trades.id, ids), eq(trades.userId, uid)));
   if (rows.length < 2) fail("Trades not found");
   if (new Set(rows.map((r) => `${r.account}|${r.instrument}|${r.direction}`)).size > 1)
     fail("Only trades with the same account, instrument and direction can be merged");
@@ -375,12 +393,13 @@ export async function mergeTrades(fd: FormData) {
  *  Executions-built trades are protected: a re-import would restore the
  *  account from the CSV anyway. */
 export async function setTradeAccount(fd: FormData) {
+  const uid = await requireUserId();
   const tradeId = str(fd, "tradeId");
   const account = str(fd, "account");
   if (!account) return;
   const linked = await db.query.executions.findFirst({ where: eq(executions.tradeId, tradeId) });
   if (linked) return;
-  await db.update(trades).set({ account, updatedAt: new Date() }).where(eq(trades.id, tradeId));
+  await db.update(trades).set({ account, updatedAt: new Date() }).where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
   await widenAccountFilter([account]);
   revalidatePath("/", "layout");
 }
@@ -388,12 +407,13 @@ export async function setTradeAccount(fd: FormData) {
 /** Rename an account across all its trades — only for accounts that have no
  *  executions behind them (imported trade lists / manual trades). */
 export async function renameAccount(fd: FormData) {
+  const uid = await requireUserId();
   const from = str(fd, "from");
   const to = str(fd, "to");
   if (!from || !to || from === to) return;
-  const hasExecs = await db.query.executions.findFirst({ where: eq(executions.account, from) });
+  const hasExecs = await db.query.executions.findFirst({ where: (e, { and: and_, eq: eq_ }) => and_(eq_(e.account, from), eq_(e.userId, uid)) });
   if (hasExecs) return; // NT-imported account — names come from the CSVs
-  await db.update(trades).set({ account: to }).where(eq(trades.account, from));
+  await db.update(trades).set({ account: to }).where(and(eq(trades.account, from), eq(trades.userId, uid)));
 
   // Keep the account filter working: replace the old name if it was selected.
   const jar = await cookies();
@@ -409,17 +429,19 @@ export async function renameAccount(fd: FormData) {
 }
 
 export async function setTradeNote(fd: FormData) {
+  const uid = await requireUserId();
   const tradeId = str(fd, "tradeId");
   await db
     .update(trades)
     .set({ note: str(fd, "note") || null, updatedAt: new Date() })
-    .where(eq(trades.id, tradeId));
+    .where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
   revalidatePath("/", "layout");
 }
 
 // ---------- plan / scenarios ----------
 
 export async function upsertPlan(fd: FormData) {
+  const uid = await requireUserId();
   const date = str(fd, "date");
   const analysis = str(fd, "analysis");
   const newsRaw = str(fd, "news");
@@ -435,11 +457,11 @@ export async function upsertPlan(fd: FormData) {
         })
     : null;
 
-  const existing = await db.query.plans.findFirst({ where: eq(plans.date, date) });
+  const existing = await db.query.plans.findFirst({ where: (pl, { and: and_, eq: eq_ }) => and_(eq_(pl.date, date), eq_(pl.userId, uid)) });
   if (existing) {
     await db.update(plans).set({ analysis, news, updatedAt: new Date() }).where(eq(plans.id, existing.id));
   } else {
-    await db.insert(plans).values({ date, analysis, news });
+    await db.insert(plans).values({ userId: uid, date, analysis, news });
   }
   revalidatePath("/", "layout");
   redirect(`/day/${date}`);
@@ -479,21 +501,23 @@ export async function deleteScenario(fd: FormData) {
 // ---------- docs (the Plans section) ----------
 
 export async function createDoc() {
-  const [doc] = await db.insert(docs).values({ title: "Untitled" }).returning({ id: docs.id });
+  const uid = await requireUserId();
+  const [doc] = await db.insert(docs).values({ userId: uid, title: "Untitled" }).returning({ id: docs.id });
   revalidatePath("/plans");
   redirect(`/plans/${doc.id}`);
 }
 
 /** Open (or create) the daily plan note for a calendar day. */
 export async function openDailyDoc(fd: FormData) {
+  const uid = await requireUserId();
   const date = str(fd, "date");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-  const existing = await db.query.docs.findFirst({ where: eq(docs.date, date) });
+  const existing = await db.query.docs.findFirst({ where: (d, { and: and_, eq: eq_ }) => and_(eq_(d.date, date), eq_(d.userId, uid)) });
   if (existing) redirect(`/plans/${existing.id}`);
   const title = new Intl.DateTimeFormat("en-US", {
     timeZone: "UTC", weekday: "short", month: "short", day: "numeric",
   }).format(new Date(date + "T12:00:00Z"));
-  const [doc] = await db.insert(docs).values({ title: `Plan · ${title}`, date }).returning({ id: docs.id });
+  const [doc] = await db.insert(docs).values({ userId: uid, title: `Plan · ${title}`, date }).returning({ id: docs.id });
   revalidatePath("/plans");
   redirect(`/plans/${doc.id}`);
 }
@@ -512,17 +536,19 @@ function pruneEmptyImages(node: TipTapNode): TipTapNode {
 
 /** Autosave endpoint for the editor (called from the client, not a form). */
 export async function saveDoc(id: string, title: string, content: unknown) {
+  const uid = await requireUserId();
   if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
   await db
     .update(docs)
     .set({ title: title.trim() || "Untitled", content, updatedAt: new Date() })
-    .where(eq(docs.id, id));
+    .where(and(eq(docs.id, id), eq(docs.userId, uid)));
   revalidatePath("/plans");
 }
 
 export async function deleteDoc(fd: FormData) {
+  const uid = await requireUserId();
   const id = str(fd, "id");
-  await db.delete(docs).where(eq(docs.id, id));
+  await db.delete(docs).where(and(eq(docs.id, id), eq(docs.userId, uid)));
   revalidatePath("/plans");
   redirect("/plans");
 }
@@ -550,27 +576,29 @@ export async function setAccountFilter(fd: FormData) {
 
 // ---------- settings ----------
 
-async function setSetting(key: string, value: unknown) {
+async function setSetting(userId: string, key: string, value: unknown) {
   await db
     .insert(settings)
-    .values({ key, value })
-    .onConflictDoUpdate({ target: settings.key, set: { value } });
+    .values({ userId, key, value })
+    .onConflictDoUpdate({ target: [settings.userId, settings.key], set: { value } });
 }
 
 export async function saveDisplaySettings(fd: FormData) {
+  const uid = await requireUserId();
   const tz = str(fd, "timezone");
   const importTz = str(fd, "importTimezone");
   const theme = str(fd, "theme") === "light" ? "light" : "dark";
-  if (TIMEZONES.includes(tz)) await setSetting("timezone", tz);
-  if (TIMEZONES.includes(importTz)) await setSetting("importTimezone", importTz);
-  await setSetting("theme", theme);
+  if (TIMEZONES.includes(tz)) await setSetting(uid, "timezone", tz);
+  if (TIMEZONES.includes(importTz)) await setSetting(uid, "importTimezone", importTz);
+  await setSetting(uid, "theme", theme);
   const df = str(fd, "dateFormat");
-  if (df === "eu" || df === "us") await setSetting("dateFormat", df);
+  if (df === "eu" || df === "us") await setSetting(uid, "dateFormat", df);
   revalidatePath("/", "layout");
 }
 
 /** Update one instrument's specs; commissions are re-applied to all trades. */
 export async function saveInstrument(fd: FormData) {
+  const uid = await requireUserId();
   const symbol = str(fd, "symbol");
   const tickSize = Number(str(fd, "tickSize"));
   const tickValue = Number(str(fd, "tickValue"));
@@ -578,10 +606,14 @@ export async function saveInstrument(fd: FormData) {
   if (!symbol || !(tickSize > 0) || !(tickValue > 0) || commission < 0 || Number.isNaN(commission)) return;
   await db
     .update(instruments)
-    .set({ tickSize: String(tickSize), tickValue: String(tickValue), commission: String(commission) })
+    .set({ tickSize: String(tickSize), tickValue: String(tickValue) })
     .where(eq(instruments.symbol, symbol));
+  await db
+    .insert(userCommissions)
+    .values({ userId: uid, symbol, commission: String(commission) })
+    .onConflictDoUpdate({ target: [userCommissions.userId, userCommissions.symbol], set: { commission: String(commission) } });
   // Executions-built trades of this one symbol: rebuild from fills.
-  await rebuildSymbol(symbol);
+  await rebuildSymbol(uid, symbol);
 
   // Trades without executions behind them (trade lists, manual entry, merges):
   // one SQL update — P&L shifts by the commission delta, so it stays net.
@@ -595,6 +627,7 @@ export async function saveInstrument(fd: FormData) {
     })
     .where(
       and(
+        eq(trades.userId, uid),
         eq(trades.instrument, symbol),
         sql`abs(${trades.commission} - ${rate}::numeric * ${trades.quantity}) > 0.005`,
         sql`${trades.id} not in (select trade_id from executions where trade_id is not null)`,
@@ -605,6 +638,7 @@ export async function saveInstrument(fd: FormData) {
 }
 
 export async function addInstrument(fd: FormData) {
+  const uid = await requireUserId();
   const symbol = str(fd, "symbol").toUpperCase();
   const name = str(fd, "name") || symbol;
   const tickSize = Number(str(fd, "tickSize"));
@@ -613,8 +647,14 @@ export async function addInstrument(fd: FormData) {
   if (!/^[A-Z0-9]{1,8}$/.test(symbol) || !(tickSize > 0) || !(tickValue > 0)) return;
   await db
     .insert(instruments)
-    .values({ symbol, name, tickSize: String(tickSize), tickValue: String(tickValue), commission: String(commission) })
+    .values({ symbol, name, tickSize: String(tickSize), tickValue: String(tickValue) })
     .onConflictDoNothing();
+  if (commission > 0) {
+    await db
+      .insert(userCommissions)
+      .values({ userId: uid, symbol, commission: String(commission) })
+      .onConflictDoUpdate({ target: [userCommissions.userId, userCommissions.symbol], set: { commission: String(commission) } });
+  }
   revalidatePath("/settings");
 }
 
@@ -623,11 +663,12 @@ export async function addInstrument(fd: FormData) {
 export type ImportState = { results: ImportResult[] } | null;
 
 export async function importCsvs(_prev: ImportState, fd: FormData): Promise<ImportState> {
+  const uid = await requireUserId();
   const files = fd.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   const results: ImportResult[] = [];
   for (const f of files) {
     const text = await f.text();
-    const res = await importCsvFile(f.name, text);
+    const res = await importCsvFile(uid, f.name, text);
     await widenAccountFilter(res.accounts);
     results.push(res);
   }
@@ -643,10 +684,11 @@ export async function importCsvs(_prev: ImportState, fd: FormData): Promise<Impo
  * so partial re-sends are safe.
  */
 export async function importCsvPart(fd: FormData): Promise<ImportResult> {
+  const uid = await requireUserId();
   const filename = str(fd, "name");
   const file = fd.get("part");
   const text = file instanceof File ? await file.text() : String(file ?? "");
-  const res = await importCsvFile(filename, text, str(fd, "account") || undefined);
+  const res = await importCsvFile(uid, filename, text, str(fd, "account") || undefined);
   await widenAccountFilter(res.accounts);
   if (str(fd, "last") === "1") revalidatePath("/", "layout");
   return res;
@@ -663,4 +705,20 @@ async function widenAccountFilter(accounts?: string[]) {
   const missing = accounts.filter((a) => !selected.includes(a));
   if (!missing.length) return;
   jar.set(ACCOUNTS_COOKIE_NAME, [...selected, ...missing].join(","), { maxAge: 60 * 60 * 24 * 365, path: "/" });
+}
+
+// ---------- platform sample uploads ----------
+
+/** "My platform isn't supported": store a sample export so a parser can be
+ *  built for it. Only the head of the file is kept — enough to see the format. */
+export async function uploadPlatformSample(fd: FormData) {
+  const uid = await requireUserId();
+  const platform = str(fd, "platform");
+  const note = str(fd, "note") || null;
+  const file = fd.get("file");
+  if (!platform || !(file instanceof File) || file.size === 0) return;
+  const text = (await file.text()).slice(0, 200_000);
+  const { platformSamples } = await import("@/db/schema");
+  await db.insert(platformSamples).values({ userId: uid, platform, filename: file.name, content: text, note });
+  revalidatePath("/import");
 }

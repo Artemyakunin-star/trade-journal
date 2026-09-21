@@ -1,13 +1,14 @@
 // Trades screen: filterable table grouped by idea, inline attach-to-idea,
 // P&L unit selector ($ / ticks / points / exit price), account filter.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import TradesTable from "@/components/TradesTable";
 import { mergeTrades } from "@/app/actions";
 import AccountFilter from "@/components/AccountFilter";
 import ColumnsFilter from "@/components/ColumnsFilter";
 import { db } from "@/db";
 import { executions } from "@/db/schema";
-import { isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { distinctAccounts, filterByAccounts, getAllIdeas, getAllTrades } from "@/lib/metrics";
 import { fmtDate, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts, getVisibleTradeColumns } from "@/lib/prefs";
@@ -20,15 +21,16 @@ export default async function TradesPage({
 }: {
   searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; from?: string; to?: string; unit?: string; mergeError?: string }>;
 }) {
+  const uid = await requireUserId();
   const sp = await searchParams;
   const [allTrades, allIdeas, instruments, selectedAccounts, prefs, visibleCols, execTradeIds] = await Promise.all([
-    getAllTrades(),
-    getAllIdeas(),
+    getAllTrades(uid),
+    getAllIdeas(uid),
     db.query.instruments.findMany(),
     getSelectedAccounts(),
-    getSettings(),
+    getSettings(uid),
     getVisibleTradeColumns(),
-    db.selectDistinct({ tradeId: executions.tradeId }).from(executions).where(isNotNull(executions.tradeId)),
+    db.selectDistinct({ tradeId: executions.tradeId }).from(executions).where(and(isNotNull(executions.tradeId), eq(executions.userId, uid))),
   ]);
   const linkedIds = new Set(execTradeIds.map((e) => e.tradeId));
   const editableAccountIds = new Set(allTrades.filter((t) => !linkedIds.has(t.id)).map((t) => t.id));

@@ -1,6 +1,7 @@
 // Idea page — a mini-Analytics for one idea: its trades with a what-if
 // simulation, editing, a write-up with screenshots and attaching/adding trades.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import IdeaForm from "@/components/IdeaForm";
 import TradesTable from "@/components/TradesTable";
@@ -12,7 +13,7 @@ import { db } from "@/db";
 import { attachTradesToIdea, deleteIdea, deleteManualTrade, setTradeIdea } from "@/app/actions";
 import { getAllIdeas, getAllTrades, rrStats, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
-import { desc, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { docs, executions } from "@/db/schema";
 import { fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -28,9 +29,10 @@ export default async function EditIdeaPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ unit?: string; stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string }>;
 }) {
+  const uid = await requireUserId();
   const { id } = await params;
   const sp = await searchParams;
-  const [allIdeas, allTrades, prefs, visibleCols] = await Promise.all([getAllIdeas(), getAllTrades(), getSettings(), getVisibleTradeColumns()]);
+  const [allIdeas, allTrades, prefs, visibleCols] = await Promise.all([getAllIdeas(uid), getAllTrades(uid), getSettings(uid), getVisibleTradeColumns()]);
   const idea = allIdeas.find((i) => i.id === id);
   if (!idea) notFound();
   const tz = prefs.timezone;
@@ -39,10 +41,10 @@ export default async function EditIdeaPage({
     db
       .select({ id: docs.id, date: docs.date, title: docs.title })
       .from(docs)
-      .where(isNotNull(docs.date))
+      .where(and(isNotNull(docs.date), eq(docs.userId, uid)))
       .orderBy(desc(docs.date))
       .limit(60),
-    db.selectDistinct({ tradeId: executions.tradeId }).from(executions).where(isNotNull(executions.tradeId)),
+    db.selectDistinct({ tradeId: executions.tradeId }).from(executions).where(and(isNotNull(executions.tradeId), eq(executions.userId, uid))),
   ]);
   const linkedIds = new Set(execTradeIds.map((e) => e.tradeId));
   const specs = Object.fromEntries(

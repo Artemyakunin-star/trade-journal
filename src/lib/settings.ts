@@ -1,5 +1,7 @@
-// App settings (single user), stored in the `settings` table.
+// Per-user app settings, stored in the `settings` table.
 import { db } from "@/db";
+import { settings as settingsTable } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export type DateFmt = "eu" | "us";
 
@@ -30,8 +32,8 @@ export const TIMEZONES = [
   "America/Chicago",
 ];
 
-export async function getSettings(): Promise<AppSettings> {
-  const rows = await db.query.settings.findMany();
+export async function getSettings(userId: string): Promise<AppSettings> {
+  const rows = await db.select().from(settingsTable).where(eq(settingsTable.userId, userId));
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const timezone = typeof map.get("timezone") === "string" ? (map.get("timezone") as string) : DEFAULT_SETTINGS.timezone;
   const importTimezone =

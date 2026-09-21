@@ -1,5 +1,6 @@
 // Ideas screen: cards grid or list with filters + "new idea".
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import IdeaCard from "@/components/IdeaCard";
 import { getAllIdeas, ideaPnl, rrStats } from "@/lib/metrics";
 import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
@@ -12,11 +13,12 @@ export default async function IdeasPage({
 }: {
   searchParams: Promise<{ status?: string; trigger?: string; grade?: string; view?: string; date?: string; from?: string; to?: string; instrument?: string }>;
 }) {
+  const uid = await requireUserId();
   const sp = await searchParams;
   const view = sp.view === "list" ? "list" : "cards";
-  const prefs = await getSettings();
+  const prefs = await getSettings(uid);
   const tz = prefs.timezone;
-  let ideas = await getAllIdeas();
+  let ideas = await getAllIdeas(uid);
   const instruments = [...new Set(ideas.map((i) => i.instrument))].sort();
 
   // The idea's trading day: the explicit date field, or the day it was written.

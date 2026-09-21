@@ -386,3 +386,12 @@ form.mcal-cell { padding: 6px 7px; }
 }
 .import-ok { color: var(--pos); }
 .import-err { color: var(--crit); }
+
+/* Auth pages */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}

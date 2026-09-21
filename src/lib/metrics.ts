@@ -118,8 +118,9 @@ export type DayAgg = {
   rogue: number;
 };
 
-export async function getAllTrades(): Promise<TradeRow[]> {
+export async function getAllTrades(userId: string): Promise<TradeRow[]> {
   const rows = await db.query.trades.findMany({
+    where: (t, { eq }) => eq(t.userId, userId),
     orderBy: (t, { asc }) => [asc(t.entryTime)],
   });
   return rows as unknown as TradeRow[];
@@ -144,8 +145,9 @@ export function filterIdeasByAccounts(ideas: IdeaRow[], accounts: string[] | nul
     .filter((i) => i.trades.length > 0 || true); // keep tradeless ideas visible
 }
 
-export async function getAllIdeas(): Promise<IdeaRow[]> {
+export async function getAllIdeas(userId: string): Promise<IdeaRow[]> {
   const rows = await db.query.ideas.findMany({
+    where: (i, { eq }) => eq(i.userId, userId),
     with: { trades: true },
     orderBy: (i, { asc }) => [asc(i.createdAt)],
   });

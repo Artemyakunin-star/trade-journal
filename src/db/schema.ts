@@ -66,6 +66,39 @@ export const barTimeframeEnum = pgEnum("bar_timeframe", [
 
 export const importKindEnum = pgEnum("import_kind", ["EXECUTIONS", "BARS", "TRADES"]);
 
+// ---------- users ----------
+
+/** Registered user. Rows imported before multi-user existed belong to the
+ *  placeholder user "legacy", adopted by the first account that registers. */
+export const users = pgTable("users", {
+  id: text("id").primaryKey().$defaultFn(createId),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Per-user commission override: USD per contract per round trip. */
+export const userCommissions = pgTable(
+  "user_commissions",
+  {
+    userId: text("user_id").notNull(),
+    symbol: text("symbol").notNull(),
+    commission: numeric("commission", { precision: 10, scale: 4 }).notNull().default("0"),
+  },
+  (t) => [uniqueIndex("user_commissions_uq").on(t.userId, t.symbol)],
+);
+
+/** Sample export files uploaded by users whose platform isn't supported yet. */
+export const platformSamples = pgTable("platform_samples", {
+  id: text("id").primaryKey().$defaultFn(createId),
+  userId: text("user_id"),
+  platform: text("platform").notNull(),
+  filename: text("filename").notNull(),
+  content: text("content").notNull(), // first ~200KB of the file, enough to build a parser
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------- reference data ----------
 
 /** Contract specs needed to convert ticks <-> dollars (MAE/MFE, what-if). */
@@ -80,11 +113,16 @@ export const instruments = pgTable("instruments", {
   commission: numeric("commission", { precision: 10, scale: 4 }).notNull().default("0"),
 });
 
-/** Single-user app settings: key -> arbitrary JSON value. */
-export const settings = pgTable("settings", {
-  key: text("key").primaryKey(), // "timezone", "theme"
-  value: jsonb("value").notNull(),
-});
+/** Per-user app settings: (user, key) -> arbitrary JSON value. */
+export const settings = pgTable(
+  "settings",
+  {
+    userId: text("user_id").notNull().default("legacy"),
+    key: text("key").notNull(), // "timezone", "theme"
+    value: jsonb("value").notNull(),
+  },
+  (t) => [uniqueIndex("settings_user_key_uq").on(t.userId, t.key)],
+);
 
 // ---------- free-form documents (the "Plans" section) ----------
 
@@ -94,18 +132,20 @@ export const docs = pgTable(
   "docs",
   {
     id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull().default("legacy"),
     title: text("title").notNull().default("Untitled"),
     date: date("date", { mode: "string" }), // daily note binding (one per day)
     content: jsonb("content"), // TipTap document JSON
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("docs_date_uq").on(t.date)],
+  (t) => [uniqueIndex("docs_user_date_uq").on(t.userId, t.date)],
 );
 
 /** Pasted screenshots, stored inline (base64) and served via /api/images/[id]. */
 export const docImages = pgTable("doc_images", {
   id: text("id").primaryKey().$defaultFn(createId),
+  userId: text("user_id").notNull().default("legacy"),
   docId: text("doc_id").references(() => docs.id, { onDelete: "set null" }),
   mimeType: text("mime_type").notNull(),
   data: text("data").notNull(), // base64
@@ -118,16 +158,21 @@ export const docImages = pgTable("doc_images", {
  * Written BEFORE the session, free text. The only thing the trader keeps
  * in front of them while trading live.
  */
-export const plans = pgTable("plans", {
+export const plans = pgTable(
+  "plans",
+  {
   id: text("id").primaryKey().$defaultFn(createId),
-  date: date("date", { mode: "string" }).notNull().unique(), // one plan per trading day
+  userId: text("user_id").notNull().default("legacy"),
+  date: date("date", { mode: "string" }).notNull(), // one plan per trading day per user
   analysis: text("analysis").notNull(), // D1 -> tick analysis, free text (markdown)
   /** News list lives inside the plan, not as a separate entity:
    *  [{ time: "15:30", title: "Retail Sales (US)", importance: "high" }] */
   news: jsonb("news").$type<{ time: string; title: string; importance: "high" | "medium" | "low" }[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+  },
+  (t) => [uniqueIndex("plans_user_date_uq").on(t.userId, t.date)],
+);
 
 /**
  * A single "if X then Y" line of the plan. Evaluated at end of day;
@@ -161,6 +206,7 @@ export const ideas = pgTable(
   "ideas",
   {
     id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull().default("legacy"),
     planId: text("plan_id").references(() => plans.id, { onDelete: "set null" }),
     /** Link to a written plan document (the Plans menu, Notion-like). */
     docId: text("doc_id").references(() => docs.id, { onDelete: "set null" }),
@@ -203,6 +249,7 @@ export const trades = pgTable(
   "trades",
   {
     id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull().default("legacy"),
     ideaId: text("idea_id").references(() => ideas.id, { onDelete: "set null" }),
     account: text("account").notNull(),
     instrument: text("instrument")
@@ -251,6 +298,7 @@ export const executions = pgTable(
   "executions",
   {
     id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull().default("legacy"),
     importId: text("import_id").references(() => imports.id, { onDelete: "set null" }),
     tradeId: text("trade_id").references(() => trades.id, { onDelete: "set null" }),
     account: text("account").notNull(),
@@ -262,7 +310,7 @@ export const executions = pgTable(
     price: numeric("price", { precision: 12, scale: 4 }).notNull(),
     time: timestamp("time", { withTimezone: true, precision: 3 }).notNull(), // with ms; source local time = Europe/Kyiv
     orderId: text("order_id").notNull(),
-    executionId: text("execution_id").notNull().unique(), // natural dedupe key: re-import is safe
+    executionId: text("execution_id").notNull(), // natural dedupe key per user: re-import is safe
     commission: numeric("commission", { precision: 10, scale: 2 }).notNull().default("0"),
     positionBefore: integer("position_before").notNull(),
     positionAfter: integer("position_after").notNull(),
@@ -271,6 +319,7 @@ export const executions = pgTable(
   (t) => [
     index("executions_account_time_idx").on(t.account, t.time),
     index("executions_trade_idx").on(t.tradeId),
+    uniqueIndex("executions_user_exec_uq").on(t.userId, t.executionId),
   ],
 );
 
@@ -306,6 +355,7 @@ export const bars = pgTable(
 /** One row per imported CSV file: audit + idempotency + debugging. */
 export const imports = pgTable("imports", {
   id: text("id").primaryKey().$defaultFn(createId),
+  userId: text("user_id").notNull().default("legacy"),
   kind: importKindEnum("kind").notNull(),
   filename: text("filename").notNull(),
   account: text("account"), // for executions files

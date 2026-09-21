@@ -1,6 +1,7 @@
 // Manually add a trade (no CSV behind it) — from the Trades screen or a Day.
 // Times are entered in the Chart timezone; P&L is computed from the prices.
 import Link from "next/link";
+import { requireUserId } from "@/lib/auth";
 import ComboInput from "@/components/ComboInput";
 import { db } from "@/db";
 import { createManualTrade } from "@/app/actions";
@@ -14,14 +15,15 @@ export default async function NewTradePage({
 }: {
   searchParams: Promise<{ date?: string; ideaId?: string }>;
 }) {
+  const uid = await requireUserId();
   const sp = await searchParams;
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : null;
 
   const [allTrades, allIdeas, instruments, prefs] = await Promise.all([
-    getAllTrades(),
-    getAllIdeas(),
+    getAllTrades(uid),
+    getAllIdeas(uid),
     db.query.instruments.findMany(),
-    getSettings(),
+    getSettings(uid),
   ]);
   const accounts = distinctAccounts(allTrades);
   const symbols = instruments.map((i) => i.symbol).sort();

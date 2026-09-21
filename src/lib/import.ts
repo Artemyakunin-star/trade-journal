@@ -11,7 +11,7 @@
 // "Import timezone" in Settings (default America/Chicago, exchange time).
 // Converted to UTC on import; displayed in the Chart timezone.
 import { db } from "@/db";
-import { bars, executions, imports, instruments, trades } from "@/db/schema";
+import { bars, executions, imports, instruments, trades, userCommissions } from "@/db/schema";
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { parseInTimeZone } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -314,7 +314,7 @@ export type ImportResult = {
   error?: string;
 };
 
-export async function importCsvFile(filename: string, text: string, accountOverride?: string): Promise<ImportResult> {
+export async function importCsvFile(userId: string, filename: string, text: string, accountOverride?: string): Promise<ImportResult> {
   const firstLine = text.slice(0, 400).split("\n")[0] ?? "";
   const isExec = /ExecutionId/i.test(firstLine);
   // TradingView "Export chart data…": lowercase `time,open,…` header and/or a
@@ -326,11 +326,11 @@ export async function importCsvFile(filename: string, text: string, accountOverr
   const isDcTrades = !isExec && !isBars && /symbol|instrument/i.test(firstLine) && /entry/i.test(firstLine) && /exit/i.test(firstLine);
 
   try {
-    const { importTimezone } = await getSettings();
-    if (isExec) return await importExecutions(filename, text, importTimezone);
-    if (isTvBars) return await importTvBars(filename, text);
-    if (isBars) return await importBars(filename, text, importTimezone);
-    if (isDcTrades) return await importTradeList(filename, text, importTimezone, accountOverride);
+    const { importTimezone } = await getSettings(userId);
+    if (isExec) return await importExecutions(userId, filename, text, importTimezone);
+    if (isTvBars) return await importTvBars(userId, filename, text);
+    if (isBars) return await importBars(userId, filename, text, importTimezone);
+    if (isDcTrades) return await importTradeList(userId, filename, text, importTimezone, accountOverride);
     return { filename, kind: "UNKNOWN", inserted: 0, skipped: 0, error: "Doesn't look like an executions/bars exporter file, a TradingView chart export or a DeepCharts trade list" };
   } catch (e) {
     return {
@@ -351,7 +351,7 @@ export async function importCsvFile(filename: string, text: string, accountOverr
  * timezone does NOT apply. Symbol and timeframe come from the file name, e.g.
  * "CME_MINI_NQ1!, 1_a1b2c3.csv" (1 = 1-minute) or "…MNQ1!, 5S_….csv" (5-sec).
  */
-async function importTvBars(filename: string, text: string): Promise<ImportResult> {
+async function importTvBars(userId: string, filename: string, text: string): Promise<ImportResult> {
   const upper = filename.toUpperCase();
   // Continuous (NQ1!) or specific contract (ESU2026 / MNQZ25) in the file name.
   const contM = upper.match(/([A-Z]{1,4})[0-9]!/);
@@ -415,7 +415,7 @@ async function importTvBars(filename: string, text: string): Promise<ImportResul
 
   await ensureInstrument(symbol);
   const day = kyivDay(rows[rows.length - 1].time);
-  await db.insert(imports).values({ kind: "BARS", filename, instrument: symbol, tradingDay: day, rowCount: rows.length });
+  await db.insert(imports).values({ userId, kind: "BARS", filename, instrument: symbol, tradingDay: day, rowCount: rows.length });
 
   let inserted = 0;
   const CHUNK = 2000;
@@ -488,7 +488,7 @@ function normalizeDateTime(raw: string): string | null {
  * between versions, so columns are located by name and numbers/dates parsed
  * tolerantly (EU decimal commas included).
  */
-async function importTradeList(filename: string, text: string, tz: string, accountOverride?: string): Promise<ImportResult> {
+async function importTradeList(userId: string, filename: string, text: string, tz: string, accountOverride?: string): Promise<ImportResult> {
   const fallbackAccount = accountOverride?.trim() || "DeepCharts";
   const lines = text.split("\n").map((l) => l.replace(/^﻿/, "").replace(/\r$/, "")).filter((l) => l.trim());
   if (lines.length < 2) return { filename, kind: "TRADES", inserted: 0, skipped: 0, error: "The file has no data rows" };
@@ -583,7 +583,8 @@ async function importTradeList(filename: string, text: string, tz: string, accou
   const symbols = [...new Set(parsed.map((t) => t.symbol))];
   for (const s of symbols) await ensureInstrument(s);
   const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
-  const spec = Object.fromEntries(instRows.map((i) => [i.symbol, { pv: Number(i.tickValue) / Number(i.tickSize), rt: Number(i.commission ?? 0) }]));
+  const rtMap = await userCommissionMap(userId, symbols);
+  const spec = Object.fromEntries(instRows.map((i) => [i.symbol, { pv: Number(i.tickValue) / Number(i.tickSize), rt: rtMap[i.symbol] ?? 0 }]));
 
   // Dedup: same account+symbol+entry second+qty+entry price = same trade.
   const from = new Date(Math.min(...parsed.map((t) => t.entryTime.getTime())) - 60_000);
@@ -591,7 +592,7 @@ async function importTradeList(filename: string, text: string, tz: string, accou
   const existing = await db
     .select({ account: trades.account, instrument: trades.instrument, entryTime: trades.entryTime, quantity: trades.quantity, avgEntryPrice: trades.avgEntryPrice, exitTime: trades.exitTime, avgExitPrice: trades.avgExitPrice })
     .from(trades)
-    .where(and(gte(trades.entryTime, from), lte(trades.entryTime, to)));
+    .where(and(eq(trades.userId, userId), gte(trades.entryTime, from), lte(trades.entryTime, to)));
   // Exit time+price are part of the key so partial exits (same entry, different exits,
   // e.g. scaling out half at T2 and holding the rest) import as separate trades
   // instead of being collapsed as duplicates.
@@ -616,6 +617,7 @@ async function importTradeList(filename: string, text: string, tz: string, accou
     const dir = t.direction === "LONG" ? 1 : -1;
     const gross = t.pnl !== null ? t.pnl : (t.exit - t.entry) * dir * t.quantity * sp.pv;
     await db.insert(trades).values({
+      userId,
       account: t.account,
       instrument: t.symbol,
       direction: t.direction,
@@ -630,7 +632,7 @@ async function importTradeList(filename: string, text: string, tz: string, accou
     inserted++;
   }
 
-  await db.insert(imports).values({ kind: "TRADES", filename, instrument: symbols.join(","), tradingDay: null, rowCount: parsed.length });
+  await db.insert(imports).values({ userId, kind: "TRADES", filename, instrument: symbols.join(","), tradingDay: null, rowCount: parsed.length });
   const maeMfeComputed = await computeMaeMfeFor(null, symbols);
 
   return {
@@ -641,6 +643,16 @@ async function importTradeList(filename: string, text: string, tz: string, accou
     maeMfeComputed,
     accounts: [...new Set(parsed.map((t) => t.account))],
   };
+}
+
+/** Per-user round-trip commissions for the given symbols ($ per contract). */
+async function userCommissionMap(userId: string, symbols: string[]): Promise<Record<string, number>> {
+  if (!symbols.length) return {};
+  const rows = await db
+    .select()
+    .from(userCommissions)
+    .where(and(eq(userCommissions.userId, userId), inArray(userCommissions.symbol, symbols)));
+  return Object.fromEntries(rows.map((r) => [r.symbol, Number(r.commission)]));
 }
 
 async function ensureInstrument(symbol: string) {
@@ -658,7 +670,7 @@ async function ensureInstrument(symbol: string) {
   await db.insert(instruments).values({ symbol, ...spec }).onConflictDoNothing();
 }
 
-async function importExecutions(filename: string, text: string, tz: string): Promise<ImportResult> {
+async function importExecutions(userId: string, filename: string, text: string, tz: string): Promise<ImportResult> {
   const rows = parseExecutionsCsv(text, tz);
   if (!rows.length) return { filename, kind: "EXECUTIONS", inserted: 0, skipped: 0, error: "The file has no data rows" };
 
@@ -670,7 +682,7 @@ async function importExecutions(filename: string, text: string, tz: string): Pro
   const existing = await db
     .select({ id: executions.executionId })
     .from(executions)
-    .where(inArray(executions.executionId, ids));
+    .where(and(eq(executions.userId, userId), inArray(executions.executionId, ids)));
   const existingSet = new Set(existing.map((e) => e.id));
   const fresh = rows.filter((r) => !existingSet.has(r.executionId));
 
@@ -679,12 +691,13 @@ async function importExecutions(filename: string, text: string, tz: string): Pro
 
   const [imp] = await db
     .insert(imports)
-    .values({ kind: "EXECUTIONS", filename, account, tradingDay: day, rowCount: rows.length })
+    .values({ userId, kind: "EXECUTIONS", filename, account, tradingDay: day, rowCount: rows.length })
     .returning();
 
   if (fresh.length) {
     await db.insert(executions).values(
       fresh.map((r) => ({
+        userId,
         importId: imp.id,
         account: r.account,
         instrument: r.symbol,
@@ -705,7 +718,7 @@ async function importExecutions(filename: string, text: string, tz: string): Pro
   // Rebuild trades for the affected account+symbols from ALL stored executions
   // (idempotent: previously built trades for these executions are replaced,
   // but idea links survive via execution-set matching).
-  const built = await rebuildTradesFor(account, symbols);
+  const built = await rebuildTradesFor(userId, account, symbols);
   const maeMfeComputed = await computeMaeMfeFor(account, symbols);
 
   return {
@@ -719,7 +732,7 @@ function kyivDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
-async function importBars(filename: string, text: string, tz: string): Promise<ImportResult> {
+async function importBars(userId: string, filename: string, text: string, tz: string): Promise<ImportResult> {
   const parsed = parseBarsFilename(filename);
   if (parsed.symbol === "?") {
     return { filename, kind: "BARS", inserted: 0, skipped: 0, error: "Can't tell the instrument from the file name (expected bars_<symbol>_<contract>_<date>.csv, e.g. bars_NQ_SEP26_20260810.csv)" };
@@ -734,7 +747,7 @@ async function importBars(filename: string, text: string, tz: string): Promise<I
   // (Kyiv date of the last bar — the session ends on the trading day itself).
   const day = parsed.day ?? kyivDay(rows[rows.length - 1].time);
 
-  await db.insert(imports).values({ kind: "BARS", filename, instrument: symbol, tradingDay: day, rowCount: rows.length });
+  await db.insert(imports).values({ userId, kind: "BARS", filename, instrument: symbol, tradingDay: day, rowCount: rows.length });
 
   // Insert in chunks; composite unique index makes re-import idempotent.
   let inserted = 0;
@@ -768,19 +781,18 @@ async function importBars(filename: string, text: string, tz: string): Promise<I
  * Existing auto-built trades whose executions are being regrouped are deleted,
  * but their ideaId/note survive if the new trade has the same first execution.
  */
-async function rebuildTradesFor(account: string, symbols: string[]): Promise<number> {
+async function rebuildTradesFor(userId: string, account: string, symbols: string[]): Promise<number> {
   const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
   const pointValues: PointValues = {};
-  const rtCommission: Record<string, number> = {}; // USD per contract, round trip
+  const rtCommission = await userCommissionMap(userId, symbols); // USD per contract, round trip
   for (const i of instRows) {
     pointValues[i.symbol] = Number(i.tickValue) / Number(i.tickSize);
-    rtCommission[i.symbol] = Number(i.commission ?? 0);
   }
 
   const execRows = await db
     .select()
     .from(executions)
-    .where(and(eq(executions.account, account), inArray(executions.instrument, symbols)));
+    .where(and(eq(executions.userId, userId), eq(executions.account, account), inArray(executions.instrument, symbols)));
 
   const rows: ExecRow[] = execRows.map((e) => ({
     account: e.account,
@@ -804,7 +816,7 @@ async function rebuildTradesFor(account: string, symbols: string[]): Promise<num
   const oldTrades = await db
     .select()
     .from(trades)
-    .where(and(eq(trades.account, account), inArray(trades.instrument, symbols)));
+    .where(and(eq(trades.userId, userId), eq(trades.account, account), inArray(trades.instrument, symbols)));
   const oldByFirstExec = new Map<string, (typeof oldTrades)[number]>();
   for (const t of oldTrades) {
     const first = await db
@@ -836,6 +848,7 @@ async function rebuildTradesFor(account: string, symbols: string[]): Promise<num
     const [ins] = await db
       .insert(trades)
       .values({
+        userId,
         ideaId: prev?.ideaId ?? null,
         account: b.account,
         instrument: b.symbol,
@@ -861,24 +874,25 @@ async function rebuildTradesFor(account: string, symbols: string[]): Promise<num
 
 /** Rebuild executions-built trades of ONE symbol (e.g. after its commission
  *  changed) — much cheaper than rebuildAll on a serverless database. */
-export async function rebuildSymbol(symbol: string): Promise<number> {
+export async function rebuildSymbol(userId: string, symbol: string): Promise<number> {
   const accounts = await db
     .selectDistinct({ account: executions.account })
     .from(executions)
-    .where(eq(executions.instrument, symbol));
+    .where(and(eq(executions.userId, userId), eq(executions.instrument, symbol)));
   let total = 0;
   for (const a of accounts) {
-    total += await rebuildTradesFor(a.account, [symbol]);
+    total += await rebuildTradesFor(userId, a.account, [symbol]);
     await computeMaeMfeFor(a.account, [symbol]); // rebuild resets MAE/MFE
   }
   return total;
 }
 
 /** Rebuild all trades from stored executions (e.g. after commission changes). */
-export async function rebuildAll(): Promise<number> {
+export async function rebuildAll(userId: string): Promise<number> {
   const pairs = await db
     .selectDistinct({ account: executions.account, instrument: executions.instrument })
-    .from(executions);
+    .from(executions)
+    .where(eq(executions.userId, userId));
   const byAccount = new Map<string, string[]>();
   for (const p of pairs) {
     if (!byAccount.has(p.account)) byAccount.set(p.account, []);
@@ -886,7 +900,7 @@ export async function rebuildAll(): Promise<number> {
   }
   let total = 0;
   for (const [account, symbols] of byAccount) {
-    total += await rebuildTradesFor(account, symbols);
+    total += await rebuildTradesFor(userId, account, symbols);
     await computeMaeMfeFor(account, symbols);
   }
   return total;
