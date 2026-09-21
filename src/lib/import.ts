@@ -15,6 +15,7 @@ import { bars, executions, imports, instruments, trades } from "@/db/schema";
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { parseInTimeZone } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
+import { siblingOf } from "@/lib/micro";
 
 // ---------- CSV ----------
 
@@ -853,7 +854,10 @@ export async function rebuildAll(): Promise<number> {
 
 /** Compute MAE/MFE for closed trades that don't have it yet (bars permitting). */
 export async function computeMaeMfeFor(account: string | null, symbols: string[]): Promise<number> {
-  const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, symbols));
+  // Micro and mini contracts share prices, so imported NQ bars can also fill
+  // MAE/MFE for MNQ trades (and vice versa) — widen the candidate set.
+  const familySymbols = [...new Set(symbols.flatMap((s) => [s, siblingOf(s)]).filter((s): s is string => !!s))];
+  const instRows = await db.select().from(instruments).where(inArray(instruments.symbol, familySymbols));
   const tickSizes: Record<string, number> = {};
   for (const i of instRows) tickSizes[i.symbol] = Number(i.tickSize);
 
@@ -862,23 +866,28 @@ export async function computeMaeMfeFor(account: string | null, symbols: string[]
     .from(trades)
     .where(
       account
-        ? and(eq(trades.account, account), inArray(trades.instrument, symbols))
-        : inArray(trades.instrument, symbols),
+        ? and(eq(trades.account, account), inArray(trades.instrument, familySymbols))
+        : inArray(trades.instrument, familySymbols),
     );
 
   let computed = 0;
   for (const t of candidates) {
     if (t.maeTicks !== null || !t.exitTime) continue;
-    const tradeBars = await db
-      .select({ high: bars.high, low: bars.low })
-      .from(bars)
-      .where(
-        and(
-          eq(bars.instrument, t.instrument),
-          gte(bars.time, t.entryTime),
-          lte(bars.time, t.exitTime),
-        ),
-      );
+    const barSources = [t.instrument, siblingOf(t.instrument)].filter((s): s is string => !!s);
+    let tradeBars: { high: string; low: string }[] = [];
+    for (const src of barSources) {
+      tradeBars = await db
+        .select({ high: bars.high, low: bars.low })
+        .from(bars)
+        .where(
+          and(
+            eq(bars.instrument, src),
+            gte(bars.time, t.entryTime),
+            lte(bars.time, t.exitTime),
+          ),
+        );
+      if (tradeBars.length) break;
+    }
     const res = computeMaeMfe(
       {
         direction: t.direction,

@@ -7,6 +7,7 @@ import { bars, trades } from "@/db/schema";
 import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { parseInTimeZone, kyivDateOf } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
+import { siblingOf } from "@/lib/micro";
 
 export const dynamic = "force-dynamic";
 
@@ -45,34 +46,50 @@ export async function GET(req: NextRequest) {
   const dayStart = parseInTimeZone(`${date} 00:00:00`, tz);
   const nextDay = new Date(dayStart.getTime() + 25 * 3600 * 1000); // +25h, trimmed below
 
-  const fetchRows = (timeframe: "S5" | "S30" | "M1" | "T100") =>
+  // Micro contracts (MNQ…) share the mini's price series (NQ…): when the
+  // requested instrument has no bars, its sibling's bars back the chart.
+  const sibling = siblingOf(instrument);
+  const barSources = sibling ? [instrument, sibling] : [instrument];
+
+  const fetchRows = (timeframe: "S5" | "S30" | "M1" | "T100", inst: string) =>
     db
       .select({ time: bars.time, open: bars.open, high: bars.high, low: bars.low, close: bars.close, volume: bars.volume })
       .from(bars)
-      .where(and(eq(bars.instrument, instrument), eq(bars.timeframe, timeframe), gte(bars.time, dayStart), lt(bars.time, nextDay)))
+      .where(and(eq(bars.instrument, inst), eq(bars.timeframe, timeframe), gte(bars.time, dayStart), lt(bars.time, nextDay)))
       .orderBy(asc(bars.time));
 
-  const [rows, tfRows, instrumentRow] = await Promise.all([
-    fetchRows(tfReq),
+  const [tfRowsAll, instrumentRow] = await Promise.all([
     db
-      .selectDistinct({ timeframe: bars.timeframe })
+      .selectDistinct({ instrument: bars.instrument, timeframe: bars.timeframe })
       .from(bars)
-      .where(and(eq(bars.instrument, instrument), gte(bars.time, dayStart), lt(bars.time, nextDay))),
+      .where(and(inArray(bars.instrument, barSources), gte(bars.time, dayStart), lt(bars.time, nextDay))),
     db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, instrument) }),
   ]);
 
   let tf: "S5" | "S30" | "M1" | "T100" = tfReq;
-  let dayRows = rows.filter((r) => kyivDateOf(r.time, tz) === date);
-  // No 5-sec bars for the day? Fall back to the finest coarser data available
-  // (30-sec, then 1-minute — some platforms only export those).
-  if (tf === "S5" && !dayRows.length) {
-    for (const alt of ["S30", "M1"] as const) {
-      if (!tfRows.some((r) => r.timeframe === alt)) continue;
-      dayRows = (await fetchRows(alt)).filter((r) => kyivDateOf(r.time, tz) === date);
-      if (dayRows.length) {
-        tf = alt;
-        break;
+  let dayRows: Awaited<ReturnType<typeof fetchRows>> = [];
+  let barsInstrument = instrument;
+  for (const src of barSources) {
+    const tfRows = tfRowsAll.filter((r) => r.instrument === src);
+    tf = tfReq;
+    dayRows = tfRows.some((r) => r.timeframe === tfReq)
+      ? (await fetchRows(tfReq, src)).filter((r) => kyivDateOf(r.time, tz) === date)
+      : [];
+    // No 5-sec bars for the day? Fall back to the finest coarser data available
+    // (30-sec, then 1-minute — some platforms only export those).
+    if (tfReq === "S5" && !dayRows.length) {
+      for (const alt of ["S30", "M1"] as const) {
+        if (!tfRows.some((r) => r.timeframe === alt)) continue;
+        dayRows = (await fetchRows(alt, src)).filter((r) => kyivDateOf(r.time, tz) === date);
+        if (dayRows.length) {
+          tf = alt;
+          break;
+        }
       }
+    }
+    if (dayRows.length) {
+      barsInstrument = src;
+      break;
     }
   }
   const off = dayRows.length ? tzOffsetSeconds(dayRows[0].time, tz) : 0;
@@ -100,8 +117,14 @@ export async function GET(req: NextRequest) {
       .orderBy(asc(trades.entryTime))
   ).filter((t) => kyivDateOf(t.entryTime, tz) === date);
 
+  // Sibling trades (micro on the mini chart or vice versa) share the price
+  // scale, so their markers can overlay this chart. On by default; fam=0 hides.
+  const showFamily = q.get("fam") !== "0";
+  const siblingTradeCount = sibling ? allDayTrades.filter((t) => t.instrument === sibling).length : 0;
+
   const markers = allDayTrades.flatMap((t, idx) => {
-    if (t.instrument !== instrument) return [];
+    const isSibling = sibling !== null && t.instrument === sibling;
+    if (t.instrument !== instrument && !(showFamily && isSibling)) return [];
     if (tradeId && t.id !== tradeId) return []; // detail page: this trade only
     const n = idx + 1;
     const long = t.direction === "LONG";
@@ -114,10 +137,13 @@ export async function GET(req: NextRequest) {
       position: "aboveBar" | "belowBar"; shape: "arrowUp" | "arrowDown"; color: string;
       direction: "LONG" | "SHORT"; quantity: number; price: number;
       pnl?: number | null; points?: number | null; ticks?: number | null;
+      sym?: string; // set when the trade's instrument differs from the chart's
     };
+    const sym = t.instrument !== instrument ? t.instrument : undefined;
     const out: M[] = [
       {
         n,
+        sym,
         kind: "entry" as const,
         time: Math.floor(t.entryTime.getTime() / 1000) + off,
         position: long ? ("belowBar" as const) : ("aboveBar" as const),
@@ -131,6 +157,7 @@ export async function GET(req: NextRequest) {
     if (t.exitTime && exit !== null) {
       out.push({
         n,
+        sym,
         kind: "exit" as const,
         time: Math.floor(t.exitTime.getTime() / 1000) + off,
         position: long ? ("aboveBar" as const) : ("belowBar" as const),
@@ -156,7 +183,10 @@ export async function GET(req: NextRequest) {
     tf,
     off,
     tickSize,
-    hasTicks: tfRows.some((r) => r.timeframe === "T100"),
+    hasTicks: tfRowsAll.some((r) => r.instrument === barsInstrument && r.timeframe === "T100"),
+    barsInstrument,
+    sibling,
+    siblingTrades: siblingTradeCount,
     bars: series,
     markers,
   });

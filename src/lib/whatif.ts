@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { bars } from "@/db/schema";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import type { TradeRow } from "@/lib/metrics";
+import { siblingOf } from "@/lib/micro";
 
 export type SimTarget = {
   ticks: number; // distance from entry, in ticks
@@ -266,16 +267,21 @@ export async function loadTradeBars(
         extendHours * 3600_000,
     );
     let parsed: Bar[] = [];
-    for (const tf of ["S5", "S30", "M1"] as const) {
-      const rows = await db
-        .select({ time: bars.time, high: bars.high, low: bars.low, close: bars.close })
-        .from(bars)
-        .where(and(eq(bars.instrument, inst), eq(bars.timeframe, tf), gte(bars.time, from), lte(bars.time, to)))
-        .orderBy(asc(bars.time));
-      if (rows.length) {
-        parsed = rows.map((r) => ({ time: r.time, high: Number(r.high), low: Number(r.low), close: Number(r.close) }));
-        break;
+    // Micro contracts (MNQ…) can run on the mini's bars (NQ…) — same prices.
+    const sib = siblingOf(inst);
+    for (const src of sib ? [inst, sib] : [inst]) {
+      for (const tf of ["S5", "S30", "M1"] as const) {
+        const rows = await db
+          .select({ time: bars.time, high: bars.high, low: bars.low, close: bars.close })
+          .from(bars)
+          .where(and(eq(bars.instrument, src), eq(bars.timeframe, tf), gte(bars.time, from), lte(bars.time, to)))
+          .orderBy(asc(bars.time));
+        if (rows.length) {
+          parsed = rows.map((r) => ({ time: r.time, high: Number(r.high), low: Number(r.low), close: Number(r.close) }));
+          break;
+        }
       }
+      if (parsed.length) break;
     }
     for (const t of its) {
       const end =

@@ -26,8 +26,12 @@ type Marker = {
   pnl?: number | null;
   points?: number | null;
   ticks?: number | null;
+  sym?: string; // trade's own symbol when it differs from the chart's (micro on a mini chart)
 };
-type ApiResponse = { bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number; off: number; tf: "S5" | "S30" | "M1" | "T100" };
+type ApiResponse = {
+  bars: Bar[]; markers: Marker[]; hasTicks: boolean; tickSize: number; off: number; tf: "S5" | "S30" | "M1" | "T100";
+  barsInstrument?: string; sibling?: string | null; siblingTrades?: number;
+};
 
 export type SimOverlay = {
   /** UTC seconds of the simulated exit (unshifted). */
@@ -131,18 +135,19 @@ function snapToBar(barTimes: number[], t: number): number {
 
 function exitLabel(m: Marker, unit: Unit): string {
   if (m.kind !== "exit") return "";
+  const head = `#${m.n}${m.sym ? ` ${m.sym}` : ""} out`;
   switch (unit) {
     case "usd": {
       const v = m.pnl;
-      if (v === null || v === undefined) return `#${m.n} out`;
-      return `#${m.n} out ${v > 0 ? "+$" : v < 0 ? "−$" : "$"}${Math.abs(v).toLocaleString("en-US")}`;
+      if (v === null || v === undefined) return head;
+      return `${head} ${v > 0 ? "+$" : v < 0 ? "−$" : "$"}${Math.abs(v).toLocaleString("en-US")}`;
     }
     case "ticks":
-      return m.ticks === null || m.ticks === undefined ? `#${m.n} out` : `#${m.n} out ${m.ticks > 0 ? "+" : ""}${m.ticks}t`;
+      return m.ticks === null || m.ticks === undefined ? head : `${head} ${m.ticks > 0 ? "+" : ""}${m.ticks}t`;
     case "points":
-      return m.points === null || m.points === undefined ? `#${m.n} out` : `#${m.n} out ${m.points > 0 ? "+" : ""}${Number(m.points.toFixed(2))}pt`;
+      return m.points === null || m.points === undefined ? head : `${head} ${m.points > 0 ? "+" : ""}${Number(m.points.toFixed(2))}pt`;
     case "price":
-      return `#${m.n} out @ ${m.price.toLocaleString("en-US")}`;
+      return `${head} @ ${m.price.toLocaleString("en-US")}`;
   }
 }
 
@@ -170,6 +175,7 @@ export default function PriceChart({
   const [timeTf, setTimeTf] = useState(30);
   const [tickTf, setTickTf] = useState(2000);
   const [unit, setUnit] = useState<Unit>("usd");
+  const [fam, setFam] = useState(true); // overlay sibling (micro/mini) trades
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -182,16 +188,21 @@ export default function PriceChart({
     const params = new URLSearchParams({ instrument, date, tf: mode === "tick" ? "T100" : "S5" });
     if (accounts?.length) params.set("accounts", accounts.join(","));
     if (tradeId) params.set("tradeId", tradeId);
+    if (!fam) params.set("fam", "0");
     fetch(`/api/bars?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled) setData({ bars: d.bars ?? [], markers: d.markers ?? [], hasTicks: !!d.hasTicks, tickSize: d.tickSize ?? 0.25, off: d.off ?? 0, tf: d.tf ?? "S5" });
+        if (!cancelled)
+          setData({
+            bars: d.bars ?? [], markers: d.markers ?? [], hasTicks: !!d.hasTicks, tickSize: d.tickSize ?? 0.25, off: d.off ?? 0, tf: d.tf ?? "S5",
+            barsInstrument: d.barsInstrument, sibling: d.sibling ?? null, siblingTrades: d.siblingTrades ?? 0,
+          });
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [instrument, date, mode, accounts, tradeId]);
+  }, [instrument, date, mode, accounts, tradeId, fam]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -245,7 +256,7 @@ export default function PriceChart({
       size: 1,
       text:
         m.kind === "entry"
-          ? `#${m.n} ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${m.price.toLocaleString("en-US")}`
+          ? `#${m.n}${m.sym ? ` ${m.sym}` : ""} ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${m.price.toLocaleString("en-US")}`
           : exitLabel(m, unit),
     }));
     // Simulation overlay: exit marker + dashed stop/target levels.
@@ -302,7 +313,11 @@ export default function PriceChart({
     <div className="card" style={{ marginBottom: 14 }}>
       <h3 style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <span>
-          Price chart <span className="sub">entries #N in/out{tz ? ` · ${tz.split("/").pop()?.replace(/_/g, " ")} time` : ""}</span>
+          Price chart{" "}
+          <span className="sub">
+            entries #N in/out{tz ? ` · ${tz.split("/").pop()?.replace(/_/g, " ")} time` : ""}
+            {data?.barsInstrument && data.barsInstrument !== instrument ? ` · ${data.barsInstrument} bars` : ""}
+          </span>
         </span>
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
           {instruments.length > 1 && (
@@ -341,6 +356,13 @@ export default function PriceChart({
                 </button>
               ))}
           </span>
+          {!tradeId && !!data?.sibling && (data?.siblingTrades ?? 0) > 0 && (
+            <span className="seg" title={`Show ${data.sibling} trades on this chart (micro and mini share the same prices)`}>
+              <button className={fam ? "on" : ""} onClick={() => setFam((v) => !v)}>
+                +{data.sibling}
+              </button>
+            </span>
+          )}
           <span className="seg" title="Exit label units">
             {UNITS.map((u) => (
               <button key={u.key} className={unit === u.key ? "on" : ""} onClick={() => setUnit(u.key)}>
@@ -356,7 +378,7 @@ export default function PriceChart({
           No {mode === "tick" ? "tick" : ""} bars for {instrument} on {date}.{" "}
           {mode === "tick"
             ? "Tick charts need bars_*_T100_*.csv from the updated exporter."
-            : <>Import the day&apos;s bars on the Import screen — NinjaTrader <b>bars_{instrument}_*.csv</b> or a TradingView chart export (30S or 1-minute) for this instrument.</>}
+            : <>Import the day&apos;s bars on the Import screen — NinjaTrader <b>bars_{instrument}_*.csv</b> or a TradingView chart export (30S or 1-minute){data?.sibling ? <> for {instrument} or {data.sibling} (they share the same prices)</> : " for this instrument"}.</>}
         </div>
       )}
       <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
