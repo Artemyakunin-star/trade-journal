@@ -621,12 +621,13 @@ async function importTradeList(userId: string, filename: string, text: string, t
     seen.add(key);
     const sp = spec[t.symbol] ?? { pv: 20, rt: 0 };
     const dir = t.direction === "LONG" ? 1 : -1;
-    // The file's own Commissions column wins (its PnL column is already net);
-    // otherwise the Settings round-trip commission is subtracted from gross.
-    const fileHasComm = t.fileComm !== null;
-    const commission = fileHasComm ? t.fileComm! : sp.rt * t.quantity;
+    // Commission: whichever is larger — what the file itself deducted or the
+    // Settings round-trip rate × contracts (platforms often leave the column
+    // at 0 for some rows even though the broker charges every trade).
+    const fileComm = t.fileComm ?? 0;
+    const commission = Math.max(fileComm, sp.rt * t.quantity);
     const gross = t.pnl !== null
-      ? (fileHasComm ? t.pnl + commission : t.pnl)
+      ? t.pnl + fileComm // the file's PnL is net of what IT deducted
       : (t.exit - t.entry) * dir * t.quantity * sp.pv;
     await db.insert(trades).values({
       userId,
