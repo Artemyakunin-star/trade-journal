@@ -323,7 +323,7 @@ export async function importCsvFile(userId: string, filename: string, text: stri
   const isBars = !isExec && !isTvBars && /Open/i.test(firstLine) && /Volume/i.test(firstLine) && !/entry/i.test(firstLine);
   // DeepCharts "Strategy Report → Trade List": semicolon-delimited round-trip
   // trades (Symbol;DT;Quantity;Entry;Exit;ProfitLoss and variants).
-  const isDcTrades = !isExec && !isBars && /symbol|instrument/i.test(firstLine) && /entry/i.test(firstLine) && /exit/i.test(firstLine);
+  const isDcTrades = !isExec && !isBars && /symbol|instrument|contract/i.test(firstLine) && /entry/i.test(firstLine) && /exit/i.test(firstLine);
 
   try {
     const { importTimezone } = await getSettings(userId);
@@ -451,9 +451,13 @@ function parseLocaleNum(s: string): number {
   return Number(t);
 }
 
-/** Normalize a platform symbol to the root: "NQZ5"/"MNQZ25"/"MESU2026"/"NQ 12-25"/"NQ SEP26" → NQ/MNQ/MES. */
+/** Normalize a platform symbol to the root:
+ *  "NQZ5"/"MNQZ25"/"MESU2026"/"NQ 12-25"/"NQ SEP26"/"MES-202612-CME" → NQ/MNQ/MES. */
 function normalizeSymbol(raw: string): string {
   const first = raw.trim().toUpperCase().split(/\s+/)[0];
+  // Dash-separated contract id: MES-202612-CME, ES-202603, NQ-202612-CME-USD…
+  const dash = first.match(/^([A-Z0-9]{1,6})-\d{4,6}(-[A-Z]+)*$/);
+  if (dash) return dash[1];
   const m = first.match(/^([A-Z]+?)[FGHJKMNQUVXZ](\d{1,2}|\d{4})$/);
   return m && m[1].length >= 1 ? m[1] : first;
 }
@@ -511,6 +515,7 @@ async function importTradeList(userId: string, filename: string, text: string, t
   const cEntry = find("entryprice", "priceentry", "entry", "openprice", "open");
   const cExit = find("exitprice", "priceexit", "exit", "closeprice", "close");
   const cPnl = find("profitloss", "netpnl", "realizedpnl", "pnl", "profit", "pl");
+  const cComm = find("commissions", "commission", "fees", "fee");
   const cEntryT = find("entrytime", "entrydt", "opentime", "dtentry", "timeentry", "dt", "datetime", "date", "time");
   const cExitT = find("exittime", "exitdt", "closetime", "dtexit", "timeexit");
   const cSide = find("side", "direction", "marketposition", "position", "type", "buysell");
@@ -519,7 +524,7 @@ async function importTradeList(userId: string, filename: string, text: string, t
     return { filename, kind: "TRADES", inserted: 0, skipped: 0, error: "Couldn't find the Symbol / Quantity / Entry / Exit / time columns in this trade list" };
   }
 
-  type T = { account: string; symbol: string; direction: "LONG" | "SHORT"; quantity: number; entryTime: Date; exitTime: Date; entry: number; exit: number; pnl: number | null };
+  type T = { account: string; symbol: string; direction: "LONG" | "SHORT"; quantity: number; entryTime: Date; exitTime: Date; entry: number; exit: number; pnl: number | null; fileComm: number | null };
   const parsed: T[] = [];
   const problems: string[] = [];
   for (const line of lines.slice(1)) {
@@ -530,6 +535,7 @@ async function importTradeList(userId: string, filename: string, text: string, t
     const entry = parseLocaleNum(f[cEntry] ?? "");
     const exit = parseLocaleNum(f[cExit] ?? "");
     const pnl = cPnl === -1 ? NaN : parseLocaleNum(f[cPnl] ?? "");
+    const fileCommRaw = cComm === -1 ? NaN : parseLocaleNum(f[cComm] ?? "");
     const entryIso = normalizeDateTime(f[cEntryT] ?? "");
     const exitIso = cExitT === -1 ? entryIso : (normalizeDateTime(f[cExitT] ?? "") ?? entryIso);
     if (!symbol || !entryIso || !(Math.abs(qtyRaw) > 0) || !(entry > 0) || !(exit > 0)) {
@@ -553,6 +559,7 @@ async function importTradeList(userId: string, filename: string, text: string, t
       entry,
       exit,
       pnl: Number.isNaN(pnl) ? null : pnl,
+      fileComm: Number.isNaN(fileCommRaw) ? null : Math.abs(fileCommRaw),
     });
   }
   if (!parsed.length) {
@@ -576,8 +583,9 @@ async function importTradeList(userId: string, filename: string, text: string, t
     const qty = g.reduce((a, x) => a + x.quantity, 0);
     const exit = g.reduce((a, x) => a + x.exit * x.quantity, 0) / qty;
     const pnl = g.every((x) => x.pnl !== null) ? g.reduce((a, x) => a + (x.pnl ?? 0), 0) : null;
+    const fileComm = g.every((x) => x.fileComm !== null) ? g.reduce((a, x) => a + (x.fileComm ?? 0), 0) : null;
     const exitTime = new Date(Math.max(...g.map((x) => x.exitTime.getTime())));
-    return { ...g[0], quantity: qty, exit, exitTime, pnl, parts: g };
+    return { ...g[0], quantity: qty, exit, exitTime, pnl, fileComm, parts: g };
   });
 
   const symbols = [...new Set(parsed.map((t) => t.symbol))];
@@ -612,10 +620,14 @@ async function importTradeList(userId: string, filename: string, text: string, t
     if (t.parts.length > 1 && t.parts.every((p) => seen.has(keyOf(p.account, p.symbol, p.entryTime, p.quantity, p.entry, p.exitTime, p.exit)))) continue;
     seen.add(key);
     const sp = spec[t.symbol] ?? { pv: 20, rt: 0 };
-    // Settings commission is USD per contract for the whole round trip.
-    const commission = sp.rt * t.quantity;
     const dir = t.direction === "LONG" ? 1 : -1;
-    const gross = t.pnl !== null ? t.pnl : (t.exit - t.entry) * dir * t.quantity * sp.pv;
+    // The file's own Commissions column wins (its PnL column is already net);
+    // otherwise the Settings round-trip commission is subtracted from gross.
+    const fileHasComm = t.fileComm !== null;
+    const commission = fileHasComm ? t.fileComm! : sp.rt * t.quantity;
+    const gross = t.pnl !== null
+      ? (fileHasComm ? t.pnl + commission : t.pnl)
+      : (t.exit - t.entry) * dir * t.quantity * sp.pv;
     await db.insert(trades).values({
       userId,
       account: t.account,
