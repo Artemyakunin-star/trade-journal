@@ -15,6 +15,7 @@ export const TRADE_COLUMNS: { key: string; label: string }[] = [
   { key: "ofConf", label: "OF confirmation" },
   { key: "stop", label: "SL (stop-loss)" },
   { key: "rr", label: "RR" },
+  { key: "grade", label: "Grade" },
   { key: "note", label: "Note" },
   { key: "idea", label: "Idea" },
 ];

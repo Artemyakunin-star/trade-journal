@@ -2,7 +2,7 @@
 // inline "attach to idea" selects, manual stop-loss entry and RR.
 import Link from "next/link";
 import ComboInput from "@/components/ComboInput";
-import { deleteManualTrade, setTradeAccount, setTradeField, setTradeIdea, setTradeStop } from "@/app/actions";
+import { deleteManualTrade, setTradeAccount, setTradeField, setTradeGrade, setTradeIdea, setTradeStop } from "@/app/actions";
 import {
   fmtDate,
   fmtExcursion,
@@ -111,7 +111,7 @@ export default function TradesTable({
 
   const colCount =
     1 +
-    ["date", "account", "instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "note"].filter(show).length +
+    ["date", "account", "instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "grade", "note"].filter(show).length +
     (showIdeaCol ? 1 : 0) +
     (sim ? 3 : 0) +
     (actionsFor ? 1 : 0);
@@ -273,6 +273,26 @@ export default function TradesTable({
             {rr === null ? "—" : rr.text}
           </td>
         )}
+        {show("grade") && (
+          <td>
+            <form action={setTradeGrade} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <input type="hidden" name="tradeId" value={t.id} />
+              <select
+                className={"mini-select grade " + gradeClass(t.grade)}
+                name="grade"
+                defaultValue={t.grade ?? ""}
+                key={t.grade ?? "none"}
+                style={{ width: 56, fontWeight: 600 }}
+              >
+                <option value="">—</option>
+                {Object.entries(GRADE_LABEL).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+              <button className="btn ghost btn-sm" type="submit">set</button>
+            </form>
+          </td>
+        )}
         {show("note") && <td style={{ whiteSpace: "normal", maxWidth: 220 }}>{t.note ?? ""}</td>}
         {showIdeaCol && (
           <td>
@@ -317,6 +337,7 @@ export default function TradesTable({
           {show("ofConf") && <th data-tip="Order-flow confirmation you saw before entry (delta divergence, absorption, big prints…), entered manually">OF conf</th>}
           {show("stop") && <th className="tip-r" data-tip="Original stop-loss SIZE per contract, entered manually in the selected unit ($ risk / ticks / points). Stored as a price behind the scenes for RR">SL</th>}
           {show("rr") && <th className="num tip-r" data-tip="Realized R-multiple: result divided by the initial risk (needs SL). +2R means you made twice your risk; −1R is a full stop">RR</th>}
+          {show("grade") && <th className="tip-r" data-tip="Execution quality grade for this trade (A+ … F) — separate from the idea's grade. How well you executed, not how much you made">Grade</th>}
           {show("note") && <th className="tip-r" data-tip="Free-text note for the trade">Note</th>}
           {showIdeaCol && <th className="tip-r" data-tip="Idea this trade belongs to. Trades without an idea are counted as rogue">Idea</th>}
           {actionsFor && <th className="tip-r" data-tip="Detach removes the trade from this idea (it becomes rogue). ✕ deletes a manually added / trade-list trade entirely">Actions</th>}

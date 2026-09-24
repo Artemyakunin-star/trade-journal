@@ -270,6 +270,8 @@ export const trades = pgTable(
     keyLevel: text("key_level"),
     /** Order-flow confirmation note (delta divergence, absorption, ...). */
     ofConfirmation: text("of_confirmation"),
+    /** Execution quality grade for THIS trade (ideas have their own grade). */
+    grade: gradeEnum("grade"),
     /** Rich per-trade write-up (TipTap JSON, incl. pasted screenshots). */
     journal: jsonb("journal"),
 

@@ -22,6 +22,7 @@ export type TradeRow = {
   maeTicks: number | null;
   mfeTicks: number | null;
   account: string;
+  grade: string | null;
 };
 
 export type IdeaRow = {

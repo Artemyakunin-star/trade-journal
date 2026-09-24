@@ -762,3 +762,17 @@ export async function sendFeedback(fd: FormData) {
   await db.insert(feedback).values({ userId: uid, message: message.slice(0, 5000), page: str(fd, "page") || null });
   redirect("/feedback?sent=1");
 }
+
+/** Grade for ONE trade (execution quality) — ideas keep their own grade. */
+export async function setTradeGrade(fd: FormData) {
+  const uid = await requireUserId();
+  const tradeId = str(fd, "tradeId");
+  const grade = str(fd, "grade");
+  const value = grade === "" ? null : (GRADES as readonly string[]).includes(grade) ? (grade as (typeof GRADES)[number]) : undefined;
+  if (value === undefined) return;
+  await db
+    .update(trades)
+    .set({ grade: value, updatedAt: new Date() })
+    .where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
+  revalidatePath("/", "layout");
+}
