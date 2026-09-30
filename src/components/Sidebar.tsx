@@ -7,6 +7,7 @@ const ITEMS = [
   { href: "/plans", ico: "≣", label: "Plans" },
   { href: "/trades", ico: "⇄", label: "Trades" },
   { href: "/ideas", ico: "✦", label: "Ideas" },
+  { href: "/missed", ico: "⊘", label: "Missed" },
   { href: "/calendar", ico: "▤", label: "Calendar" },
   { href: "/analytics", ico: "∿", label: "Analytics" },
   { href: "/day", ico: "☀", label: "Day" },
