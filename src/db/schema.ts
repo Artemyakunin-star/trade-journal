@@ -439,6 +439,13 @@ export const missedTrades = pgTable(
     stopPrice: numeric("stop_price", { precision: 12, scale: 4 }).notNull(),
     reason: missedReasonEnum("reason").notNull(),
     note: text("note"),
+    /** Per-setup exit plan, entered by hand (overrides the page-level rule):
+     *  two targets in ticks with contracts each, and a BE trigger in ticks. */
+    t1Ticks: integer("t1_ticks"),
+    t1Qty: integer("t1_qty"),
+    t2Ticks: integer("t2_ticks"),
+    t2Qty: integer("t2_qty"),
+    beTicks: integer("be_ticks"),
     /** Manual result in ticks per contract (fallback when no bars that day). */
     manualTicks: integer("manual_ticks"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

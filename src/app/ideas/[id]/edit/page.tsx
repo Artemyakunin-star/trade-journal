@@ -143,14 +143,23 @@ export default async function EditIdeaPage({
     manualTicks: m.manualTicks,
   }));
   const missedBars = await loadMissedBars(missedInputs);
-  const missedResults = missedInputs.map((mi) => {
+  const missedResults = missedInputs.map((mi, i) => {
+    const m = missedRows[i];
     const spec = specs[mi.instrument] ?? fallbackSpec;
+    // The setup's own hand-entered plan (T1/T2 × qty, BE in ticks) wins over
+    // the page-level rule row.
+    const ownTargets = m.t1Ticks
+      ? [
+          { ticks: m.t1Ticks, qty: m.t1Qty ?? 1 },
+          ...(m.t2Ticks ? [{ ticks: m.t2Ticks, qty: m.t2Qty ?? 1 }] : []),
+        ]
+      : null;
     return simulateMissed(mi, missedBars.get(mi.id) ?? [], spec, {
       stopTicks: null,
-      targetTicks: toTicks(targetVal, spec),
-      targets: targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
-      beAfterFirstTarget: beAfterT1,
-      beTriggerTicks: toTicks(beVal, spec),
+      targetTicks: ownTargets ? null : toTicks(targetVal, spec),
+      targets: ownTargets ?? targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
+      beAfterFirstTarget: ownTargets ? false : beAfterT1,
+      beTriggerTicks: m.beTicks ?? toTicks(beVal, spec),
       slippageTicks,
       ignoreActualExit: true,
     });
@@ -361,6 +370,7 @@ export default async function EditIdeaPage({
                   <th className="num">Qty</th>
                   <th className="num">Entry</th>
                   <th className="num" data-tip="Planned stop distance">SL</th>
+                  <th data-tip="This setup's own exit plan (T1/T2 × contracts, BE trigger in ticks). Empty = the What-if rule row above applies">Plan</th>
                   <th data-tip="Why the trade was not taken. Blue = conscious risk decision, red = emotional miss">Reason</th>
                   <th data-tip="Virtual outcome: bars replayed from the planned time with your target rules from the What-if row above">Would exit by</th>
                   <th className="num" data-tip="Virtual P&L of the missed setup (no commission — the trade was never taken)">Virtual P&L</th>
@@ -382,6 +392,13 @@ export default async function EditIdeaPage({
                       <td className="num">{m.quantity}</td>
                       <td className="num">{fmtPrice(m.plannedEntry)}</td>
                       <td className="num">{slTicks}t</td>
+                      <td style={{ whiteSpace: "nowrap", color: "var(--ink-2)" }}>
+                        {m.t1Ticks
+                          ? `T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}${m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}${m.beTicks ? ` · BE ${m.beTicks}t` : ""}`
+                          : m.beTicks
+                            ? `BE ${m.beTicks}t`
+                            : "—"}
+                      </td>
                       <td style={{ color: reason.kind === "conscious" ? "var(--s1)" : "var(--crit)" }}>{reason.label}</td>
                       <td>
                         {r.source === "none" ? (
@@ -424,6 +441,11 @@ export default async function EditIdeaPage({
           <input className="tj-input" name="entryPrice" type="number" step="0.01" placeholder="Entry price" required style={{ width: 110 }} />
           <input className="tj-input" name="stopValue" type="number" step="0.01" placeholder={`SL (${unitSuffix}/ct)`} required style={{ width: 100 }} title={`Planned stop distance per contract, in ${unitSuffix}`} />
           <input className="tj-input" name="quantity" type="number" min="1" step="1" placeholder="Qty" defaultValue={1} style={{ width: 64 }} />
+          <input className="tj-input" name="t1" type="number" step="0.01" placeholder={`T1 (${unitSuffix})`} style={{ width: 82 }} title={`First target per contract, in ${unitSuffix} (optional — otherwise the rule row above applies)`} />
+          <input className="tj-input" name="tq1" type="number" min="1" step="1" placeholder="×" style={{ width: 46 }} title="Contracts at T1" />
+          <input className="tj-input" name="t2" type="number" step="0.01" placeholder={`T2 (${unitSuffix})`} style={{ width: 82 }} title={`Second target per contract, in ${unitSuffix}`} />
+          <input className="tj-input" name="tq2" type="number" min="1" step="1" placeholder="×" style={{ width: 46 }} title="Contracts at T2" />
+          <input className="tj-input" name="be" type="number" step="0.01" placeholder={`BE (${unitSuffix})`} style={{ width: 82 }} title={`Move stop to break-even after price goes this far in favor (${unitSuffix})`} />
           <select className="tj-select" name="reason" required defaultValue="" style={{ width: 190 }}>
             <option value="" disabled>Why not taken?</option>
             <optgroup label="Conscious (risk decision)">

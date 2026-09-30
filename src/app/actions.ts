@@ -810,6 +810,18 @@ export async function createMissedTrade(fd: FormData) {
   const dir = idea.direction === "LONG" ? 1 : -1;
   const stopPrice = entry - dir * distancePoints;
 
+  // Per-setup exit plan (optional): sizes come in the active unit, stored in ticks.
+  const toTicksVal = (raw: string): number | null => {
+    const v = Number(raw);
+    if (!(v > 0)) return null;
+    const pts = stopUnit === "ticks" ? v * tickSize : stopUnit === "usd" ? (v / tickValue) * tickSize : v;
+    return Math.round(pts / tickSize);
+  };
+  const t1 = toTicksVal(str(fd, "t1"));
+  const t2 = toTicksVal(str(fd, "t2"));
+  const be = toTicksVal(str(fd, "be"));
+  const qOf = (name: string) => Math.max(1, Math.round(Number(str(fd, name)) || 1));
+
   await db.insert(missedTrades).values({
     userId: uid,
     ideaId,
@@ -821,6 +833,11 @@ export async function createMissedTrade(fd: FormData) {
     stopPrice: stopPrice.toFixed(4),
     reason: reason as (typeof MISSED_REASONS)[number],
     note: str(fd, "note") || null,
+    t1Ticks: t1,
+    t1Qty: t1 === null ? null : qOf("tq1"),
+    t2Ticks: t2,
+    t2Qty: t2 === null ? null : qOf("tq2"),
+    beTicks: be,
   });
   revalidatePath("/", "layout");
   redirect(returnTo);

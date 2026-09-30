@@ -73,14 +73,21 @@ export default async function MissedPage({
     manualTicks: m.manualTicks,
   }));
   const barsMap = await loadMissedBars(inputs);
-  const results = inputs.map((mi) => {
+  const results = inputs.map((mi, i) => {
+    const m = missed[i];
     const spec = specs[mi.instrument] ?? fallbackSpec;
+    const ownTargets = m.t1Ticks
+      ? [
+          { ticks: m.t1Ticks, qty: m.t1Qty ?? 1 },
+          ...(m.t2Ticks ? [{ ticks: m.t2Ticks, qty: m.t2Qty ?? 1 }] : []),
+        ]
+      : null;
     return simulateMissed(mi, barsMap.get(mi.id) ?? [], spec, {
       stopTicks: null,
       targetTicks: null,
-      targets: targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
-      beAfterFirstTarget: beAfterT1,
-      beTriggerTicks: null,
+      targets: ownTargets ?? targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
+      beAfterFirstTarget: ownTargets ? false : beAfterT1,
+      beTriggerTicks: m.beTicks ?? null,
       slippageTicks,
       ignoreActualExit: true,
     });
@@ -209,6 +216,7 @@ export default async function MissedPage({
                   <th className="num">Qty</th>
                   <th className="num">Entry</th>
                   <th className="num">SL</th>
+                  <th data-tip="This setup's own exit plan. Empty = the T1–T3 rule row above applies">Plan</th>
                   <th data-tip="Blue = conscious risk decision, red = emotional miss">Reason</th>
                   <th>Would exit by</th>
                   <th className="num">Virtual P&L</th>
@@ -235,6 +243,13 @@ export default async function MissedPage({
                       <td className="num">{m.quantity}</td>
                       <td className="num">{fmtPrice(m.plannedEntry)}</td>
                       <td className="num">{slTicks}t</td>
+                      <td style={{ whiteSpace: "nowrap", color: "var(--ink-2)" }}>
+                        {m.t1Ticks
+                          ? `T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}${m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}${m.beTicks ? ` · BE ${m.beTicks}t` : ""}`
+                          : m.beTicks
+                            ? `BE ${m.beTicks}t`
+                            : "—"}
+                      </td>
                       <td style={{ color: reason.kind === "conscious" ? "var(--s1)" : "var(--crit)" }}>{reason.label}</td>
                       <td>
                         {r.source === "none" ? (
