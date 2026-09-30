@@ -864,3 +864,61 @@ export async function setMissedManual(fd: FormData) {
     .where(and(eq(missedTrades.id, str(fd, "id")), eq(missedTrades.userId, uid)));
   revalidatePath("/", "layout");
 }
+
+/** Edit a missed setup in place (same fields as the add form). */
+export async function updateMissedTrade(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const reason = str(fd, "reason");
+  const plannedAt = str(fd, "plannedAt");
+  const entry = Number(str(fd, "entryPrice"));
+  const quantity = Math.round(Number(str(fd, "quantity")) || 1);
+  const stopVal = Number(str(fd, "stopValue"));
+  const stopUnit = str(fd, "stopUnit");
+  const returnTo = str(fd, "returnTo") || `/missed/${id}`;
+
+  const { missedTrades } = await import("@/db/schema");
+  const m = await db.query.missedTrades.findFirst({
+    where: (x, { and: and_, eq: eq_ }) => and_(eq_(x.id, id), eq_(x.userId, uid)),
+  });
+  if (!m) return;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(plannedAt) || !(entry > 0) || !(stopVal > 0) || !(quantity > 0)) return;
+  if (!(MISSED_REASONS as readonly string[]).includes(reason)) return;
+
+  const prefs = await (await import("@/lib/settings")).getSettings(uid);
+  const plannedTime = parseInTimeZone(plannedAt.replace("T", " ").slice(0, 16) + ":00", prefs.timezone);
+  const inst = await db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, m.instrument) });
+  const tickSize = inst ? Number(inst.tickSize) : 0.25;
+  const tickValue = inst ? Number(inst.tickValue) : 5;
+  const toPts = (v: number) => (stopUnit === "ticks" ? v * tickSize : stopUnit === "usd" ? (v / tickValue) * tickSize : v);
+  const dir = m.direction === "LONG" ? 1 : -1;
+  const stopPrice = entry - dir * toPts(stopVal);
+  const toTicksVal = (raw: string): number | null => {
+    const v = Number(raw);
+    return v > 0 ? Math.round(toPts(v) / tickSize) : null;
+  };
+  const t1 = toTicksVal(str(fd, "t1"));
+  const t2 = toTicksVal(str(fd, "t2"));
+  const be = toTicksVal(str(fd, "be"));
+  const qOf = (name: string) => Math.max(1, Math.round(Number(str(fd, name)) || 1));
+
+  await db
+    .update(missedTrades)
+    .set({
+      quantity,
+      plannedTime,
+      plannedEntry: entry.toFixed(4),
+      stopPrice: stopPrice.toFixed(4),
+      reason: reason as (typeof MISSED_REASONS)[number],
+      note: str(fd, "note") || null,
+      t1Ticks: t1,
+      t1Qty: t1 === null ? null : qOf("tq1"),
+      t2Ticks: t2,
+      t2Qty: t2 === null ? null : qOf("tq2"),
+      beTicks: be,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(missedTrades.id, id), eq(missedTrades.userId, uid)));
+  revalidatePath("/", "layout");
+  redirect(returnTo);
+}
