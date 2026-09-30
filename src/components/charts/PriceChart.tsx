@@ -43,6 +43,8 @@ export type SimOverlay = {
   targetPrice?: number | null;
   /** Multiple targets (multi-target simulation): dashed green lines. */
   targetPrices?: { price: number; title: string }[];
+  /** Planned entry level (missed-trade pages): dashed blue line. */
+  entryPrice?: { price: number; title: string } | null;
 };
 
 const TIME_TFS = [
@@ -280,6 +282,9 @@ export default function PriceChart({
     }
     for (const tp of sim?.targetPrices ?? []) {
       candles.createPriceLine({ price: tp.price, color: "#0ca30c", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: tp.title });
+    }
+    if (sim?.entryPrice) {
+      candles.createPriceLine({ price: sim.entryPrice.price, color: "#3987e5", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: sim.entryPrice.title });
     }
 
     if (data.markers.length && agg.length) {

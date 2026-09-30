@@ -234,7 +234,11 @@ export default async function MissedPage({
                   const v = r.pnlUsd === null ? null : convM(r.pnlUsd, m.instrument);
                   return (
                     <tr key={m.id}>
-                      <td>{fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}</td>
+                      <td>
+                        <Link href={`/missed/${m.id}?unit=${unit}`} className="linklike" title="Open the virtual replay on the chart">
+                          {fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}
+                        </Link>
+                      </td>
                       <td style={{ whiteSpace: "normal", maxWidth: 180 }}>
                         <Link href={`/ideas/${m.ideaId}/edit`} className="linklike">{ideaTitle.get(m.ideaId) ?? "idea"}</Link>
                       </td>

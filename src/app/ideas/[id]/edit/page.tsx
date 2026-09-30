@@ -388,7 +388,11 @@ export default async function EditIdeaPage({
                   const v = r.pnlUsd === null ? null : convTrade(r.pnlUsd, m);
                   return (
                     <tr key={m.id}>
-                      <td>{fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}</td>
+                      <td>
+                        <Link href={`/missed/${m.id}?unit=${unit}`} className="linklike" title="Open the virtual replay on the chart">
+                          {fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}
+                        </Link>
+                      </td>
                       <td className="num">{m.quantity}</td>
                       <td className="num">{fmtPrice(m.plannedEntry)}</td>
                       <td className="num">{slTicks}t</td>
