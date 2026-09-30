@@ -5,9 +5,8 @@ import { notFound } from "next/navigation";
 import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
 import PriceChart, { type SimOverlay } from "@/components/charts/PriceChart";
-import Tiles from "@/components/Tiles";
 import { deleteMissedTrade, updateMissedTrade } from "@/app/actions";
-import { fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { fmtDateLong, fmtExcursion, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { loadMissedBars, simulateMissed } from "@/lib/whatif";
 
@@ -33,6 +32,10 @@ export default async function MissedDetailPage({
     db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, m.instrument) }),
   ]);
   const tz = prefs.timezone;
+  const rtRow = await db.query.userCommissions.findFirst({
+    where: (c, { and: and_, eq: eq_ }) => and_(eq_(c.userId, uid), eq_(c.symbol, m.instrument)),
+  });
+  const rt = rtRow ? Number(rtRow.commission) : 0; // USD per contract, round trip
   const spec = inst ? { tickSize: Number(inst.tickSize), tickValue: Number(inst.tickValue) } : { tickSize: 0.25, tickValue: 5 };
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "ticks") as PnlUnit;
 
@@ -87,20 +90,22 @@ export default async function MissedDetailPage({
   const inUnit = (ticks: number) =>
     unit === "ticks" ? ticks : unit === "usd" ? Number((ticks * spec.tickValue).toFixed(2)) : Number((ticks * spec.tickSize).toFixed(2));
   const reason = MISSED_REASON_LABEL[m.reason] ?? { label: m.reason, kind: "emotional" as const };
-  const conv = (usd: number) =>
-    unit === "usd" ? usd : unit === "ticks" ? usd / spec.tickValue : (usd / spec.tickValue) * spec.tickSize;
-  const fmtU = (v: number) =>
-    unit === "usd"
-      ? fmtMoney(Math.round(v))
-      : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(unit === "ticks" ? Math.round(v) : Number(v.toFixed(2))).toLocaleString("en-US")}${unit === "ticks" ? "t" : "pt"}`;
-  const v = r.pnlUsd === null ? null : conv(r.pnlUsd);
-  const date = kyivDateOf(m.plannedTime, tz);
+  const gross = r.pnlUsd; // virtual, before commission
+  const commission = gross === null ? 0 : rt * m.quantity;
+  const net = gross === null ? null : gross - commission;
 
+  const fmtWhole = (usd: number): string => {
+    if (unit === "usd") return fmtMoney2(usd);
+    const ticks = usd / spec.tickValue;
+    const v = unit === "ticks" ? Math.round(ticks) : Number((ticks * spec.tickSize).toFixed(2));
+    return `${v > 0 ? "+" : ""}${v.toLocaleString("en-US")}`;
+  };
+  const date = kyivDateOf(m.plannedTime, tz);
   const sim: SimOverlay = {
     exitTimeSec: r.exitTime ? Math.floor(r.exitTime.getTime() / 1000) : null,
     exitPrice: r.exitPrice,
-    label: r.pnlUsd === null ? `SIM ${r.exitLabel}` : `SIM ${fmtMoney(Math.round(r.pnlUsd))} (${r.exitLabel})`,
-    positive: (r.pnlUsd ?? 0) > 0,
+    label: gross === null ? `SIM ${r.exitLabel}` : `SIM ${fmtMoney2(gross)} (${r.exitLabel})`,
+    positive: (gross ?? 0) > 0,
     stopPrice: Number(m.stopPrice),
     targetPrices: ownTargets.map((t, i) => ({
       price: entry + dir * t.ticks * spec.tickSize,
@@ -111,46 +116,19 @@ export default async function MissedDetailPage({
     entryLabel: `SIM ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${fmtPrice(m.plannedEntry)}`,
   };
 
-  const excursion = (ticks: number | null) => {
-    if (ticks === null) return { val: "—", whole: undefined as string | undefined };
-    const perContractUsd = ticks * spec.tickValue;
-    return {
-      val: fmtU(conv(perContractUsd)).replace(/^\+/, ""),
-      whole: `whole trade ×${m.quantity}: ${fmtMoney(Math.round(perContractUsd * m.quantity)).replace(/^\+/, "")}`,
-    };
-  };
-  const mae = excursion(maeTicks);
-  const mfe = excursion(mfeTicks);
-  const tiles: import("@/lib/metrics").Tile[] = [
-    {
-      lbl: "Virtual P&L (no commission)",
-      val: v === null ? "—" : fmtU(v),
-      cls: v === null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "",
-      delta:
-        r.source === "manual" ? "manual estimate" : r.source === "none" ? "no bars for this day" : !r.entryReached ? "price never touched the entry (8h window)" : `would exit by ${r.exitLabel}`,
-    },
-    {
-      lbl: "Planned entry",
-      val: fmtPrice(m.plannedEntry),
-      delta: `${m.direction === "LONG" ? "Long" : "Short"} ×${m.quantity} · ${fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}`,
-    },
-    {
-      lbl: "Stop & plan",
-      val: `${slTicks}t`,
-      delta: `${m.t1Ticks ? `T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}${m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}` : "no targets"}${m.beTicks ? ` · BE after ${m.beTicks}t` : ""}`,
-    },
-    { lbl: "MAE (worst against you, per contract)", val: mae.val, cls: maeTicks ? "neg" : "", delta: mae.whole },
-    { lbl: "MFE (best in your favor, per contract)", val: mfe.val, cls: mfeTicks ? "pos" : "", delta: mfe.whole },
-  ];
+  const stat = (lbl: string, val: React.ReactNode, cls = "") => (
+    <div className="card tile">
+      <div className="lbl">{lbl}</div>
+      <div className={"val " + cls} style={{ fontSize: 19 }}>{val}</div>
+    </div>
+  );
 
   return (
     <>
       <div className="topbar">
         <h1 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           Missed · {m.instrument} {m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity}{" "}
-          <span style={{ color: "var(--muted)", fontWeight: 400 }}>
-            · {new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: tz }).format(m.plannedTime)}
-          </span>{" "}
+          <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {fmtDateLong(date)}</span>{" "}
           <span style={{ color: reason.kind === "conscious" ? "var(--s1)" : "var(--crit)", fontSize: 14, fontWeight: 600 }}>
             {reason.label}
           </span>
@@ -170,7 +148,52 @@ export default async function MissedDetailPage({
         </form>
       </div>
 
-      <Tiles tiles={tiles} />
+      <div className="tiles" style={{ marginBottom: 14 }}>
+        {stat(
+          "Net P&L (after commission)",
+          net === null ? r.exitLabel : fmtWhole(net),
+          net === null ? "" : net > 0 ? "pos" : net < 0 ? "neg" : "",
+        )}
+        {stat("Gross P&L", gross === null ? "—" : fmtWhole(gross), "")}
+        {stat("Commission", commission > 0 ? "$" + commission.toFixed(2) : "$0")}
+        {stat(
+          "MAE (worst against you, per contract)",
+          maeTicks === null ? "—" : (
+            <>
+              {fmtExcursion(maeTicks, unit, spec, 1)}
+              {m.quantity > 1 && unit === "usd" && (
+                <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
+                  whole trade ×{m.quantity}: {fmtExcursion(maeTicks, unit, spec, m.quantity)}
+                </div>
+              )}
+            </>
+          ),
+          "neg",
+        )}
+        {stat(
+          "MFE (best in your favor, per contract)",
+          mfeTicks === null ? "—" : (
+            <>
+              {fmtExcursion(mfeTicks, unit, spec, 1)}
+              {m.quantity > 1 && unit === "usd" && (
+                <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
+                  whole trade ×{m.quantity}: {fmtExcursion(mfeTicks, unit, spec, m.quantity)}
+                </div>
+              )}
+            </>
+          ),
+          "pos",
+        )}
+      </div>
+
+      <div className="section-note" style={{ margin: "0 0 10px 2px" }}>
+        Virtual replay: planned entry <b>{fmtPrice(m.plannedEntry)}</b> ({m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity} ·{" "}
+        {fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}) · SL {slTicks}t
+        {m.t1Ticks ? ` · T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}` : ""}
+        {m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}
+        {m.beTicks ? ` · BE after ${m.beTicks}t` : ""} · would exit by <b>{r.exitLabel}</b>
+        {r.source === "manual" ? " (manual estimate)" : r.source === "none" ? " (no bars for this day)" : !r.entryReached ? " (price never touched the entry)" : ""}
+      </div>
 
       <PriceChart instruments={[m.instrument]} date={date} tz={tz} theme={prefs.theme} tradeId={m.id} sim={sim} />
 
