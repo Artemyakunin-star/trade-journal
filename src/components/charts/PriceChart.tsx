@@ -45,6 +45,12 @@ export type SimOverlay = {
   targetPrices?: { price: number; title: string }[];
   /** Planned entry level (missed-trade pages): dashed blue line. */
   entryPrice?: { price: number; title: string } | null;
+  /** Virtual entry marker + zoom anchor (missed-trade pages): UTC seconds. */
+  entryTimeSec?: number | null;
+  /** Direction for the entry arrow (with entryTimeSec). */
+  long?: boolean;
+  /** Entry arrow label, e.g. "SIM ▲×1 @ 7,759.75". */
+  entryLabel?: string;
 };
 
 const TIME_TFS = [
@@ -261,6 +267,19 @@ export default function PriceChart({
           ? `#${m.n}${m.sym ? ` ${m.sym}` : ""} ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${m.price.toLocaleString("en-US")}`
           : exitLabel(m, unit),
     }));
+    // Simulation overlay: virtual entry arrow (missed setups), like #N entries.
+    if (sim?.entryTimeSec) {
+      const long = sim.long ?? true;
+      markerList.push({
+        time: snapToBar(barTimes, sim.entryTimeSec + data.off) as UTCTimestamp,
+        position: long ? ("belowBar" as const) : ("aboveBar" as const),
+        shape: (long ? "arrowUp" : "arrowDown") as "arrowUp" | "arrowDown",
+        color: "#3987e5",
+        size: 2 as unknown as 1,
+        text: sim.entryLabel ?? "SIM entry",
+      });
+      markerList.sort((a, b) => (a.time as number) - (b.time as number));
+    }
     // Simulation overlay: exit marker + dashed stop/target levels.
     if (sim?.exitTimeSec && sim.exitPrice !== null) {
       markerList.push({
@@ -287,17 +306,15 @@ export default function PriceChart({
       candles.createPriceLine({ price: sim.entryPrice.price, color: "#3987e5", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: sim.entryPrice.title });
     }
 
-    if (data.markers.length && agg.length) {
-      const pad = mode === "time" ? 20 * 60 : 0;
-      if (mode === "time") {
-        const simT = sim?.exitTimeSec ? sim.exitTimeSec + data.off : null;
-        const lastMark = Math.max(data.markers[data.markers.length - 1].time, simT ?? 0);
-        const from = Math.max(agg[0].time, data.markers[0].time - pad);
-        const to = Math.min(agg[agg.length - 1].time, lastMark + pad);
-        chart.timeScale().setVisibleRange({ from: from as UTCTimestamp, to: to as UTCTimestamp });
-      } else {
-        chart.timeScale().fitContent();
-      }
+    // Zoom to the action: real markers and/or the virtual entry/exit window.
+    const focus: number[] = data.markers.map((m) => m.time);
+    if (sim?.entryTimeSec) focus.push(sim.entryTimeSec + data.off);
+    if (sim?.exitTimeSec) focus.push(sim.exitTimeSec + data.off);
+    if (focus.length && agg.length && mode === "time") {
+      const pad = 20 * 60;
+      const from = Math.max(agg[0].time, Math.min(...focus) - pad);
+      const to = Math.min(agg[agg.length - 1].time, Math.max(...focus) + pad);
+      chart.timeScale().setVisibleRange({ from: from as UTCTimestamp, to: to as UTCTimestamp });
     } else {
       chart.timeScale().fitContent();
     }

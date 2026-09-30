@@ -363,6 +363,7 @@ export type MissedResult = {
   entryReached: boolean;
   exitLabel: string; // "T1 1 + T2 1", "stop 2", "not reached", "no bars", "manual"
   pnlUsd: number | null; // virtual, net of nothing (no commission on a trade never taken)
+  entryTime: Date | null; // bar where the planned entry was touched (sim only)
   exitTime: Date | null;
   exitPrice: number | null;
 };
@@ -383,10 +384,10 @@ export function simulateMissed(
     if (m.manualTicks !== null) {
       return {
         id: m.id, source: "manual", entryReached: true, exitLabel: "manual",
-        pnlUsd: m.manualTicks * spec.tickValue * m.quantity, exitTime: null, exitPrice: null,
+        pnlUsd: m.manualTicks * spec.tickValue * m.quantity, entryTime: null, exitTime: null, exitPrice: null,
       };
     }
-    return { id: m.id, source: "none", entryReached: false, exitLabel: "no bars", pnlUsd: null, exitTime: null, exitPrice: null };
+    return { id: m.id, source: "none", entryReached: false, exitLabel: "no bars", pnlUsd: null, entryTime: null, exitTime: null, exitPrice: null };
   }
 
   const from = m.plannedTime.getTime();
@@ -395,7 +396,7 @@ export function simulateMissed(
     (b) => b.time.getTime() >= from && b.time.getTime() <= to && b.low <= m.plannedEntry && m.plannedEntry <= b.high,
   );
   if (fillBarIdx === -1) {
-    return { id: m.id, source: "sim", entryReached: false, exitLabel: "not reached", pnlUsd: null, exitTime: null, exitPrice: null };
+    return { id: m.id, source: "sim", entryReached: false, exitLabel: "not reached", pnlUsd: null, entryTime: null, exitTime: null, exitPrice: null };
   }
 
   const fillTime = bars[fillBarIdx].time;
@@ -434,6 +435,7 @@ export function simulateMissed(
     entryReached: true,
     exitLabel: r.exitLabel ?? r.exitReason,
     pnlUsd: r.simPnl,
+    entryTime: fillTime,
     exitTime: r.exitTime,
     exitPrice: r.exitPrice,
   };
