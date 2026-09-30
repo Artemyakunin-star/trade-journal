@@ -250,3 +250,14 @@ export const OUTCOME_LABEL: Record<string, { text: string; cls: string }> = {
   FAILED: { text: "failed", cls: "invalid" },
   NOT_TRIGGERED: { text: "never triggered", cls: "" },
 };
+
+/** Missed-trade reasons: conscious risk decisions vs emotional misses. */
+export const MISSED_REASON_LABEL: Record<string, { label: string; kind: "conscious" | "emotional" }> = {
+  RISK_LIMIT: { label: "Daily risk limit", kind: "conscious" },
+  ALREADY_IN_TRADE: { label: "Already in a trade", kind: "conscious" },
+  ENOUGH_FOR_TODAY: { label: "Enough for today", kind: "conscious" },
+  FEAR_AFTER_LOSS: { label: "Fear after loss", kind: "emotional" },
+  HESITATED: { label: "Hesitated", kind: "emotional" },
+  MISSED_AWAY: { label: "Away / distracted", kind: "emotional" },
+  OTHER: { label: "Other", kind: "emotional" },
+};

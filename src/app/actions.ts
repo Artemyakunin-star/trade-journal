@@ -776,3 +776,74 @@ export async function setTradeGrade(fd: FormData) {
     .where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
   revalidatePath("/", "layout");
 }
+
+// ---------- missed trades ----------
+
+const MISSED_REASONS = ["RISK_LIMIT", "ALREADY_IN_TRADE", "ENOUGH_FOR_TODAY", "FEAR_AFTER_LOSS", "HESITATED", "MISSED_AWAY", "OTHER"] as const;
+
+/** Log a setup from an idea that was NOT taken. Stop is entered as a SIZE per
+ *  contract in the active unit and stored as a price off the planned entry. */
+export async function createMissedTrade(fd: FormData) {
+  const uid = await requireUserId();
+  const ideaId = str(fd, "ideaId");
+  const reason = str(fd, "reason");
+  const plannedAt = str(fd, "plannedAt"); // datetime-local, Chart timezone
+  const entry = Number(str(fd, "entryPrice"));
+  const quantity = Math.round(Number(str(fd, "quantity")) || 1);
+  const stopVal = Number(str(fd, "stopValue"));
+  const stopUnit = str(fd, "stopUnit"); // usd | ticks | points
+  const returnTo = str(fd, "returnTo") || `/ideas/${ideaId}/edit`;
+
+  const idea = await db.query.ideas.findFirst({ where: (i, { and: and_, eq: eq_ }) => and_(eq_(i.id, ideaId), eq_(i.userId, uid)) });
+  if (!idea) return;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(plannedAt) || !(entry > 0) || !(stopVal > 0) || !(quantity > 0)) return;
+  if (!(MISSED_REASONS as readonly string[]).includes(reason)) return;
+
+  const { missedTrades } = await import("@/db/schema");
+  const prefs = await (await import("@/lib/settings")).getSettings(uid);
+  const plannedTime = parseInTimeZone(plannedAt.replace("T", " ").slice(0, 16) + ":00", prefs.timezone);
+  const inst = await db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, idea.instrument) });
+  const tickSize = inst ? Number(inst.tickSize) : 0.25;
+  const tickValue = inst ? Number(inst.tickValue) : 5;
+  const distancePoints =
+    stopUnit === "ticks" ? stopVal * tickSize : stopUnit === "usd" ? (stopVal / tickValue) * tickSize : stopVal;
+  const dir = idea.direction === "LONG" ? 1 : -1;
+  const stopPrice = entry - dir * distancePoints;
+
+  await db.insert(missedTrades).values({
+    userId: uid,
+    ideaId,
+    instrument: idea.instrument,
+    direction: idea.direction,
+    quantity,
+    plannedTime,
+    plannedEntry: entry.toFixed(4),
+    stopPrice: stopPrice.toFixed(4),
+    reason: reason as (typeof MISSED_REASONS)[number],
+    note: str(fd, "note") || null,
+  });
+  revalidatePath("/", "layout");
+  redirect(returnTo);
+}
+
+export async function deleteMissedTrade(fd: FormData) {
+  const uid = await requireUserId();
+  const { missedTrades } = await import("@/db/schema");
+  await db.delete(missedTrades).where(and(eq(missedTrades.id, str(fd, "id")), eq(missedTrades.userId, uid)));
+  revalidatePath("/", "layout");
+  redirect(str(fd, "returnTo") || "/ideas");
+}
+
+/** Manual virtual result in ticks per contract — fallback when no bars exist. */
+export async function setMissedManual(fd: FormData) {
+  const uid = await requireUserId();
+  const raw = str(fd, "manualTicks");
+  const ticks = raw === "" ? null : Math.round(Number(raw));
+  if (ticks !== null && Number.isNaN(ticks)) return;
+  const { missedTrades } = await import("@/db/schema");
+  await db
+    .update(missedTrades)
+    .set({ manualTicks: ticks, updatedAt: new Date() })
+    .where(and(eq(missedTrades.id, str(fd, "id")), eq(missedTrades.userId, uid)));
+  revalidatePath("/", "layout");
+}

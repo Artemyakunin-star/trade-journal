@@ -406,3 +406,43 @@ export const feedback = pgTable("feedback", {
   page: text("page"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------- missed trades (planned setups that were not taken) ----------
+
+export const missedReasonEnum = pgEnum("missed_reason", [
+  // conscious (risk management by choice)
+  "RISK_LIMIT", // daily risk/loss limit reached
+  "ALREADY_IN_TRADE", // was in a position at the time
+  "ENOUGH_FOR_TODAY", // took my trade(s), chose not to add risk
+  // emotional
+  "FEAR_AFTER_LOSS",
+  "HESITATED", // waited for extra confirmation that never came
+  "MISSED_AWAY", // away from screen / distracted
+  "OTHER",
+]);
+
+/** A setup from an idea that was NOT taken. Result is computed virtually from
+ *  bars (entry touch → what-if replay); virtual P&L is never mixed with real. */
+export const missedTrades = pgTable(
+  "missed_trades",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull(),
+    ideaId: text("idea_id")
+      .notNull()
+      .references(() => ideas.id, { onDelete: "cascade" }),
+    instrument: text("instrument").notNull(),
+    direction: directionEnum("direction").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    plannedTime: timestamp("planned_time", { withTimezone: true }).notNull(),
+    plannedEntry: numeric("planned_entry", { precision: 12, scale: 4 }).notNull(),
+    stopPrice: numeric("stop_price", { precision: 12, scale: 4 }).notNull(),
+    reason: missedReasonEnum("reason").notNull(),
+    note: text("note"),
+    /** Manual result in ticks per contract (fallback when no bars that day). */
+    manualTicks: integer("manual_ticks"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("missed_idea_idx").on(t.ideaId), index("missed_user_idx").on(t.userId)],
+);

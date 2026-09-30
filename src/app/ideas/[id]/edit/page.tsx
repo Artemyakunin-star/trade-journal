@@ -10,15 +10,15 @@ import AttachTradesPicker from "@/components/AttachTradesPicker";
 import DocEditor from "@/components/DocEditor";
 import Tiles from "@/components/Tiles";
 import { db } from "@/db";
-import { attachTradesToIdea, deleteIdea, deleteManualTrade, setTradeIdea } from "@/app/actions";
+import { attachTradesToIdea, createMissedTrade, deleteIdea, deleteManualTrade, deleteMissedTrade, setMissedManual, setTradeIdea } from "@/app/actions";
 import { getAllIdeas, getAllTrades, rrStats, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { docs, executions } from "@/db/schema";
-import { fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { getVisibleTradeColumns } from "@/lib/prefs";
-import { loadTradeBars, simulateSequential } from "@/lib/whatif";
+import { loadMissedBars, loadTradeBars, simulateMissed, simulateSequential } from "@/lib/whatif";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +47,10 @@ export default async function EditIdeaPage({
     db.selectDistinct({ tradeId: executions.tradeId }).from(executions).where(and(isNotNull(executions.tradeId), eq(executions.userId, uid))),
   ]);
   const linkedIds = new Set(execTradeIds.map((e) => e.tradeId));
+  const missedRows = await db.query.missedTrades.findMany({
+    where: (m, { and: and_, eq: eq_ }) => and_(eq_(m.ideaId, id), eq_(m.userId, uid)),
+    orderBy: (m, { asc: asc_ }) => [asc_(m.plannedTime)],
+  });
   const specs = Object.fromEntries(
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
   );
@@ -126,6 +130,35 @@ export default async function EditIdeaPage({
     (beAfterT1 ? "&bet1=1" : "") +
     (sp.be ? `&be=${sp.be}` : "") +
     (noBe ? "&nobe=1" : "");
+
+  // ---------- missed trades: virtual replay (never mixed with real P&L) ----------
+  const missedInputs = missedRows.map((m) => ({
+    id: m.id,
+    instrument: m.instrument,
+    direction: m.direction,
+    quantity: m.quantity,
+    plannedTime: m.plannedTime,
+    plannedEntry: Number(m.plannedEntry),
+    stopPrice: Number(m.stopPrice),
+    manualTicks: m.manualTicks,
+  }));
+  const missedBars = await loadMissedBars(missedInputs);
+  const missedResults = missedInputs.map((mi) => {
+    const spec = specs[mi.instrument] ?? fallbackSpec;
+    return simulateMissed(mi, missedBars.get(mi.id) ?? [], spec, {
+      stopTicks: null,
+      targetTicks: toTicks(targetVal, spec),
+      targets: targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
+      beAfterFirstTarget: beAfterT1,
+      beTriggerTicks: toTicks(beVal, spec),
+      slippageTicks,
+      ignoreActualExit: true,
+    });
+  });
+  const missedWithPnl = missedResults.filter((r) => r.pnlUsd !== null);
+  const missedTotal = missedWithPnl.reduce((a, r) => a + (r.pnlUsd ?? 0), 0);
+  const missedPlayedOut = missedWithPnl.filter((r) => (r.pnlUsd ?? 0) > 0).length;
+  const missedReached = missedResults.filter((r) => r.entryReached).length;
   // One combined table: sim cells + row actions plugged into the shared TradesTable.
   const simMap = new Map(
     simTrades.map((t, i) => {
@@ -302,6 +335,117 @@ export default async function EditIdeaPage({
           One table for everything: Net P&L is the actual result, Sim / Δ / Sim exit come from the rule set above,
           Key Level, OF conf, SL and Account are editable inline, and the Columns menu adds or removes columns
           (shared with the Trades screen). Click a time to open the trade with the simulation applied.
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3 style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          Missed trades{" "}
+          <span className="sub">
+            setups you saw but didn&apos;t take · replayed virtually on bars — never mixed with real P&L
+          </span>
+          {missedRows.length > 0 && (
+            <span style={{ marginLeft: "auto", fontSize: 12.5, color: "var(--ink-2)" }}>
+              {missedRows.length} logged · {missedReached} reached entry · {missedPlayedOut} played out ·{" "}
+              <b className={missedTotal > 0 ? "pos" : missedTotal < 0 ? "neg" : ""}>{fmtU(unit === "usd" ? missedTotal : missedTotal / (specs[idea.instrument]?.tickValue ?? 5) * (unit === "points" ? (specs[idea.instrument]?.tickSize ?? 0.25) : 1))}{unit === "usd" ? "" : unitSuffix}</b>{" "}
+              virtual
+            </span>
+          )}
+        </h3>
+        {missedRows.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table className="tj">
+              <thead>
+                <tr>
+                  <th data-tip="Planned entry time">Time</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Entry</th>
+                  <th className="num" data-tip="Planned stop distance">SL</th>
+                  <th data-tip="Why the trade was not taken. Blue = conscious risk decision, red = emotional miss">Reason</th>
+                  <th data-tip="Virtual outcome: bars replayed from the planned time with your target rules from the What-if row above">Would exit by</th>
+                  <th className="num" data-tip="Virtual P&L of the missed setup (no commission — the trade was never taken)">Virtual P&L</th>
+                  <th>Note</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {missedRows.map((m, i) => {
+                  const r = missedResults[i];
+                  const spec = specs[m.instrument] ?? fallbackSpec;
+                  const dirM = m.direction === "LONG" ? 1 : -1;
+                  const slTicks = Math.round(((Number(m.plannedEntry) - Number(m.stopPrice)) * dirM) / spec.tickSize);
+                  const reason = MISSED_REASON_LABEL[m.reason] ?? { label: m.reason, kind: "emotional" as const };
+                  const v = r.pnlUsd === null ? null : convTrade(r.pnlUsd, m);
+                  return (
+                    <tr key={m.id}>
+                      <td>{fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}</td>
+                      <td className="num">{m.quantity}</td>
+                      <td className="num">{fmtPrice(m.plannedEntry)}</td>
+                      <td className="num">{slTicks}t</td>
+                      <td style={{ color: reason.kind === "conscious" ? "var(--s1)" : "var(--crit)" }}>{reason.label}</td>
+                      <td>
+                        {r.source === "none" ? (
+                          <form action={setMissedManual} style={{ display: "inline-flex", gap: 4, alignItems: "center" }} title="No bars for that day — enter the result manually in ticks per contract (e.g. 40 or -20)">
+                            <input type="hidden" name="id" value={m.id} />
+                            <span style={{ color: "var(--muted)" }}>no bars ·</span>
+                            <input className="tj-input" name="manualTicks" placeholder="±ticks" defaultValue={m.manualTicks ?? ""} style={{ width: 64 }} />
+                            <button className="btn ghost btn-sm" type="submit">set</button>
+                          </form>
+                        ) : (
+                          <>
+                            {r.exitLabel}
+                            {r.source === "manual" && <span className="sub"> (manual)</span>}
+                          </>
+                        )}
+                      </td>
+                      <td className={"num " + (v === null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "")} style={{ fontWeight: 600 }}>
+                        {v === null ? "—" : fmtU(v)}
+                      </td>
+                      <td style={{ whiteSpace: "normal", maxWidth: 200 }}>{m.note ?? ""}</td>
+                      <td>
+                        <form action={deleteMissedTrade} style={{ display: "inline" }}>
+                          <input type="hidden" name="id" value={m.id} />
+                          <input type="hidden" name="returnTo" value={`/ideas/${id}/edit?unit=${unit}${simQ}`} />
+                          <button type="submit" title="Delete this missed trade" style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 13, padding: "0 2px" }}>✕</button>
+                        </form>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <form action={createMissedTrade} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+          <input type="hidden" name="ideaId" value={idea.id} />
+          <input type="hidden" name="returnTo" value={`/ideas/${id}/edit?unit=${unit}${simQ}`} />
+          <input type="hidden" name="stopUnit" value={unit} />
+          <input className="tj-input" type="datetime-local" name="plannedAt" required defaultValue={idea.date ? `${idea.date}T15:30` : ""} style={{ width: 190 }} title="Planned entry time (Chart timezone)" />
+          <input className="tj-input" name="entryPrice" type="number" step="0.01" placeholder="Entry price" required style={{ width: 110 }} />
+          <input className="tj-input" name="stopValue" type="number" step="0.01" placeholder={`SL (${unitSuffix}/ct)`} required style={{ width: 100 }} title={`Planned stop distance per contract, in ${unitSuffix}`} />
+          <input className="tj-input" name="quantity" type="number" min="1" step="1" placeholder="Qty" defaultValue={1} style={{ width: 64 }} />
+          <select className="tj-select" name="reason" required defaultValue="" style={{ width: 190 }}>
+            <option value="" disabled>Why not taken?</option>
+            <optgroup label="Conscious (risk decision)">
+              <option value="RISK_LIMIT">Daily risk limit</option>
+              <option value="ALREADY_IN_TRADE">Already in a trade</option>
+              <option value="ENOUGH_FOR_TODAY">Enough for today</option>
+            </optgroup>
+            <optgroup label="Emotional">
+              <option value="FEAR_AFTER_LOSS">Fear after loss</option>
+              <option value="HESITATED">Hesitated</option>
+              <option value="MISSED_AWAY">Away / distracted</option>
+              <option value="OTHER">Other</option>
+            </optgroup>
+          </select>
+          <input className="tj-input" name="note" placeholder="Note (optional)" style={{ width: 180 }} />
+          <button className="btn btn-sm" type="submit">+ Missed</button>
+        </form>
+        <div className="section-note">
+          Instrument and direction come from the idea. The virtual result waits for price to touch your entry after the
+          planned time, then replays bar by bar with your own stop and the target rules from the What-if row above —
+          same conservative fills as the simulator (stop wins ties). &quot;Not reached&quot; means price never came to
+          your entry within 8 hours.
         </div>
       </div>
 

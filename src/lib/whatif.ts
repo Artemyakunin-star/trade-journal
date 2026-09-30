@@ -341,3 +341,133 @@ export function sweep(
     };
   });
 }
+
+// ---------- missed trades: virtual replay of setups that were not taken ----------
+
+export type MissedInput = {
+  id: string;
+  instrument: string;
+  direction: "LONG" | "SHORT";
+  quantity: number;
+  plannedTime: Date;
+  plannedEntry: number;
+  stopPrice: number;
+  manualTicks: number | null;
+};
+
+export type MissedResult = {
+  id: string;
+  /** "sim" = computed from bars; "manual" = user-entered ticks; "none" = no data. */
+  source: "sim" | "manual" | "none";
+  /** Entry price was never touched after the planned time (sim only). */
+  entryReached: boolean;
+  exitLabel: string; // "T1 1 + T2 1", "stop 2", "not reached", "no bars", "manual"
+  pnlUsd: number | null; // virtual, net of nothing (no commission on a trade never taken)
+  exitTime: Date | null;
+  exitPrice: number | null;
+};
+
+/**
+ * Replay one missed setup on bars: wait (up to `windowHours`) for price to
+ * touch the planned entry, then run the ordinary what-if engine from that bar
+ * with the trade's own stop and the caller's target rules.
+ */
+export function simulateMissed(
+  m: MissedInput,
+  bars: Bar[],
+  spec: Spec,
+  params: SimParams,
+  windowHours = 8,
+): MissedResult {
+  if (!bars.length) {
+    if (m.manualTicks !== null) {
+      return {
+        id: m.id, source: "manual", entryReached: true, exitLabel: "manual",
+        pnlUsd: m.manualTicks * spec.tickValue * m.quantity, exitTime: null, exitPrice: null,
+      };
+    }
+    return { id: m.id, source: "none", entryReached: false, exitLabel: "no bars", pnlUsd: null, exitTime: null, exitPrice: null };
+  }
+
+  const from = m.plannedTime.getTime();
+  const to = from + windowHours * 3600_000;
+  const fillBarIdx = bars.findIndex(
+    (b) => b.time.getTime() >= from && b.time.getTime() <= to && b.low <= m.plannedEntry && m.plannedEntry <= b.high,
+  );
+  if (fillBarIdx === -1) {
+    return { id: m.id, source: "sim", entryReached: false, exitLabel: "not reached", pnlUsd: null, exitTime: null, exitPrice: null };
+  }
+
+  const fillTime = bars[fillBarIdx].time;
+  const dir = m.direction === "LONG" ? 1 : -1;
+  const stopTicks = Math.round(((m.plannedEntry - m.stopPrice) * dir) / spec.tickSize);
+  const pseudo = {
+    id: m.id,
+    ideaId: null,
+    instrument: m.instrument,
+    direction: m.direction,
+    quantity: m.quantity,
+    entryTime: fillTime,
+    exitTime: null,
+    avgEntryPrice: String(m.plannedEntry),
+    avgExitPrice: null,
+    pnl: "0",
+    commission: "0",
+    stopPrice: String(m.stopPrice),
+    keyLevel: null,
+    ofConfirmation: null,
+    note: null,
+    maeTicks: null,
+    mfeTicks: null,
+    account: "",
+    grade: null,
+  } as TradeRow;
+
+  const r = simulateTrade(pseudo, bars.slice(fillBarIdx), spec, {
+    ...params,
+    stopTicks: stopTicks > 0 ? stopTicks : params.stopTicks,
+    ignoreActualExit: true,
+  });
+  return {
+    id: m.id,
+    source: "sim",
+    entryReached: true,
+    exitLabel: r.exitLabel ?? r.exitReason,
+    pnlUsd: r.simPnl,
+    exitTime: r.exitTime,
+    exitPrice: r.exitPrice,
+  };
+}
+
+/** Bars for missed setups: planned time .. +windowHours, finest available,
+ *  micro contracts falling back to the mini sibling's bars. */
+export async function loadMissedBars(items: MissedInput[], windowHours = 8): Promise<Map<string, Bar[]>> {
+  const out = new Map<string, Bar[]>();
+  const insts = [...new Set(items.map((m) => m.instrument))];
+  for (const inst of insts) {
+    const its = items.filter((m) => m.instrument === inst);
+    const from = new Date(Math.min(...its.map((m) => m.plannedTime.getTime())));
+    const to = new Date(Math.max(...its.map((m) => m.plannedTime.getTime())) + windowHours * 3600_000);
+    let parsed: Bar[] = [];
+    const sib = siblingOf(inst);
+    for (const src of sib ? [inst, sib] : [inst]) {
+      for (const tf of ["S5", "S30", "M1"] as const) {
+        const rows = await db
+          .select({ time: bars.time, high: bars.high, low: bars.low, close: bars.close })
+          .from(bars)
+          .where(and(eq(bars.instrument, src), eq(bars.timeframe, tf), gte(bars.time, from), lte(bars.time, to)))
+          .orderBy(asc(bars.time));
+        if (rows.length) {
+          parsed = rows.map((r) => ({ time: r.time, high: Number(r.high), low: Number(r.low), close: Number(r.close) }));
+          break;
+        }
+      }
+      if (parsed.length) break;
+    }
+    for (const m of its) {
+      const end = m.plannedTime.getTime() + windowHours * 3600_000;
+      out.set(m.id, parsed.filter((b) => b.time.getTime() >= m.plannedTime.getTime() && b.time.getTime() <= end));
+    }
+  }
+  return out;
+}
