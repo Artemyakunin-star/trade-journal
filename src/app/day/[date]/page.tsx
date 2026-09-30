@@ -4,6 +4,8 @@ import Link from "next/link";
 import { requireUserId } from "@/lib/auth";
 import Tiles from "@/components/Tiles";
 import IdeaCard from "@/components/IdeaCard";
+import { loadMissedBars, simulateMissed } from "@/lib/whatif";
+import { MISSED_REASON_LABEL } from "@/lib/format";
 import PriceChart from "@/components/charts/PriceChart";
 import { db } from "@/db";
 import { and, eq, gte, lt } from "drizzle-orm";
@@ -63,8 +65,41 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
   const allTrades = filterByAccounts(rawTrades, selectedAccounts);
   const dayTrades = allTrades.filter((t) => kyivDateOf(t.entryTime, tz) === date);
   const tradeIds = new Set(dayTrades.map((t) => t.id));
+  // Missed setups logged for this day (virtual replays, never mixed with real P&L).
+  const [allMissed, instRows] = await Promise.all([
+    db.query.missedTrades.findMany({ where: (mm, { eq: eq_ }) => eq_(mm.userId, uid) }),
+    db.query.instruments.findMany(),
+  ]);
+  const dayMissed = allMissed
+    .filter((m) => kyivDateOf(m.plannedTime, tz) === date)
+    .sort((a, b) => a.plannedTime.getTime() - b.plannedTime.getTime());
+  const missedIdeaIds = new Set(dayMissed.map((m) => m.ideaId));
+  const specsM = Object.fromEntries(instRows.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]));
+  const missedInputs = dayMissed.map((m) => ({
+    id: m.id, instrument: m.instrument, direction: m.direction, quantity: m.quantity,
+    plannedTime: m.plannedTime, plannedEntry: Number(m.plannedEntry), stopPrice: Number(m.stopPrice), manualTicks: m.manualTicks,
+  }));
+  const missedBars = await loadMissedBars(missedInputs);
+  const missedResults = missedInputs.map((mi, i) => {
+    const m = dayMissed[i];
+    const spec = specsM[mi.instrument] ?? { tickSize: 0.25, tickValue: 5 };
+    const ownTargets = m.t1Ticks
+      ? [{ ticks: m.t1Ticks, qty: m.t1Qty ?? 1 }, ...(m.t2Ticks ? [{ ticks: m.t2Ticks, qty: m.t2Qty ?? 1 }] : [])]
+      : [];
+    return simulateMissed(mi, missedBars.get(mi.id) ?? [], spec, {
+      stopTicks: null, targetTicks: null, targets: ownTargets,
+      beAfterFirstTarget: false, beTriggerTicks: m.beTicks ?? null, slippageTicks: 1, ignoreActualExit: true,
+    });
+  });
+  const missedTotal = missedResults.reduce((a, r) => a + (r.pnlUsd ?? 0), 0);
+  const missedEvaluated = missedResults.filter((r) => r.pnlUsd !== null).length;
+
   const dayIdeas = allIdeas.filter(
-    (i) => i.trades.some((t) => tradeIds.has(t.id)) || (plan && i.planId === plan.id),
+    (i) =>
+      i.trades.some((t) => tradeIds.has(t.id)) ||
+      (plan && i.planId === plan.id) ||
+      i.date === date ||
+      missedIdeaIds.has(i.id),
   );
   const rogue = dayTrades.filter((t) => !t.ideaId);
 
@@ -95,6 +130,12 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     { lbl: "Trades", val: String(dayTrades.length), delta: closed ? `${wins} win${wins === 1 ? "" : "s"} of ${closed} closed` : undefined },
     { lbl: "Ideas", val: String(dayIdeas.length), delta: rogue.length ? undefined : "all trades linked" },
     { lbl: "Rogue trades", val: String(rogue.length), cls: rogue.length ? "neg" : "", delta: rogue.length ? `total ${fmtMoney(rogue.reduce((a, t) => a + tradePnl(t), 0))}` : "clean" },
+    {
+      lbl: "Missed setups",
+      val: String(dayMissed.length),
+      cls: "",
+      delta: dayMissed.length ? (missedEvaluated ? `virtual ${fmtMoney(Math.round(missedTotal))}` : "not evaluated yet") : "none logged",
+    },
     { lbl: "Scenarios played out", val: scen.length ? `${played} of ${scen.length}` : "—", delta: scen.length === 0 ? "no scenarios yet" : graded < scen.length ? `${scen.length - graded} not reviewed yet` : "review complete" },
   ];
 
@@ -240,6 +281,39 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
             ))}
             {dayIdeas.length === 0 && <div className="section-note">No ideas linked to this day yet.</div>}
           </div>
+        </div>
+        <div className="card">
+          <h3>
+            Missed setups{" "}
+            <span className="sub">
+              {dayMissed.length ? `${dayMissed.length} logged · virtual ${fmtMoney(Math.round(missedTotal))}` : "planned but not taken"}
+            </span>
+          </h3>
+          {dayMissed.map((m, i) => {
+            const r = missedResults[i];
+            const idea = allIdeas.find((x) => x.id === m.ideaId);
+            const reason = MISSED_REASON_LABEL[m.reason] ?? { label: m.reason, kind: "emotional" as const };
+            const p = r.pnlUsd;
+            return (
+              <div className="timeline-item" key={m.id}>
+                <span className="t">
+                  <Link href={`/missed/${m.id}`} className="linklike">{fmtTimeKyiv(m.plannedTime, false, tz, prefs.dateFormat)}</Link>
+                </span>
+                <span className="what">
+                  {m.instrument} {m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity} @ {Number(m.plannedEntry).toLocaleString("en-US")}
+                  {idea ? <> · {idea.title}</> : null} ·{" "}
+                  <span style={{ color: reason.kind === "conscious" ? "var(--s1)" : "var(--crit)" }}>{reason.label}</span>
+                  <span style={{ color: "var(--muted)" }}> — {r.exitLabel}</span>
+                </span>
+                <span className="pnl" style={{ color: p === null ? "var(--muted)" : p > 0 ? "var(--pos)" : p < 0 ? "var(--neg)" : "var(--ink-2)" }}>
+                  {p === null ? "—" : fmtMoney(Math.round(p))}
+                </span>
+              </div>
+            );
+          })}
+          {dayMissed.length === 0 && (
+            <div className="section-note">Nothing logged for this day. Missed setups are added inside an idea (&quot;+ Missed&quot;).</div>
+          )}
         </div>
         <div className="card">
           <h3>Execution timeline <span className="sub">{tzLabel(tz)}</span></h3>
