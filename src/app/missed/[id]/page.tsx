@@ -105,7 +105,6 @@ export default async function MissedDetailPage({
       price: entry + dir * t.ticks * spec.tickSize,
       title: `SIM T${i + 1} ×${t.qty}`,
     })),
-    entryPrice: { price: entry, title: `SIM entry ×${m.quantity}` },
     entryTimeSec: Math.floor((r.entryTime ?? m.plannedTime).getTime() / 1000),
     long: m.direction === "LONG",
     entryLabel: `SIM ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${fmtPrice(m.plannedEntry)}`,

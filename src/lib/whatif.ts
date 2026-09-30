@@ -83,16 +83,22 @@ export function simulateTrade(
 
   // ---------- multi-target mode: partial exits, contract by contract ----------
   if (multi.length > 0) {
-    // Assign contracts to targets in order; anything beyond the sum is a runner.
+    // Assign contracts to targets starting from the FURTHEST one: when the
+    // position has fewer contracts than the plan needs (e.g. 1 contract with
+    // a T1+T2 plan), it rides to the far target instead of quitting at the
+    // near one. With enough contracts the result is identical to in-order
+    // assignment. Labels keep the original target numbers ("T2 1").
     let remaining = qty;
-    const legs = multi
-      .map((x) => {
-        const take = Math.min(x.qty, remaining);
-        remaining -= take;
-        return { price: entry + dir * x.ticks * spec.tickSize, qty: take, label: "" };
-      })
+    const withIdx = multi.map((x, i) => ({ ...x, idx: i }));
+    const takes = new Map<number, number>();
+    for (const x of [...withIdx].sort((a, b) => b.ticks - a.ticks)) {
+      const take = Math.min(x.qty, remaining);
+      remaining -= take;
+      takes.set(x.idx, take);
+    }
+    const legs = withIdx
+      .map((x) => ({ price: entry + dir * x.ticks * spec.tickSize, qty: takes.get(x.idx) ?? 0, label: `T${x.idx + 1}` }))
       .filter((l) => l.qty > 0);
-    legs.forEach((l, i) => (l.label = `T${i + 1}`));
 
     let open = qty;
     let gross = 0;
