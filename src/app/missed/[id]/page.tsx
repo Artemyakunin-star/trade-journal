@@ -61,6 +61,21 @@ export default async function MissedDetailPage({
 
   const dir = m.direction === "LONG" ? 1 : -1;
   const entry = Number(m.plannedEntry);
+  // Virtual MAE/MFE: excursions between the virtual entry fill and exit.
+  const winBars = (barsMap.get(m.id) ?? []).filter((b) => {
+    if (!r.entryTime) return false;
+    const t = b.time.getTime();
+    const end = r.exitTime ? r.exitTime.getTime() : Infinity;
+    return t >= r.entryTime.getTime() && t <= end;
+  });
+  let maeTicks: number | null = null;
+  let mfeTicks: number | null = null;
+  if (winBars.length) {
+    const lo = Math.min(...winBars.map((b) => b.low));
+    const hi = Math.max(...winBars.map((b) => b.high));
+    maeTicks = Math.max(0, Math.round((dir === 1 ? entry - lo : hi - entry) / spec.tickSize));
+    mfeTicks = Math.max(0, Math.round((dir === 1 ? hi - entry : entry - lo) / spec.tickSize));
+  }
   const slTicks = Math.round(((entry - Number(m.stopPrice)) * dir) / spec.tickSize);
   const dtLocal = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
@@ -96,32 +111,46 @@ export default async function MissedDetailPage({
     entryLabel: `SIM ${m.direction === "LONG" ? "▲" : "▼"}×${m.quantity} @ ${fmtPrice(m.plannedEntry)}`,
   };
 
+  const excursion = (ticks: number | null) => {
+    if (ticks === null) return { val: "—", whole: undefined as string | undefined };
+    const perContractUsd = ticks * spec.tickValue;
+    return {
+      val: fmtU(conv(perContractUsd)).replace(/^\+/, ""),
+      whole: `whole trade ×${m.quantity}: ${fmtMoney(Math.round(perContractUsd * m.quantity)).replace(/^\+/, "")}`,
+    };
+  };
+  const mae = excursion(maeTicks);
+  const mfe = excursion(mfeTicks);
   const tiles = [
-    { lbl: "Planned entry", val: fmtPrice(m.plannedEntry), delta: `${m.direction === "LONG" ? "Long" : "Short"} ×${m.quantity} · ${fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}` },
-    { lbl: "Stop", val: `${slTicks}t`, delta: fmtPrice(m.stopPrice) },
     {
-      lbl: "Plan",
-      val: m.t1Ticks ? `T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}${m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}` : "—",
-      delta: m.beTicks ? `BE after ${m.beTicks}t` : "no BE rule",
-    },
-    {
-      lbl: "Would exit by",
-      val: r.exitLabel,
-      delta: r.source === "manual" ? "manual estimate" : r.source === "none" ? "no bars for this day" : !r.entryReached ? "price never touched the entry (8h window)" : "bar-by-bar replay, conservative fills",
-    },
-    {
-      lbl: "Virtual P&L",
+      lbl: "Virtual P&L (no commission)",
       val: v === null ? "—" : fmtU(v),
       cls: v === null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "",
-      delta: "never mixed with real results · no commission",
+      delta:
+        r.source === "manual" ? "manual estimate" : r.source === "none" ? "no bars for this day" : !r.entryReached ? "price never touched the entry (8h window)" : `would exit by ${r.exitLabel}`,
     },
+    {
+      lbl: "Planned entry",
+      val: fmtPrice(m.plannedEntry),
+      delta: `${m.direction === "LONG" ? "Long" : "Short"} ×${m.quantity} · ${fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}`,
+    },
+    {
+      lbl: "Stop & plan",
+      val: `${slTicks}t`,
+      delta: `${m.t1Ticks ? `T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}${m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}` : "no targets"}${m.beTicks ? ` · BE after ${m.beTicks}t` : ""}`,
+    },
+    { lbl: "MAE (worst against you, per contract)", val: mae.val, cls: maeTicks ? "neg" : "", delta: mae.whole },
+    { lbl: "MFE (best in your favor, per contract)", val: mfe.val, cls: mfeTicks ? "pos" : "", delta: mfe.whole },
   ];
 
   return (
     <>
       <div className="topbar">
         <h1 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          Missed · {m.instrument} {m.direction === "LONG" ? "Long" : "Short"}{" "}
+          Missed · {m.instrument} {m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity}{" "}
+          <span style={{ color: "var(--muted)", fontWeight: 400 }}>
+            · {new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: tz }).format(m.plannedTime)}
+          </span>{" "}
           <span style={{ color: reason.kind === "conscious" ? "var(--s1)" : "var(--crit)", fontSize: 14, fontWeight: 600 }}>
             {reason.label}
           </span>
