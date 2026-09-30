@@ -7,6 +7,7 @@ import { deleteMissedTrade, setMissedManual } from "@/app/actions";
 import { fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { loadMissedBars, simulateMissed } from "@/lib/whatif";
+import Tiles from "@/components/Tiles";
 
 export const dynamic = "force-dynamic";
 
@@ -130,7 +131,7 @@ export default async function MissedPage({
       ? fmtMoney(Math.round(v))
       : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(unit === "ticks" ? Math.round(v) : Number(v.toFixed(2))).toLocaleString("en-US")}${unitSuffix}`;
 
-  const tiles = [
+  const tiles: import("@/lib/metrics").Tile[] = [
     { lbl: "Logged", val: String(missed.length), delta: `${reached} reached entry` },
     { lbl: "Played out", val: withPnl.length ? `${playedOut} of ${withPnl.length}` : "—", delta: "virtual winners among evaluated" },
     { lbl: "Virtual P&L", val: fmtMoney(Math.round(totalUsd)), cls: totalUsd > 0 ? "pos" : totalUsd < 0 ? "neg" : "", delta: "what the missed setups would have made" },
@@ -165,15 +166,7 @@ export default async function MissedPage({
         </span>
       </form>
 
-      <div className="tiles" style={{ marginBottom: 14 }}>
-        {tiles.map((t) => (
-          <div className="tile" key={t.lbl}>
-            <div className="lbl">{t.lbl}</div>
-            <div className={"val " + (t.cls ?? "")}>{t.val}</div>
-            {t.delta && <div className="delta">{t.delta}</div>}
-          </div>
-        ))}
-      </div>
+      <Tiles tiles={tiles} />
 
       <div className="card">
         <h3 style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>

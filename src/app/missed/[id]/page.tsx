@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
 import PriceChart, { type SimOverlay } from "@/components/charts/PriceChart";
+import Tiles from "@/components/Tiles";
 import { deleteMissedTrade, updateMissedTrade } from "@/app/actions";
 import { fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -120,7 +121,7 @@ export default async function MissedDetailPage({
   };
   const mae = excursion(maeTicks);
   const mfe = excursion(mfeTicks);
-  const tiles = [
+  const tiles: import("@/lib/metrics").Tile[] = [
     {
       lbl: "Virtual P&L (no commission)",
       val: v === null ? "—" : fmtU(v),
@@ -169,17 +170,9 @@ export default async function MissedDetailPage({
         </form>
       </div>
 
-      <div className="tiles" style={{ marginBottom: 14 }}>
-        {tiles.map((t) => (
-          <div className="tile" key={t.lbl}>
-            <div className="lbl">{t.lbl}</div>
-            <div className={"val " + (t.cls ?? "")}>{t.val}</div>
-            {t.delta && <div className="delta">{t.delta}</div>}
-          </div>
-        ))}
-      </div>
+      <Tiles tiles={tiles} />
 
-      <PriceChart instruments={[m.instrument]} date={date} tz={tz} tradeId={m.id} sim={sim} />
+      <PriceChart instruments={[m.instrument]} date={date} tz={tz} theme={prefs.theme} tradeId={m.id} sim={sim} />
 
       <div className="card" style={{ marginTop: 14 }}>
         <h3>
