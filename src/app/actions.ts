@@ -819,6 +819,7 @@ export async function createMissedTrade(fd: FormData) {
   };
   const t1 = toTicksVal(str(fd, "t1"));
   const t2 = toTicksVal(str(fd, "t2"));
+  const t3 = toTicksVal(str(fd, "t3"));
   const be = toTicksVal(str(fd, "be"));
   const qOf = (name: string) => Math.max(1, Math.round(Number(str(fd, name)) || 1));
 
@@ -837,6 +838,8 @@ export async function createMissedTrade(fd: FormData) {
     t1Qty: t1 === null ? null : qOf("tq1"),
     t2Ticks: t2,
     t2Qty: t2 === null ? null : qOf("tq2"),
+    t3Ticks: t3,
+    t3Qty: t3 === null ? null : qOf("tq3"),
     beTicks: be,
   });
   revalidatePath("/", "layout");
@@ -899,6 +902,7 @@ export async function updateMissedTrade(fd: FormData) {
   };
   const t1 = toTicksVal(str(fd, "t1"));
   const t2 = toTicksVal(str(fd, "t2"));
+  const t3 = toTicksVal(str(fd, "t3"));
   const be = toTicksVal(str(fd, "be"));
   const qOf = (name: string) => Math.max(1, Math.round(Number(str(fd, name)) || 1));
 
@@ -915,6 +919,8 @@ export async function updateMissedTrade(fd: FormData) {
       t1Qty: t1 === null ? null : qOf("tq1"),
       t2Ticks: t2,
       t2Qty: t2 === null ? null : qOf("tq2"),
+      t3Ticks: t3,
+      t3Qty: t3 === null ? null : qOf("tq3"),
       beTicks: be,
       updatedAt: new Date(),
     })

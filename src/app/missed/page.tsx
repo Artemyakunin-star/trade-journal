@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { deleteMissedTrade, setMissedManual } from "@/app/actions";
 import { fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
-import { loadMissedBars, simulateMissed } from "@/lib/whatif";
+import { loadMissedBars, ownTargetsOf, simulateMissed } from "@/lib/whatif";
 import Tiles from "@/components/Tiles";
 
 export const dynamic = "force-dynamic";
@@ -76,16 +76,11 @@ export default async function MissedPage({
   const results = inputs.map((mi, i) => {
     const m = missed[i];
     const spec = specs[mi.instrument] ?? fallbackSpec;
-    const ownTargets = m.t1Ticks
-      ? [
-          { ticks: m.t1Ticks, qty: m.t1Qty ?? 1 },
-          ...(m.t2Ticks ? [{ ticks: m.t2Ticks, qty: m.t2Qty ?? 1 }] : []),
-        ]
-      : null;
+    const ownTargets = ownTargetsOf(m);
     return simulateMissed(mi, barsMap.get(mi.id) ?? [], spec, {
       stopTicks: null,
       targetTicks: null,
-      targets: ownTargets ?? targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
+      targets: ownTargets.length ? ownTargets : targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
       beAfterFirstTarget: false,
       beTriggerTicks: m.beTicks ?? null,
       slippageTicks,
@@ -238,7 +233,7 @@ export default async function MissedPage({
                       <td className="num">{slTicks}t</td>
                       <td style={{ whiteSpace: "nowrap", color: "var(--ink-2)" }}>
                         {m.t1Ticks
-                          ? `T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}${m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}${m.beTicks ? ` · BE ${m.beTicks}t` : ""}`
+                          ? `T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}${m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}${m.t3Ticks ? ` + T3 ${m.t3Ticks}t×${m.t3Qty ?? 1}` : ""}${m.beTicks ? ` · BE ${m.beTicks}t` : ""}`
                           : m.beTicks
                             ? `BE ${m.beTicks}t`
                             : "—"}

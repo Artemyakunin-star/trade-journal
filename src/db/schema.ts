@@ -445,6 +445,8 @@ export const missedTrades = pgTable(
     t1Qty: integer("t1_qty"),
     t2Ticks: integer("t2_ticks"),
     t2Qty: integer("t2_qty"),
+    t3Ticks: integer("t3_ticks"),
+    t3Qty: integer("t3_qty"),
     beTicks: integer("be_ticks"),
     /** Manual result in ticks per contract (fallback when no bars that day). */
     manualTicks: integer("manual_ticks"),

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { requireUserId } from "@/lib/auth";
 import Tiles from "@/components/Tiles";
 import IdeaCard from "@/components/IdeaCard";
-import { loadMissedBars, simulateMissed } from "@/lib/whatif";
+import { loadMissedBars, ownTargetsOf, simulateMissed } from "@/lib/whatif";
 import { MISSED_REASON_LABEL } from "@/lib/format";
 import PriceChart from "@/components/charts/PriceChart";
 import { db } from "@/db";
@@ -83,9 +83,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
   const missedResults = missedInputs.map((mi, i) => {
     const m = dayMissed[i];
     const spec = specsM[mi.instrument] ?? { tickSize: 0.25, tickValue: 5 };
-    const ownTargets = m.t1Ticks
-      ? [{ ticks: m.t1Ticks, qty: m.t1Qty ?? 1 }, ...(m.t2Ticks ? [{ ticks: m.t2Ticks, qty: m.t2Qty ?? 1 }] : [])]
-      : [];
+    const ownTargets = ownTargetsOf(m);
     return simulateMissed(mi, missedBars.get(mi.id) ?? [], spec, {
       stopTicks: null, targetTicks: null, targets: ownTargets,
       beAfterFirstTarget: false, beTriggerTicks: m.beTicks ?? null, slippageTicks: 1, ignoreActualExit: true,

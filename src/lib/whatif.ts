@@ -384,6 +384,19 @@ export type MissedResult = {
  * touch the planned entry, then run the ordinary what-if engine from that bar
  * with the trade's own stop and the caller's target rules.
  */
+/** A missed setup's own hand-entered targets (T1..T3 x contracts), in order. */
+export function ownTargetsOf(m: {
+  t1Ticks: number | null; t1Qty: number | null;
+  t2Ticks: number | null; t2Qty: number | null;
+  t3Ticks?: number | null; t3Qty?: number | null;
+}): SimTarget[] {
+  const out: SimTarget[] = [];
+  if (m.t1Ticks) out.push({ ticks: m.t1Ticks, qty: m.t1Qty ?? 1 });
+  if (m.t2Ticks) out.push({ ticks: m.t2Ticks, qty: m.t2Qty ?? 1 });
+  if (m.t3Ticks) out.push({ ticks: m.t3Ticks, qty: m.t3Qty ?? 1 });
+  return out;
+}
+
 export function simulateMissed(
   m: MissedInput,
   bars: Bar[],

@@ -8,7 +8,7 @@ import PriceChart, { type SimOverlay } from "@/components/charts/PriceChart";
 import { deleteMissedTrade, updateMissedTrade } from "@/app/actions";
 import { fmtDateLong, fmtExcursion, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
-import { loadMissedBars, simulateMissed } from "@/lib/whatif";
+import { loadMissedBars, ownTargetsOf, simulateMissed } from "@/lib/whatif";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +49,7 @@ export default async function MissedDetailPage({
     stopPrice: Number(m.stopPrice),
     manualTicks: m.manualTicks,
   };
-  const ownTargets = m.t1Ticks
-    ? [{ ticks: m.t1Ticks, qty: m.t1Qty ?? 1 }, ...(m.t2Ticks ? [{ ticks: m.t2Ticks, qty: m.t2Qty ?? 1 }] : [])]
-    : [];
+  const ownTargets = ownTargetsOf(m);
   const barsMap = await loadMissedBars([input]);
   const r = simulateMissed(input, barsMap.get(m.id) ?? [], spec, {
     stopTicks: null,
@@ -191,6 +189,7 @@ export default async function MissedDetailPage({
         {fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}) · SL {slTicks}t
         {m.t1Ticks ? ` · T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}` : ""}
         {m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}
+        {m.t3Ticks ? ` + T3 ${m.t3Ticks}t×${m.t3Qty ?? 1}` : ""}
         {m.beTicks ? ` · BE after ${m.beTicks}t` : ""} · would exit by <b>{r.exitLabel}</b>
         {r.source === "manual" ? " (manual estimate)" : r.source === "none" ? " (no bars for this day)" : !r.entryReached ? " (price never touched the entry)" : ""}
       </div>
@@ -208,13 +207,15 @@ export default async function MissedDetailPage({
           <input type="hidden" name="stopUnit" value={unit} />
           <label className="sub">Time <input className="tj-input" type="datetime-local" name="plannedAt" required defaultValue={dtLocal} style={{ width: 190 }} /></label>
           <label className="sub">Entry <input className="tj-input" name="entryPrice" type="number" step="0.01" required defaultValue={entry} style={{ width: 100 }} /></label>
-          <label className="sub">SL <input className="tj-input" name="stopValue" type="number" step="0.01" required defaultValue={inUnit(slTicks)} style={{ width: 84 }} /></label>
+          <label className="sub">Stop <input className="tj-input" name="stopValue" type="number" step="0.01" required defaultValue={inUnit(slTicks)} style={{ width: 84 }} /></label>
           <label className="sub">Qty <input className="tj-input" name="quantity" type="number" min="1" step="1" defaultValue={m.quantity} style={{ width: 60 }} /></label>
           <label className="sub">T1 <input className="tj-input" name="t1" type="number" step="0.01" defaultValue={m.t1Ticks ? inUnit(m.t1Ticks) : ""} style={{ width: 80 }} /></label>
           <label className="sub">× <input className="tj-input" name="tq1" type="number" min="1" step="1" defaultValue={m.t1Qty ?? ""} style={{ width: 48 }} /></label>
           <label className="sub">T2 <input className="tj-input" name="t2" type="number" step="0.01" defaultValue={m.t2Ticks ? inUnit(m.t2Ticks) : ""} style={{ width: 80 }} /></label>
           <label className="sub">× <input className="tj-input" name="tq2" type="number" min="1" step="1" defaultValue={m.t2Qty ?? ""} style={{ width: 48 }} /></label>
-          <label className="sub">BE <input className="tj-input" name="be" type="number" step="0.01" defaultValue={m.beTicks ? inUnit(m.beTicks) : ""} style={{ width: 80 }} /></label>
+          <label className="sub">T3 <input className="tj-input" name="t3" type="number" step="0.01" defaultValue={m.t3Ticks ? inUnit(m.t3Ticks) : ""} style={{ width: 80 }} /></label>
+          <label className="sub">× <input className="tj-input" name="tq3" type="number" min="1" step="1" defaultValue={m.t3Qty ?? ""} style={{ width: 48 }} /></label>
+          <label className="sub">BE after <input className="tj-input" name="be" type="number" step="0.01" defaultValue={m.beTicks ? inUnit(m.beTicks) : ""} style={{ width: 80 }} /></label>
           <select className="tj-select" name="reason" required defaultValue={m.reason} style={{ width: 180 }}>
             <optgroup label="Conscious (risk decision)">
               <option value="RISK_LIMIT">Daily risk limit</option>
