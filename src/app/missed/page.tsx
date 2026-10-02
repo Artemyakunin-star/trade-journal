@@ -54,7 +54,6 @@ export default async function MissedPage({
       qty: Math.max(1, Math.round(Number((sp as Record<string, string | undefined>)[`q${i}`] ?? 1) || 1)),
     }))
     .filter((x): x is { size: number; qty: number } => x.size !== null);
-  const beAfterT1 = sp.bet1 === "1";
   const slippageTicks = sp.slip && Number(sp.slip) >= 0 ? Number(sp.slip) : 1;
   const toTicks = (v: number | null, spec: { tickSize: number; tickValue: number }): number | null => {
     if (v === null) return null;
@@ -87,7 +86,7 @@ export default async function MissedPage({
       stopTicks: null,
       targetTicks: null,
       targets: ownTargets ?? targetSlots.map((x) => ({ ticks: toTicks(x.size, spec)!, qty: x.qty })),
-      beAfterFirstTarget: ownTargets ? false : beAfterT1,
+      beAfterFirstTarget: false,
       beTriggerTicks: m.beTicks ?? null,
       slippageTicks,
       ignoreActualExit: true,
@@ -185,9 +184,6 @@ export default async function MissedPage({
                 <input className="tj-input" name={`q${i}`} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? ""} placeholder="1" style={{ width: 38 }} />
               </span>
             ))}
-            <label style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-              <input type="checkbox" name="bet1" value="1" defaultChecked={beAfterT1} /> BE after T1
-            </label>
             <button className="btn ghost btn-sm" type="submit">Apply</button>
           </form>
         </h3>

@@ -77,7 +77,12 @@ export function simulateTrade(
   const cutoff = ignoreExit || !t.exitTime ? null : t.exitTime.getTime();
   const activeBars = cutoff === null ? tradeBars : tradeBars.filter((b) => b.time.getTime() <= cutoff);
 
-  let stopPrice = p.stopTicks === null ? null : entry - dir * p.stopTicks * spec.tickSize;
+  // Virtual stop: the rule's stop wins; with no rule stop, the trade's OWN
+  // recorded SL (the SL column) applies - "what if I held to target" still
+  // respects the stop that was actually protecting the position.
+  const ownStop = t.stopPrice === null ? null : Number(t.stopPrice);
+  const ownStopValid = ownStop !== null && !Number.isNaN(ownStop) && (entry - ownStop) * dir > 0;
+  let stopPrice = p.stopTicks !== null ? entry - dir * p.stopTicks * spec.tickSize : ownStopValid ? ownStop : null;
   const beLevel = beTrigger === null ? null : entry + dir * beTrigger * spec.tickSize;
   let beArmed = false;
 

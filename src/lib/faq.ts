@@ -96,7 +96,7 @@ export const FAQ: FaqSection[] = [
       },
       {
         q: "How do multiple targets work?",
-        a: "Up to three target slots (T1–T3), each with a size (in the active unit) and a number of contracts. Contracts beyond the targets' total ride as a runner until the stop, break-even or the end of data. The \"BE after T1\" checkbox moves the stop to entry once the first target fills. The exit chip shows the actual mix — e.g. \"T1 1 + T2 1\", \"T1 1 + BE 1\" or \"stop 2\".",
+        a: "Up to three target slots (T1–T3), each with a size (in the active unit) and a number of contracts. Contracts beyond the targets' total ride as a runner until the stop, break-even or the end of data. A \"BE after\" trigger (in ticks or the active unit) moves the stop to entry once price has gone that far in your favor. When the rule row has no stop, each trade's own recorded SL applies automatically. The exit chip shows the actual mix — e.g. \"T1 1 + T2 1\", \"T1 1 + BE 1\" or \"stop 2\".",
       },
       {
         q: "How honest are the fills?",

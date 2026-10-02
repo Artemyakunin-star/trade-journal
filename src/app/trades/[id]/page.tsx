@@ -286,10 +286,6 @@ export default async function TradeDetailPage({
                   <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 42 }} />
                 </span>
               ))}
-              <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)" }} title="Move the stop of the remaining contracts to break-even right after the first target fills">
-                <input type="checkbox" name="bet1" value="1" defaultChecked={beAfterT1} style={{ accentColor: "var(--s1)" }} />
-                BE after T1
-              </label>
               <BeField defaultBe={sp.be ?? ""} defaultNoBe={wNoBe} suffix={unitSuffix} compact />
               <button className="btn btn-sm" type="submit">Try</button>
               {(sp.wstop || sp.wtarget || sp.be || sp.nobe || targetSlots.length > 0 || beAfterT1) && (

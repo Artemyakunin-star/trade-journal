@@ -163,7 +163,7 @@ export default async function AnalyticsPage({
   // table below follows the $/t/pt switch instead.
   const tiles: Tile[] = [
     { lbl: "Actual net P&L", val: fmtMoney(Math.round(sum.actualTotal)), cls: sum.actualTotal > 0 ? "pos" : sum.actualTotal < 0 ? "neg" : "", delta: `${sum.total} closed trades` },
-    { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · ${targetSlots.length ? targetSlots.map((x, i) => `T${i + 1} ${x.size}${unitSuffix}×${x.qty}`).join(" ") : `target ${targetVal ?? "—"}${unitSuffix}`}${beAfterT1 ? " · BE after T1" : ""} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
+    { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · ${targetSlots.length ? targetSlots.map((x, i) => `T${i + 1} ${x.size}${unitSuffix}×${x.qty}`).join(" ") : `target ${targetVal ?? "—"}${unitSuffix}`} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
     { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
     { lbl: "Win rate: actual → sim", val: `${Math.round(sum.actualWinRate * 100)}% → ${Math.round(sum.simWinRate * 100)}%` },
     { lbl: "Trades re-routed", val: `${sum.changed} of ${sum.covered}`, delta: (() => {
@@ -320,10 +320,6 @@ export default async function AnalyticsPage({
               <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 44 }} />
             </label>
           ))}
-          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)" }} title="Move the stop of the remaining contracts to break-even right after the first target fills">
-            <input type="checkbox" name="bet1" value="1" defaultChecked={beAfterT1} style={{ accentColor: "var(--s1)" }} />
-            BE after T1
-          </label>
           <BeField defaultBe={sp.be ?? ""} defaultNoBe={noBe} suffix={unitSuffix} />
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
             Slip, t
