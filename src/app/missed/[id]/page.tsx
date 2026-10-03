@@ -5,7 +5,8 @@ import { notFound } from "next/navigation";
 import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
 import PriceChart, { type SimOverlay } from "@/components/charts/PriceChart";
-import { deleteMissedTrade, updateMissedTrade } from "@/app/actions";
+import DocEditor from "@/components/DocEditor";
+import { deleteMissedTrade, setMissedIdea, updateMissedTrade } from "@/app/actions";
 import { fmtDateLong, fmtExcursion, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { loadMissedBars, ownTargetsOf, simulateMissed } from "@/lib/whatif";
@@ -26,10 +27,15 @@ export default async function MissedDetailPage({
     where: (x, { and: and_, eq: eq_ }) => and_(eq_(x.id, id), eq_(x.userId, uid)),
   });
   if (!m) notFound();
-  const [prefs, idea, inst] = await Promise.all([
+  const [prefs, idea, inst, allIdeas] = await Promise.all([
     getSettings(uid),
     db.query.ideas.findFirst({ where: (i, { eq: eq_ }) => eq_(i.id, m.ideaId), columns: { id: true, title: true } }),
     db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, m.instrument) }),
+    db.query.ideas.findMany({
+      where: (i, { eq: eq_ }) => eq_(i.userId, uid),
+      columns: { id: true, title: true },
+      orderBy: (i, { desc: desc_ }) => [desc_(i.createdAt)],
+    }),
   ]);
   const tz = prefs.timezone;
   const rtRow = await db.query.userCommissions.findFirst({
@@ -185,7 +191,7 @@ export default async function MissedDetailPage({
       </div>
 
       <div className="section-note" style={{ margin: "0 0 10px 2px" }}>
-        Linked to: <Link className="linklike" href={`/ideas/${m.ideaId}/edit`}>{idea?.title ?? "idea"}</Link> · Virtual replay: planned entry <b>{fmtPrice(m.plannedEntry)}</b> ({m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity} ·{" "}
+        Virtual replay: planned entry <b>{fmtPrice(m.plannedEntry)}</b> ({m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity} ·{" "}
         {fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}) · SL {slTicks}t
         {m.t1Ticks ? ` · T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}` : ""}
         {m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}
@@ -196,7 +202,8 @@ export default async function MissedDetailPage({
 
       <PriceChart instruments={[m.instrument]} date={date} tz={tz} theme={prefs.theme} tradeId={m.id} sim={sim} />
 
-      <div className="card" style={{ marginTop: 14 }}>
+      <div className="grid2" style={{ gridTemplateColumns: "1.6fr 1fr", alignItems: "start", marginTop: 14 }}>
+      <div className="card">
         <h3>
           Edit this setup{" "}
           <span className="sub">sizes in {unit === "usd" ? "$" : unit === "ticks" ? "ticks" : "points"} per contract · the chart re-runs on save</span>
@@ -236,6 +243,38 @@ export default async function MissedDetailPage({
           Time, entry, stop, contracts, targets, BE, reason and note — everything is editable; the virtual replay and the
           chart update immediately after saving. T1/T2/BE left empty = ride to stop or session end.
         </div>
+      </div>
+
+      <div className="card">
+        <h3>Idea</h3>
+        <div style={{ fontSize: 12.5, color: "var(--ink-2)", marginBottom: 10 }}>
+          Linked to: <Link className="linklike" href={`/ideas/${m.ideaId}/edit`}>{idea?.title ?? "idea"}</Link>
+        </div>
+        <form action={setMissedIdea} style={{ display: "flex", gap: 6 }}>
+          <input type="hidden" name="id" value={m.id} />
+          <select className="tj-select" name="ideaId" defaultValue={m.ideaId} style={{ flex: 1 }}>
+            {allIdeas.map((i) => (
+              <option key={i.id} value={i.id}>{i.title}</option>
+            ))}
+          </select>
+          <button className="btn btn-sm" type="submit">Save</button>
+        </form>
+        <div className="section-note">
+          A missed setup always belongs to an idea. Moving it to another idea also takes that idea&apos;s instrument and
+          direction.
+        </div>
+      </div>
+      </div>
+
+      {/* Full-width write-up, same editor as trades: description + screenshots. */}
+      <div style={{ marginTop: 14 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", margin: "0 0 10px 2px" }}>
+          Setup write-up{" "}
+          <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 11.5 }}>
+            — why you saw it, why you skipped it, chart screenshots (paste with Ctrl+V), autosaved
+          </span>
+        </h3>
+        <DocEditor kind="missed" docId={m.id} initialTitle="" initialContent={m.journal ?? null} />
       </div>
     </>
   );

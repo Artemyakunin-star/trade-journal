@@ -448,6 +448,8 @@ export const missedTrades = pgTable(
     t3Ticks: integer("t3_ticks"),
     t3Qty: integer("t3_qty"),
     beTicks: integer("be_ticks"),
+    /** Rich write-up (TipTap JSON, incl. pasted screenshots), like trades. */
+    journal: jsonb("journal"),
     /** Manual result in ticks per contract (fallback when no bars that day). */
     manualTicks: integer("manual_ticks"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

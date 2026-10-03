@@ -928,3 +928,31 @@ export async function updateMissedTrade(fd: FormData) {
   revalidatePath("/", "layout");
   redirect(returnTo);
 }
+
+/** Autosave for the rich missed-setup write-up (same editor as trades). */
+export async function saveMissedJournal(id: string, content: unknown) {
+  const uid = await requireUserId();
+  if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  const { missedTrades } = await import("@/db/schema");
+  await db
+    .update(missedTrades)
+    .set({ journal: content, updatedAt: new Date() })
+    .where(and(eq(missedTrades.id, id), eq(missedTrades.userId, uid)));
+  revalidatePath(`/missed/${id}`);
+}
+
+/** Move a missed setup to another idea (Idea card on the setup page). */
+export async function setMissedIdea(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const ideaId = str(fd, "ideaId");
+  if (!ideaId) return; // a missed setup always belongs to an idea
+  const idea = await db.query.ideas.findFirst({ where: (i, { and: and_, eq: eq_ }) => and_(eq_(i.id, ideaId), eq_(i.userId, uid)) });
+  if (!idea) return;
+  const { missedTrades } = await import("@/db/schema");
+  await db
+    .update(missedTrades)
+    .set({ ideaId, instrument: idea.instrument, direction: idea.direction, updatedAt: new Date() })
+    .where(and(eq(missedTrades.id, id), eq(missedTrades.userId, uid)));
+  revalidatePath("/", "layout");
+}
