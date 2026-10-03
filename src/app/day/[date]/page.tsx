@@ -299,7 +299,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
                 </span>
                 <span className="what">
                   {m.instrument} {m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity} @ {Number(m.plannedEntry).toLocaleString("en-US")}
-                  {idea ? <> · {idea.title}</> : null} ·{" "}
+                  {idea ? <> · <Link href={`/ideas/${idea.id}/edit`} className="linklike">{idea.title}</Link></> : null} ·{" "}
                   <span style={{ color: reason.kind === "conscious" ? "var(--s1)" : "var(--crit)" }}>{reason.label}</span>
                   <span style={{ color: "var(--muted)" }}> — {r.exitLabel}</span>
                 </span>

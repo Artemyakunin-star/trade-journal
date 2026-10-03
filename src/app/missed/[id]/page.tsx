@@ -185,7 +185,7 @@ export default async function MissedDetailPage({
       </div>
 
       <div className="section-note" style={{ margin: "0 0 10px 2px" }}>
-        Virtual replay: planned entry <b>{fmtPrice(m.plannedEntry)}</b> ({m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity} ·{" "}
+        Linked to: <Link className="linklike" href={`/ideas/${m.ideaId}/edit`}>{idea?.title ?? "idea"}</Link> · Virtual replay: planned entry <b>{fmtPrice(m.plannedEntry)}</b> ({m.direction === "LONG" ? "Long" : "Short"} ×{m.quantity} ·{" "}
         {fmtTimeKyiv(m.plannedTime, true, tz, prefs.dateFormat)}) · SL {slTicks}t
         {m.t1Ticks ? ` · T1 ${m.t1Ticks}t×${m.t1Qty ?? 1}` : ""}
         {m.t2Ticks ? ` + T2 ${m.t2Ticks}t×${m.t2Qty ?? 1}` : ""}
