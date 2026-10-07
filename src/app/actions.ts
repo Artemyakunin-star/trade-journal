@@ -956,3 +956,42 @@ export async function setMissedIdea(fd: FormData) {
     .where(and(eq(missedTrades.id, id), eq(missedTrades.userId, uid)));
   revalidatePath("/", "layout");
 }
+
+// ---------- day frame (bias + playbook scenarios + rules of the day) ----------
+
+/** Autosave for the day-frame panel above the daily plan editor. New scenario
+ *  names are merged into the user's playbook vocabulary. */
+export async function saveDayFrame(input: { date: string; bias: string | null; scenarios: string[]; rules: string }) {
+  const uid = await requireUserId();
+  const { date, rules } = input;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  const bias = input.bias && ["LONG", "SHORT", "NEUTRAL"].includes(input.bias) ? input.bias : null;
+  const scenarios = (input.scenarios ?? []).map((s) => String(s).trim()).filter(Boolean).slice(0, 2);
+
+  const { dayFrames } = await import("@/db/schema");
+  await db
+    .insert(dayFrames)
+    .values({ userId: uid, date, bias, scenarios, rules: rules.trim() || null })
+    .onConflictDoUpdate({
+      target: [dayFrames.userId, dayFrames.date],
+      set: { bias, scenarios, rules: rules.trim() || null, updatedAt: new Date() },
+    });
+
+  // Grow the playbook vocabulary with anything new.
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  const missing = scenarios.filter((s) => !prefs.playbookOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
+  if (missing.length) await setSetting(uid, "playbookOptions", [...prefs.playbookOptions, ...missing]);
+
+  revalidatePath("/", "layout");
+}
+
+/** Remove a scenario from the playbook vocabulary (does not touch saved frames). */
+export async function removePlaybookOption(fd: FormData) {
+  const uid = await requireUserId();
+  const name = str(fd, "name");
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  await setSetting(uid, "playbookOptions", prefs.playbookOptions.filter((o) => o !== name));
+  revalidatePath("/", "layout");
+}

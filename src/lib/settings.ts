@@ -12,6 +12,8 @@ export type AppSettings = {
   dateFormat: DateFmt; // eu = 31.12.2026, us = 12/31/2026
   keyLevelOptions: string[]; // dropdown vocabulary, grows as the user types new values
   ofConfOptions: string[];
+  /** The user's playbook: named scenarios selectable in the day frame. */
+  playbookOptions: string[];
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -21,6 +23,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dateFormat: "eu",
   keyLevelOptions: ["POC", "VAH", "VAL", "ONH", "ONL", "Asia High", "Asia Low", "IB High", "IB Low", "Open"],
   ofConfOptions: ["Absorption", "Delta divergence", "Big prints", "Imbalance", "Exhaustion", "Iceberg", "Stops run"],
+  playbookOptions: [
+    "Discount pullback → continuation",
+    "Range: play from the edge",
+    "Breakout + retest → continuation",
+    "Fake breakout → mean reversion",
+    "News / no trading",
+  ],
 };
 
 export const TIMEZONES = [
@@ -50,6 +59,7 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     dateFormat: map.get("dateFormat") === "us" ? "us" : "eu",
     keyLevelOptions: strArr("keyLevelOptions", DEFAULT_SETTINGS.keyLevelOptions),
     ofConfOptions: strArr("ofConfOptions", DEFAULT_SETTINGS.ofConfOptions),
+    playbookOptions: strArr("playbookOptions", DEFAULT_SETTINGS.playbookOptions),
   };
 }
 

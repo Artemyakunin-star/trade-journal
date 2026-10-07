@@ -457,3 +457,21 @@ export const missedTrades = pgTable(
   },
   (t) => [index("missed_idea_idx").on(t.ideaId), index("missed_user_idx").on(t.userId)],
 );
+
+/** The day's trading FRAME — the anti-overtrading contract written in the
+ *  morning plan: directional bias + which playbook scenarios are allowed
+ *  today + free-text rules of the day. One per user per date. */
+export const dayFrames = pgTable(
+  "day_frames",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull(),
+    date: date("date", { mode: "string" }).notNull(),
+    bias: text("bias"), // "LONG" | "SHORT" | "NEUTRAL"
+    scenarios: jsonb("scenarios").$type<string[]>(), // 1-2 playbook entries
+    rules: text("rules"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("day_frames_user_date_uq").on(t.userId, t.date)],
+);

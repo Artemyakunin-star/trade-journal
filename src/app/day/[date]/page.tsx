@@ -32,13 +32,15 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
   const uid = await requireUserId();
   const { date } = await params;
 
-  const [plan, planDoc] = await Promise.all([
+  const [plan, planDoc, frame] = await Promise.all([
     db.query.plans.findFirst({
       where: eq(plans.date, date),
       with: { scenarios: true },
     }),
     // The written plan from the Plans menu (Notion-like daily document).
     db.query.docs.findFirst({ where: (d, { and, eq: eq_ }) => and(eq_(d.date, date), eq_(d.userId, uid)) }),
+    // The day frame: bias + allowed scenarios + rules, set in the plan.
+    db.query.dayFrames.findFirst({ where: (f, { and, eq: eq_ }) => and(eq_(f.userId, uid), eq_(f.date, date)) }),
   ]);
 
   // Short plain-text preview of the TipTap document.
@@ -173,6 +175,44 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
       <div className="grid2" style={{ gridTemplateColumns: "1.15fr 1fr", marginBottom: 14 }}>
         <div className="card">
           <h3>Day plan {(plan || planDoc) && <span className="sub">one plan per trading day</span>}</h3>
+          {frame && (frame.bias || (frame.scenarios ?? []).length > 0 || frame.rules) && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                {frame.bias && (
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      borderRadius: 99,
+                      padding: "2px 9px",
+                      border: "1px solid var(--border)",
+                      color:
+                        frame.bias === "LONG" ? "var(--pos)" : frame.bias === "SHORT" ? "var(--neg)" : "var(--ink-2)",
+                    }}
+                  >
+                    {frame.bias === "LONG" ? "Long" : frame.bias === "SHORT" ? "Short" : "Neutral"}
+                  </span>
+                )}
+                {(frame.scenarios ?? []).map((s) => (
+                  <span
+                    key={s}
+                    style={{
+                      fontSize: 11.5,
+                      borderRadius: 99,
+                      padding: "2px 9px",
+                      border: "1px solid var(--border)",
+                      color: "var(--ink-2)",
+                    }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+              {frame.rules && (
+                <div style={{ marginTop: 5, fontSize: 12, color: "var(--muted)" }}>Rules: {frame.rules}</div>
+              )}
+            </div>
+          )}
           {planDoc && (
             <div style={{ marginBottom: plan ? 10 : 0 }}>
               <Link className="linklike" href={`/plans/${planDoc.id}`} style={{ fontWeight: 600 }}>
