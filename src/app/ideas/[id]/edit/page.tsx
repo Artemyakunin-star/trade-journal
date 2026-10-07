@@ -15,6 +15,7 @@ import { getAllIdeas, getAllTrades, rrStats, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { checkIdea } from "@/lib/rules";
+import IdeaChecklist from "@/components/IdeaChecklist";
 import { docs, executions } from "@/db/schema";
 import { fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -73,6 +74,14 @@ export default async function EditIdeaPage({
     exitsByTrade.set(e.tradeId, list);
   }
   const ruleCheck = checkIdea(idea.instrument, idea.trades, prefs.tradingRules, specs, exitsByTrade);
+
+  // Day frame for the idea's date — shown inside the self-check.
+  const ideaDate = idea.date;
+  const frame = ideaDate
+    ? await db.query.dayFrames.findFirst({
+        where: (f, { and: and_, eq: eq_ }) => and_(eq_(f.userId, uid), eq_(f.date, ideaDate)),
+      })
+    : null;
   const tradeViolations = idea.trades
     .map((t) => ({ t, c: ruleCheck.tradeChecks.get(t.id) }))
     .filter((x) => x.c && (x.c.qtyOver || x.c.stopWider));
@@ -283,6 +292,20 @@ export default async function EditIdeaPage({
           <button className="btn danger btn-sm" type="submit">Delete idea</button>
         </form>
       </div>
+
+      <IdeaChecklist
+        ideaId={idea.id}
+        direction={idea.direction}
+        date={idea.date}
+        frame={frame ? { bias: frame.bias, scenarios: frame.scenarios ?? [], rules: frame.rules } : null}
+        playbookOptions={prefs.playbookOptions}
+        ofConfOptions={prefs.ofConfOptions}
+        initialSetup={idea.setup}
+        initialRulesFollowed={idea.rulesFollowed}
+        initialConfirmBefore={idea.confirmBefore}
+        initialConfirmType={idea.confirmType}
+        initialEntryPlanned={idea.entryPlanned}
+      />
 
       <div className="card" style={{ marginBottom: 14 }}>
         <h3 style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>

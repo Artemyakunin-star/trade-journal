@@ -1043,3 +1043,47 @@ export async function saveTradingRule(fd: FormData) {
   revalidatePath("/", "layout");
   redirect(`/rules?symbol=${encodeURIComponent(symbol)}&saved=1`);
 }
+
+// ---------- idea CLCE self-check ----------
+
+/** Autosave for the idea checklist: setup + honesty ticks. New setup names
+ *  grow the playbook vocabulary; new confirmation types grow the OF one. */
+export async function saveIdeaChecklist(input: {
+  ideaId: string;
+  setup: string | null;
+  rulesFollowed: boolean | null;
+  confirmBefore: boolean | null;
+  confirmType: string | null;
+  entryPlanned: boolean | null;
+}) {
+  const uid = await requireUserId();
+  const idea = await db.query.ideas.findFirst({
+    where: (i, { and: and_, eq: eq_ }) => and_(eq_(i.id, input.ideaId), eq_(i.userId, uid)),
+  });
+  if (!idea) return;
+  const setup = input.setup?.trim() || null;
+  const confirmType = input.confirmType?.trim() || null;
+  const b = (v: boolean | null) => (typeof v === "boolean" ? v : null);
+  await db
+    .update(ideas)
+    .set({
+      setup,
+      rulesFollowed: b(input.rulesFollowed),
+      confirmBefore: b(input.confirmBefore),
+      confirmType,
+      entryPlanned: b(input.entryPlanned),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(ideas.id, idea.id), eq(ideas.userId, uid)));
+
+  // Grow the shared vocabularies.
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  if (setup && !prefs.playbookOptions.some((o) => o.toLowerCase() === setup.toLowerCase())) {
+    await setSetting(uid, "playbookOptions", [...prefs.playbookOptions, setup]);
+  }
+  if (confirmType && !prefs.ofConfOptions.some((o) => o.toLowerCase() === confirmType.toLowerCase())) {
+    await setSetting(uid, "ofConfOptions", [...prefs.ofConfOptions, confirmType]);
+  }
+  revalidatePath("/", "layout");
+}

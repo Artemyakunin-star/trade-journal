@@ -13,6 +13,7 @@ import {
   timestamp,
   date,
   jsonb,
+  boolean,
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
@@ -221,6 +222,17 @@ export const ideas = pgTable(
     invalidation: text("invalidation").notNull(), // REQUIRED: what kills the idea
     grade: gradeEnum("grade"), // graded at end of day, so nullable until then
     trigger: ideaTriggerEnum("trigger").notNull(),
+    // ---- CLCE self-check (filled after the session, against the day frame) ----
+    /** Playbook setup this idea plays (shared vocabulary with the day frame). */
+    setup: text("setup"),
+    /** "I followed the rules of the day" (the frame's free-text rules). */
+    rulesFollowed: boolean("rules_followed"),
+    /** "Confirmation came BEFORE the entry." */
+    confirmBefore: boolean("confirm_before"),
+    /** Which confirmation (order-flow vocabulary, shared with trades). */
+    confirmType: text("confirm_type"),
+    /** "Entry per plan — from the zone, not chasing." */
+    entryPlanned: boolean("entry_planned"),
     comment: text("comment"), // psychological state, free text
     status: ideaStatusEnum("status").notNull().default("ACTIVE"),
     /** Notion-like write-up with pasted screenshots (TipTap JSON), like plans/trades. */

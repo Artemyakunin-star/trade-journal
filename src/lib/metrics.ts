@@ -40,6 +40,12 @@ export type IdeaRow = {
   trigger: string;
   comment: string | null;
   status: string;
+  // CLCE self-check
+  setup: string | null;
+  rulesFollowed: boolean | null;
+  confirmBefore: boolean | null;
+  confirmType: string | null;
+  entryPlanned: boolean | null;
   createdAt: Date;
   invalidatedAt: Date | null;
   trades: TradeRow[];

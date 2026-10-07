@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function IdeasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; trigger?: string; grade?: string; view?: string; date?: string; from?: string; to?: string; instrument?: string }>;
+  searchParams: Promise<{ status?: string; trigger?: string; grade?: string; view?: string; date?: string; from?: string; to?: string; instrument?: string; setup?: string }>;
 }) {
   const uid = await requireUserId();
   const sp = await searchParams;
@@ -24,6 +24,7 @@ export default async function IdeasPage({
   const tz = prefs.timezone;
   let ideas = await getAllIdeas(uid);
   const instruments = [...new Set(ideas.map((i) => i.instrument))].sort();
+  const setups = [...new Set(ideas.map((i) => i.setup).filter((s): s is string => !!s))].sort();
 
   // The idea's trading day: the explicit date field, or the day it was written.
   const dayOf = (i: (typeof ideas)[number]) => i.date ?? kyivDateOf(i.createdAt, tz);
@@ -35,6 +36,7 @@ export default async function IdeasPage({
   if (isDate(sp.from)) ideas = ideas.filter((i) => dayOf(i) >= sp.from!);
   if (isDate(sp.to)) ideas = ideas.filter((i) => dayOf(i) <= sp.to!);
   if (sp.instrument) ideas = ideas.filter((i) => i.instrument === sp.instrument);
+  if (sp.setup) ideas = ideas.filter((i) => i.setup === sp.setup);
   if (sp.status) ideas = ideas.filter((i) => i.status === sp.status);
   if (sp.trigger) ideas = ideas.filter((i) => i.trigger === sp.trigger);
   if (sp.grade === "A") ideas = ideas.filter((i) => i.grade?.startsWith("A"));
@@ -88,6 +90,12 @@ export default async function IdeasPage({
           to
           <input className="tj-input" name="to" type="date" defaultValue={isDate(sp.to) ? sp.to : ""} style={{ width: 140 }} />
         </span>
+        <select name="setup" defaultValue={sp.setup ?? ""} className="tj-select" title="Filter by playbook setup (chosen in the idea's self-check)">
+          <option value="">All setups</option>
+          {setups.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         <select name="instrument" defaultValue={sp.instrument ?? ""} className="tj-select">
           <option value="">All instruments</option>
           {instruments.map((i) => (

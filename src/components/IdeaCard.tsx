@@ -46,6 +46,7 @@ export default function IdeaCard({
           <span className="status-chip" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtDate(idea.date, dateFormat)}</span>
         )}
         <span className="status-chip">{idea.instrument} · {idea.direction === "LONG" ? "Long" : "Short"}</span>
+        {idea.setup && <span className="status-chip" title="Playbook setup">{idea.setup}</span>}
         <span className={"badge " + (TRIGGER_LABEL[idea.trigger] ?? "")}>{TRIGGER_LABEL[idea.trigger] ?? idea.trigger.toLowerCase()}</span>
         <span className={"status-chip " + status.cls}>{status.text}</span>
         {!idea.planId && !idea.docId && <span className="badge rogue">outside plan</span>}
