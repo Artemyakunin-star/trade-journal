@@ -49,18 +49,16 @@ export default async function RulesPage({
       <div className="grid2" style={{ gridTemplateColumns: "minmax(0,520px) 1fr", alignItems: "start" }}>
         <div className="card">
           <h3 style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            Risk frame <span className="sub">one instrument at a time</span>
+            Risk frame — {symbol} <span className="sub">one instrument at a time</span>
             {sp.saved === "1" && <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--pos)" }}>Saved</span>}
           </h3>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
-            {configured.length > 0 && (
-              <span className="seg">
-                {configured.map((s) => (
-                  <Link key={s} href={`/rules?symbol=${s}`} className={s === symbol ? "on" : ""}>{s}</Link>
-                ))}
-              </span>
-            )}
+            <span className="seg">
+              {(configured.includes(symbol) ? configured : [...configured, symbol]).map((s) => (
+                <Link key={s} href={`/rules?symbol=${s}`} className={s === symbol ? "on" : ""}>{s}</Link>
+              ))}
+            </span>
             <form method="get" style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <select className="tj-select" name="symbol" defaultValue={symbol}>
                 {symbols.map((s) => (
