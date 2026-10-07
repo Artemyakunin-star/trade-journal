@@ -4,8 +4,10 @@ import type { IdeaRow } from "@/lib/metrics";
 import { ideaPnl, rrStats } from "@/lib/metrics";
 
 export type IdeaLimitsBadge = {
+  entries: number;
   stops: number;
   be: number;
+  maxEntries: number | null;
   maxStops: number | null;
   maxBe: number | null;
   broken: boolean;
@@ -51,9 +53,10 @@ export default function IdeaCard({
           <span
             className="status-chip"
             style={limitsBadge.broken ? { color: "var(--crit)", borderColor: "var(--crit)", fontWeight: 600 } : undefined}
-            title="Stops / break-evens vs your per-idea limits (Settings → Trading rules)"
+            title="Entries / stops / break-evens vs your per-idea limits (Rules page)"
           >
-            Stops {limitsBadge.stops}{limitsBadge.maxStops != null ? `/${limitsBadge.maxStops}` : ""} · BE {limitsBadge.be}
+            E {limitsBadge.entries}{limitsBadge.maxEntries != null ? `/${limitsBadge.maxEntries}` : ""} · Stops{" "}
+            {limitsBadge.stops}{limitsBadge.maxStops != null ? `/${limitsBadge.maxStops}` : ""} · BE {limitsBadge.be}
             {limitsBadge.maxBe != null ? `/${limitsBadge.maxBe}` : ""}
           </span>
         )}

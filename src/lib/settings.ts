@@ -2,7 +2,7 @@
 import { db } from "@/db";
 import { settings as settingsTable } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import type { IdeaLimits, InstrumentRule, TradingRules } from "@/lib/rules";
+import type { InstrumentRule, TradingRules } from "@/lib/rules";
 import { DEFAULT_BE_WIN } from "@/lib/rules";
 
 export type DateFmt = "eu" | "us";
@@ -16,10 +16,8 @@ export type AppSettings = {
   ofConfOptions: string[];
   /** The user's playbook: named scenarios selectable in the day frame. */
   playbookOptions: string[];
-  /** Per-instrument trading rules (size cap, stop, targets, BE window). */
+  /** Per-instrument trading rules (size cap, stop, targets, BE window, idea limits). */
   tradingRules: TradingRules;
-  /** Per-idea discipline limits (max stops / max break-evens). */
-  ideaLimits: IdeaLimits;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -37,7 +35,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     "News / no trading",
   ],
   tradingRules: {},
-  ideaLimits: { maxStops: 2, maxBe: 3 },
 };
 
 export const TIMEZONES = [
@@ -62,6 +59,8 @@ export async function getSettings(userId: string): Promise<AppSettings> {
   };
   // Per-instrument trading rules: validate shape, drop garbage.
   const posNum = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+  const limNum = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
   const winNum = (v: unknown, dflt: number): number =>
     typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : dflt;
   const tradingRules: TradingRules = {};
@@ -74,22 +73,19 @@ export async function getSettings(userId: string): Promise<AppSettings> {
         maxContracts: posNum(o.maxContracts),
         stopTicks: posNum(o.stopTicks),
         t1Ticks: posNum(o.t1Ticks),
+        t1Qty: posNum(o.t1Qty),
         t2Ticks: posNum(o.t2Ticks),
+        t2Qty: posNum(o.t2Qty),
         beTriggerTicks: posNum(o.beTriggerTicks),
         beWinMinus: winNum(o.beWinMinus, DEFAULT_BE_WIN.minus),
         beWinPlus: winNum(o.beWinPlus, DEFAULT_BE_WIN.plus),
+        maxEntries: limNum(o.maxEntries),
+        maxStops: limNum(o.maxStops),
+        maxBe: limNum(o.maxBe),
       };
       tradingRules[sym] = rule;
     }
   }
-  const rawLimits = map.get("ideaLimits");
-  const lim = (rawLimits && typeof rawLimits === "object" ? rawLimits : {}) as Record<string, unknown>;
-  const limNum = (v: unknown): number | null =>
-    typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
-  const ideaLimits: IdeaLimits =
-    rawLimits && typeof rawLimits === "object"
-      ? { maxStops: limNum(lim.maxStops), maxBe: limNum(lim.maxBe) }
-      : DEFAULT_SETTINGS.ideaLimits;
 
   return {
     timezone,
@@ -100,7 +96,6 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     ofConfOptions: strArr("ofConfOptions", DEFAULT_SETTINGS.ofConfOptions),
     playbookOptions: strArr("playbookOptions", DEFAULT_SETTINGS.playbookOptions),
     tradingRules,
-    ideaLimits,
   };
 }
 

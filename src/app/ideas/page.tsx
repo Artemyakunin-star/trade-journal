@@ -62,7 +62,7 @@ export default async function IdeasPage({
     exitsByTrade.set(e.tradeId, list);
   }
   const ideaChecks = new Map<string, IdeaCheck>(
-    ideas.map((i) => [i.id, checkIdea(i.trades, prefs.tradingRules, specs, prefs.ideaLimits, exitsByTrade)]),
+    ideas.map((i) => [i.id, checkIdea(i.instrument, i.trades, prefs.tradingRules, specs, exitsByTrade)]),
   );
 
   return (

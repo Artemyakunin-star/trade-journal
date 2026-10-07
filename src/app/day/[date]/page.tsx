@@ -120,7 +120,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     exitsByTrade.set(e.tradeId, list);
   }
   const ideaChecks = new Map<string, IdeaCheck>(
-    dayIdeas.map((i) => [i.id, checkIdea(i.trades, prefs.tradingRules, specsM, prefs.ideaLimits, exitsByTrade)]),
+    dayIdeas.map((i) => [i.id, checkIdea(i.instrument, i.trades, prefs.tradingRules, specsM, exitsByTrade)]),
   );
   const brokenIdeas = dayIdeas.filter((i) => ideaChecks.get(i.id)?.broken).length;
 

@@ -7,21 +7,23 @@ export type InstrumentRule = {
   /** Planned stop distance, ticks. Losses meaningfully deeper -> "stop wider than rule". */
   stopTicks: number | null;
   t1Ticks: number | null;
+  /** Contracts to close at T1 / T2 (the planned split). Reference for now. */
+  t1Qty: number | null;
   t2Ticks: number | null;
+  t2Qty: number | null;
   /** Move stop to BE after price goes this many ticks in favor. Reference only. */
   beTriggerTicks: number | null;
   /** BE window: a closed trade with result in [-beWinMinus, +beWinPlus] ticks
    *  per contract counts as a break-even. Deeper in minus = a stop. */
   beWinMinus: number;
   beWinPlus: number;
-};
-
-export type TradingRules = Record<string, InstrumentRule>; // by symbol
-
-export type IdeaLimits = {
+  // ---- per-idea limits for this instrument ----
+  maxEntries: number | null; // max attempts (trades) per idea
   maxStops: number | null; // max full stops per idea
   maxBe: number | null; // max break-evens per idea
 };
+
+export type TradingRules = Record<string, InstrumentRule>; // by symbol
 
 export const DEFAULT_BE_WIN = { minus: 1, plus: 1 };
 /** Losses deeper than stop + this many ticks are flagged (slippage allowance). */
@@ -95,8 +97,10 @@ export type IdeaCheck = {
   entries: number; // closed + open trades attached
   stops: number;
   be: number;
+  maxEntries: number | null;
   maxStops: number | null;
   maxBe: number | null;
+  entriesOver: boolean;
   stopsOver: boolean;
   beOver: boolean;
   broken: boolean; // any limit exceeded or any per-trade violation
@@ -104,11 +108,13 @@ export type IdeaCheck = {
   tradeChecks: Map<string, TradeCheck>;
 };
 
+/** Check one idea against the rules. Limits come from the IDEA's instrument
+ *  (each trade's size/stop is still checked against its own instrument rule). */
 export function checkIdea(
+  ideaInstrument: string,
   trades: TradeLike[],
   rules: TradingRules,
   specs: Record<string, Spec>,
-  limits: IdeaLimits,
   exitsByTrade?: Map<string, ExitFill[]>,
 ): IdeaCheck {
   const tradeChecks = new Map<string, TradeCheck>();
@@ -122,17 +128,24 @@ export function checkIdea(
     if (c.cls === "BE") be++;
     if (c.qtyOver || c.stopWider) anyTradeViolation = true;
   }
-  const stopsOver = limits.maxStops != null && stops > limits.maxStops;
-  const beOver = limits.maxBe != null && be > limits.maxBe;
+  const lim = rules[ideaInstrument];
+  const maxEntries = lim?.maxEntries ?? null;
+  const maxStops = lim?.maxStops ?? null;
+  const maxBe = lim?.maxBe ?? null;
+  const entriesOver = maxEntries != null && trades.length > maxEntries;
+  const stopsOver = maxStops != null && stops > maxStops;
+  const beOver = maxBe != null && be > maxBe;
   return {
     entries: trades.length,
     stops,
     be,
-    maxStops: limits.maxStops,
-    maxBe: limits.maxBe,
+    maxEntries,
+    maxStops,
+    maxBe,
+    entriesOver,
     stopsOver,
     beOver,
-    broken: stopsOver || beOver || anyTradeViolation,
+    broken: entriesOver || stopsOver || beOver || anyTradeViolation,
     tradeChecks,
   };
 }

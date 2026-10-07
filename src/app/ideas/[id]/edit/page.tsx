@@ -72,7 +72,7 @@ export default async function EditIdeaPage({
     list.push({ price: Number(e.price), quantity: e.quantity });
     exitsByTrade.set(e.tradeId, list);
   }
-  const ruleCheck = checkIdea(idea.trades, prefs.tradingRules, specs, prefs.ideaLimits, exitsByTrade);
+  const ruleCheck = checkIdea(idea.instrument, idea.trades, prefs.tradingRules, specs, exitsByTrade);
   const tradeViolations = idea.trades
     .map((t) => ({ t, c: ruleCheck.tradeChecks.get(t.id) }))
     .filter((x) => x.c && (x.c.qtyOver || x.c.stopWider));
@@ -292,7 +292,9 @@ export default async function EditIdeaPage({
           </span>
           {idea.trades.length > 0 && (
             <span style={{ marginLeft: "auto", display: "inline-flex", gap: 12, alignItems: "center", fontSize: 12.5, fontWeight: 400, color: "var(--ink-2)" }}>
-              <span>Entries <b>{ruleCheck.entries}</b></span>
+              <span style={ruleCheck.entriesOver ? { color: "var(--crit)", fontWeight: 700 } : undefined}>
+                Entries <b>{ruleCheck.entries}{ruleCheck.maxEntries != null ? `/${ruleCheck.maxEntries}` : ""}</b>
+              </span>
               <span style={ruleCheck.stopsOver ? { color: "var(--crit)", fontWeight: 700 } : undefined}>
                 Stops <b>{ruleCheck.stops}{ruleCheck.maxStops != null ? `/${ruleCheck.maxStops}` : ""}</b>
               </span>
