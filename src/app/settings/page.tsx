@@ -2,8 +2,9 @@
 import { db } from "@/db";
 import { eq } from "drizzle-orm";
 import { requireUserId } from "@/lib/auth";
-import { addInstrument, renameAccount, saveDisplaySettings, saveInstrument } from "@/app/actions";
+import { addInstrument, renameAccount, saveDisplaySettings, saveIdeaLimits, saveInstrument, saveTradingRule } from "@/app/actions";
 import { getSettings, TIMEZONES } from "@/lib/settings";
+import type { InstrumentRule } from "@/lib/rules";
 import { executions, trades, userCommissions } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -123,6 +124,60 @@ export default async function SettingsPage() {
         </div>
       </div>
 
+      <div className="card" style={{ marginTop: 14 }}>
+        <h3>
+          Trading rules{" "}
+          <span className="sub">
+            your own risk frame per instrument — ideas and trades are checked against it automatically
+          </span>
+        </h3>
+        <div style={{ overflowX: "auto" }}>
+          <table className="tj">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th className="num" data-tip="Position-size cap: trades with MORE contracts get flagged">Contracts max</th>
+                <th className="num" data-tip="Planned stop distance, ticks. Losses clearly deeper get flagged">Stop t</th>
+                <th className="num">T1 t</th>
+                <th className="num">T2 t</th>
+                <th className="num" data-tip="Move stop to break-even after this many ticks in favor (reference)">BE after t</th>
+                <th className="num" data-tip="Result within −X…+Y ticks per contract counts as a break-even; deeper in minus counts as a stop">BE window − t</th>
+                <th className="num">BE window + t</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {instruments.map((i) => (
+                <tr key={i.symbol}>
+                  <td style={{ fontWeight: 600, color: "var(--ink)" }}>{i.symbol}</td>
+                  <RuleCells symbol={i.symbol} rule={prefs.tradingRules[i.symbol]} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <form action={saveIdeaLimits} style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", marginTop: 14 }}>
+          <b style={{ fontSize: 13 }}>Limits per idea</b>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
+            Max stops
+            <input className="tj-input" name="maxStops" type="number" min={0} step={1} defaultValue={prefs.ideaLimits.maxStops ?? ""} placeholder="—" style={{ width: 70 }} />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
+            Max break-evens
+            <input className="tj-input" name="maxBe" type="number" min={0} step={1} defaultValue={prefs.ideaLimits.maxBe ?? ""} placeholder="—" style={{ width: 70 }} />
+          </label>
+          <button className="btn btn-sm" type="submit">Save limits</button>
+        </form>
+
+        <div className="section-note">
+          Every closed trade is classified from its result in ticks per contract: inside the BE window = break-even,
+          deeper in minus = a stop, better = a working trade. NinjaTrader trades are judged part by part (a partial exit
+          at full stop counts as a stop); merged trade-list trades use the per-contract average. Ideas then show
+          “Stops n/limit · BE n/limit” and turn red when a limit is exceeded. Empty limit = unlimited.
+        </div>
+      </div>
+
       {renamable.length > 0 && (
         <div className="card" style={{ maxWidth: 420, marginTop: 14 }}>
           <h3>
@@ -144,6 +199,35 @@ export default async function SettingsPage() {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+// One <form> per row: trading-rule fields + Save button.
+function RuleCells({ symbol, rule }: { symbol: string; rule: InstrumentRule | undefined }) {
+  const formId = `rule-${symbol}`;
+  const num = (v: number | null | undefined) => (v == null ? "" : v);
+  const cell = (name: string, value: string | number, width = 64) => (
+    <td className="num">
+      <input className="tj-input" name={name} type="number" min={0} step="any" defaultValue={value} placeholder="—" form={formId} style={{ width, textAlign: "right" }} />
+    </td>
+  );
+  return (
+    <>
+      <td className="num" style={{ position: "relative" }}>
+        <form id={formId} action={saveTradingRule} />
+        <input type="hidden" name="symbol" value={symbol} form={formId} />
+        <input className="tj-input" name="maxContracts" type="number" min={0} step={1} defaultValue={num(rule?.maxContracts)} placeholder="—" form={formId} style={{ width: 64, textAlign: "right" }} />
+      </td>
+      {cell("stopTicks", num(rule?.stopTicks))}
+      {cell("t1Ticks", num(rule?.t1Ticks))}
+      {cell("t2Ticks", num(rule?.t2Ticks))}
+      {cell("beTriggerTicks", num(rule?.beTriggerTicks))}
+      {cell("beWinMinus", rule?.beWinMinus ?? 1)}
+      {cell("beWinPlus", rule?.beWinPlus ?? 1)}
+      <td>
+        <button className="btn ghost btn-sm" type="submit" form={formId}>Save</button>
+      </td>
     </>
   );
 }

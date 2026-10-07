@@ -13,7 +13,8 @@ import { db } from "@/db";
 import { attachTradesToIdea, createMissedTrade, deleteIdea, deleteManualTrade, deleteMissedTrade, setMissedManual, setTradeIdea } from "@/app/actions";
 import { getAllIdeas, getAllTrades, rrStats, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { checkIdea } from "@/lib/rules";
 import { docs, executions } from "@/db/schema";
 import { fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -55,6 +56,26 @@ export default async function EditIdeaPage({
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
   );
   const fallbackSpec = { tickSize: 0.25, tickValue: 5 };
+
+  // ---------- trading-rules check (Settings -> Trading rules) ----------
+  const ideaTradeIds = idea.trades.map((t) => t.id);
+  const exitRows = ideaTradeIds.length
+    ? await db
+        .select({ tradeId: executions.tradeId, price: executions.price, quantity: executions.quantity, action: executions.action })
+        .from(executions)
+        .where(and(eq(executions.userId, uid), inArray(executions.tradeId, ideaTradeIds)))
+    : [];
+  const exitsByTrade = new Map<string, { price: number; quantity: number }[]>();
+  for (const e of exitRows) {
+    if (!e.tradeId || !["REDUCE", "CLOSE", "REVERSE"].includes(e.action)) continue;
+    const list = exitsByTrade.get(e.tradeId) ?? [];
+    list.push({ price: Number(e.price), quantity: e.quantity });
+    exitsByTrade.set(e.tradeId, list);
+  }
+  const ruleCheck = checkIdea(idea.trades, prefs.tradingRules, specs, prefs.ideaLimits, exitsByTrade);
+  const tradeViolations = idea.trades
+    .map((t) => ({ t, c: ruleCheck.tradeChecks.get(t.id) }))
+    .filter((x) => x.c && (x.c.qtyOver || x.c.stopWider));
 
   // ---------- what-if simulation over THIS idea's trades (like Analytics) ----------
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "ticks") as PnlUnit;
@@ -264,12 +285,38 @@ export default async function EditIdeaPage({
       </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3>
+        <h3 style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
           Trades of this idea &amp; what-if{" "}
           <span className="sub">
             same simulator as Analytics, only for this idea&apos;s {simTrades.length} closed trades
           </span>
+          {idea.trades.length > 0 && (
+            <span style={{ marginLeft: "auto", display: "inline-flex", gap: 12, alignItems: "center", fontSize: 12.5, fontWeight: 400, color: "var(--ink-2)" }}>
+              <span>Entries <b>{ruleCheck.entries}</b></span>
+              <span style={ruleCheck.stopsOver ? { color: "var(--crit)", fontWeight: 700 } : undefined}>
+                Stops <b>{ruleCheck.stops}{ruleCheck.maxStops != null ? `/${ruleCheck.maxStops}` : ""}</b>
+              </span>
+              <span style={ruleCheck.beOver ? { color: "var(--crit)", fontWeight: 700 } : undefined}>
+                BE <b>{ruleCheck.be}{ruleCheck.maxBe != null ? `/${ruleCheck.maxBe}` : ""}</b>
+              </span>
+              {ruleCheck.broken && <span className="badge rogue">rules broken</span>}
+            </span>
+          )}
         </h3>
+        {tradeViolations.length > 0 && (
+          <div style={{ margin: "0 0 10px", fontSize: 12.5, color: "var(--crit)" }}>
+            {tradeViolations.map(({ t, c }) => (
+              <div key={t.id}>
+                ⚠ {fmtTimeKyiv(t.entryTime, false, tz)} —{" "}
+                {c!.qtyOver && <>{t.quantity} contracts, rule max {prefs.tradingRules[t.instrument]?.maxContracts}</>}
+                {c!.qtyOver && c!.stopWider && " · "}
+                {c!.stopWider && (
+                  <>loss {Math.abs(Math.round(c!.worstTicks ?? 0))}t deep, rule stop {prefs.tradingRules[t.instrument]?.stopTicks}t</>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         <form className="filters" method="get" style={{ marginBottom: 10 }}>
           <span className="seg" title="Units for the table and rule inputs">
             {PNL_UNITS.map((u) => (

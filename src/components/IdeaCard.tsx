@@ -3,7 +3,25 @@ import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, STATUS_LABEL, TRIGGER_LABEL
 import type { IdeaRow } from "@/lib/metrics";
 import { ideaPnl, rrStats } from "@/lib/metrics";
 
-export default function IdeaCard({ idea, editable = true, dateFormat = "eu" }: { idea: IdeaRow; editable?: boolean; dateFormat?: DateFmt }) {
+export type IdeaLimitsBadge = {
+  stops: number;
+  be: number;
+  maxStops: number | null;
+  maxBe: number | null;
+  broken: boolean;
+};
+
+export default function IdeaCard({
+  idea,
+  editable = true,
+  dateFormat = "eu",
+  limitsBadge,
+}: {
+  idea: IdeaRow;
+  editable?: boolean;
+  dateFormat?: DateFmt;
+  limitsBadge?: IdeaLimitsBadge | null;
+}) {
   const pnl = ideaPnl(idea);
   const rr = rrStats(idea.trades);
   const status = STATUS_LABEL[idea.status] ?? { text: idea.status.toLowerCase(), cls: "" };
@@ -29,6 +47,17 @@ export default function IdeaCard({ idea, editable = true, dateFormat = "eu" }: {
         <span className={"badge " + (TRIGGER_LABEL[idea.trigger] ?? "")}>{TRIGGER_LABEL[idea.trigger] ?? idea.trigger.toLowerCase()}</span>
         <span className={"status-chip " + status.cls}>{status.text}</span>
         {!idea.planId && !idea.docId && <span className="badge rogue">outside plan</span>}
+        {limitsBadge && idea.trades.length > 0 && (
+          <span
+            className="status-chip"
+            style={limitsBadge.broken ? { color: "var(--crit)", borderColor: "var(--crit)", fontWeight: 600 } : undefined}
+            title="Stops / break-evens vs your per-idea limits (Settings → Trading rules)"
+          >
+            Stops {limitsBadge.stops}{limitsBadge.maxStops != null ? `/${limitsBadge.maxStops}` : ""} · BE {limitsBadge.be}
+            {limitsBadge.maxBe != null ? `/${limitsBadge.maxBe}` : ""}
+          </span>
+        )}
+        {limitsBadge?.broken && <span className="badge rogue">rules broken</span>}
       </div>
       <div className="thesis">{idea.thesis}</div>
       <div className="inval">

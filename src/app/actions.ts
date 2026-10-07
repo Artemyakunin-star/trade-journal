@@ -995,3 +995,52 @@ export async function removePlaybookOption(fd: FormData) {
   await setSetting(uid, "playbookOptions", prefs.playbookOptions.filter((o) => o !== name));
   revalidatePath("/", "layout");
 }
+
+// ---------- trading rules (per-instrument templates + idea limits) ----------
+
+/** Save one instrument's trading rule row from Settings. */
+export async function saveTradingRule(fd: FormData) {
+  const uid = await requireUserId();
+  const symbol = str(fd, "symbol");
+  if (!symbol) return;
+  const posNum = (k: string): number | null => {
+    const v = Number(str(fd, k));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+  const winNum = (k: string, dflt: number): number => {
+    const raw = str(fd, k);
+    if (raw === "") return dflt;
+    const v = Number(raw);
+    return Number.isFinite(v) && v >= 0 ? Math.abs(v) : dflt;
+  };
+  const { getSettings } = await import("@/lib/settings");
+  const { DEFAULT_BE_WIN } = await import("@/lib/rules");
+  const prefs = await getSettings(uid);
+  const next = {
+    ...prefs.tradingRules,
+    [symbol]: {
+      maxContracts: posNum("maxContracts"),
+      stopTicks: posNum("stopTicks"),
+      t1Ticks: posNum("t1Ticks"),
+      t2Ticks: posNum("t2Ticks"),
+      beTriggerTicks: posNum("beTriggerTicks"),
+      beWinMinus: winNum("beWinMinus", DEFAULT_BE_WIN.minus),
+      beWinPlus: winNum("beWinPlus", DEFAULT_BE_WIN.plus),
+    },
+  };
+  await setSetting(uid, "tradingRules", next);
+  revalidatePath("/", "layout");
+}
+
+/** Save the per-idea discipline limits (max stops / max break-evens). */
+export async function saveIdeaLimits(fd: FormData) {
+  const uid = await requireUserId();
+  const limNum = (k: string): number | null => {
+    const raw = str(fd, k);
+    if (raw === "") return null; // empty = no limit
+    const v = Number(raw);
+    return Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+  };
+  await setSetting(uid, "ideaLimits", { maxStops: limNum("maxStops"), maxBe: limNum("maxBe") });
+  revalidatePath("/", "layout");
+}

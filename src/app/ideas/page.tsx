@@ -5,6 +5,10 @@ import IdeaCard from "@/components/IdeaCard";
 import { getAllIdeas, ideaPnl, rrStats } from "@/lib/metrics";
 import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
+import { db } from "@/db";
+import { executions } from "@/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { checkIdea, type IdeaCheck } from "@/lib/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +43,27 @@ export default async function IdeasPage({
   if (sp.grade === "DF") ideas = ideas.filter((i) => i.grade === "D" || i.grade === "F");
 
   ideas = [...ideas].reverse(); // newest first
+
+  // Trading-rules check per visible idea (Settings -> Trading rules).
+  const instRows = await db.query.instruments.findMany();
+  const specs = Object.fromEntries(instRows.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]));
+  const checkTradeIds = ideas.flatMap((i) => i.trades.map((t) => t.id));
+  const exitRows = checkTradeIds.length
+    ? await db
+        .select({ tradeId: executions.tradeId, price: executions.price, quantity: executions.quantity, action: executions.action })
+        .from(executions)
+        .where(and(eq(executions.userId, uid), inArray(executions.tradeId, checkTradeIds)))
+    : [];
+  const exitsByTrade = new Map<string, { price: number; quantity: number }[]>();
+  for (const e of exitRows) {
+    if (!e.tradeId || !["REDUCE", "CLOSE", "REVERSE"].includes(e.action)) continue;
+    const list = exitsByTrade.get(e.tradeId) ?? [];
+    list.push({ price: Number(e.price), quantity: e.quantity });
+    exitsByTrade.set(e.tradeId, list);
+  }
+  const ideaChecks = new Map<string, IdeaCheck>(
+    ideas.map((i) => [i.id, checkIdea(i.trades, prefs.tradingRules, specs, prefs.ideaLimits, exitsByTrade)]),
+  );
 
   return (
     <>
@@ -157,7 +182,7 @@ export default async function IdeasPage({
       ) : (
         <div className="grid2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))" }}>
           {ideas.map((i) => (
-            <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} />
+            <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} />
           ))}
         </div>
       )}

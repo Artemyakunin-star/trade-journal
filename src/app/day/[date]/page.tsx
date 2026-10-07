@@ -8,8 +8,9 @@ import { loadMissedBars, ownTargetsOf, simulateMissed } from "@/lib/whatif";
 import { MISSED_REASON_LABEL } from "@/lib/format";
 import PriceChart from "@/components/charts/PriceChart";
 import { db } from "@/db";
-import { and, eq, gte, lt } from "drizzle-orm";
-import { bars, docs, plans } from "@/db/schema";
+import { and, eq, gte, inArray, lt } from "drizzle-orm";
+import { bars, docs, executions, plans } from "@/db/schema";
+import { checkIdea, type IdeaCheck } from "@/lib/rules";
 import { addScenario, deleteScenario, setScenarioOutcome } from "@/app/actions";
 import AccountFilter from "@/components/AccountFilter";
 import {
@@ -103,6 +104,26 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
   );
   const rogue = dayTrades.filter((t) => !t.ideaId);
 
+  // Trading-rules check per idea (Settings -> Trading rules).
+  const checkTradeIds = dayIdeas.flatMap((i) => i.trades.map((t) => t.id));
+  const exitRows = checkTradeIds.length
+    ? await db
+        .select({ tradeId: executions.tradeId, price: executions.price, quantity: executions.quantity, action: executions.action })
+        .from(executions)
+        .where(and(eq(executions.userId, uid), inArray(executions.tradeId, checkTradeIds)))
+    : [];
+  const exitsByTrade = new Map<string, { price: number; quantity: number }[]>();
+  for (const e of exitRows) {
+    if (!e.tradeId || !["REDUCE", "CLOSE", "REVERSE"].includes(e.action)) continue;
+    const list = exitsByTrade.get(e.tradeId) ?? [];
+    list.push({ price: Number(e.price), quantity: e.quantity });
+    exitsByTrade.set(e.tradeId, list);
+  }
+  const ideaChecks = new Map<string, IdeaCheck>(
+    dayIdeas.map((i) => [i.id, checkIdea(i.trades, prefs.tradingRules, specsM, prefs.ideaLimits, exitsByTrade)]),
+  );
+  const brokenIdeas = dayIdeas.filter((i) => ideaChecks.get(i.id)?.broken).length;
+
   // Chart instruments: the day's trades, or — when no trades are visible
   // (e.g. account filter) — any instruments that have imported bars that day.
   let chartInstruments = [...new Set(dayTrades.map((t) => t.instrument))];
@@ -130,6 +151,12 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     { lbl: "Trades", val: String(dayTrades.length), delta: closed ? `${wins} win${wins === 1 ? "" : "s"} of ${closed} closed` : undefined },
     { lbl: "Ideas", val: String(dayIdeas.length), delta: rogue.length ? undefined : "all trades linked" },
     { lbl: "Rogue trades", val: String(rogue.length), cls: rogue.length ? "neg" : "", delta: rogue.length ? `total ${fmtMoney(rogue.reduce((a, t) => a + tradePnl(t), 0))}` : "clean" },
+    {
+      lbl: "Rules",
+      val: dayIdeas.length === 0 ? "—" : brokenIdeas ? `${brokenIdeas} broken` : "OK",
+      cls: brokenIdeas ? "neg" : dayIdeas.length ? "pos" : "",
+      delta: dayIdeas.length === 0 ? "no ideas this day" : brokenIdeas ? "idea limits or trade rules exceeded" : "inside your limits",
+    },
     {
       lbl: "Missed setups",
       val: String(dayMissed.length),
@@ -315,7 +342,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
           </h3>
           <div className="grid2" style={{ gridTemplateColumns: "1fr" }}>
             {dayIdeas.map((i) => (
-              <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} />
+              <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} />
             ))}
             {dayIdeas.length === 0 && <div className="section-note">No ideas linked to this day yet.</div>}
           </div>
