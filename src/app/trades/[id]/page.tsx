@@ -10,7 +10,7 @@ import PriceChart from "@/components/charts/PriceChart";
 import DocEditor from "@/components/DocEditor";
 import BeField from "@/components/BeField";
 import ReplayResolutionNote from "@/components/ReplayResolutionNote";
-import { deleteManualTrade, setTradeAccount, setTradeIdea, setTradeNote } from "@/app/actions";
+import { deleteManualTrade, setTradeAccount, setTradeEntryDip, setTradeIdea, setTradeNote } from "@/app/actions";
 import { getAllIdeas, type TradeRow } from "@/lib/metrics";
 import { loadTradeBars, simulateTrade, type SimResult } from "@/lib/whatif";
 import type { SimOverlay } from "@/components/charts/PriceChart";
@@ -330,6 +330,20 @@ export default async function TradeDetailPage({
               field = no break-even move · slippage 1 tick on stops · full sweep across ALL trades lives in Analytics.
               <ReplayResolutionNote meta={barsMeta} />
             </div>
+            <form action={setTradeEntryDip} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+              <input type="hidden" name="tradeId" value={trade.id} />
+              <label
+                style={{ display: "inline-flex", alignItems: "flex-start", gap: 7, fontSize: 12.5, color: "var(--ink-2)", cursor: "pointer", maxWidth: 560 }}
+                title="Replays can't see the move order inside the entry candle, so a dip to the stop there normally counts as a stop. Tick this ONLY if you remember the dip happened before you entered — stops on all later candles still apply."
+              >
+                <input type="checkbox" name="dip" value="1" defaultChecked={trade.entryDipBefore === true} style={{ accentColor: "var(--s1)", marginTop: 2 }} />
+                <span>
+                  The entry-candle dip was BEFORE my entry — don&apos;t count it as a stop in replays.{" "}
+                  <span style={{ color: "var(--muted)" }}>Applies to the entry candle only; your word, not the bars.</span>
+                </span>
+              </label>
+              <button className="btn ghost btn-sm" type="submit">Save</button>
+            </form>
           </div>
 
           <div className="card">

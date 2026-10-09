@@ -433,8 +433,16 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                 {selTrades.map((t) => (
                   <tr key={t.id}>
                     <td>{fmtDate(dayOfTrade(t), prefs.dateFormat)}</td>
-                    <td>
+                    <td style={{ whiteSpace: "nowrap" }}>
                       <Link className="linklike" href={`/trades/${t.id}`}>{fmtTimeKyiv(t.entryTime, false, tz)}</Link>
+                      {t.entryDipBefore === true && (
+                        <span
+                          title="Entry-candle stop ignored by your manual flag on this trade (dip was before the entry)"
+                          style={{ color: "var(--warn)", marginLeft: 5, cursor: "help" }}
+                        >
+                          ✱
+                        </span>
+                      )}
                     </td>
                     <td>{t.instrument}</td>
                     <td className="num">{t.quantity}</td>

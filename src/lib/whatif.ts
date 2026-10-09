@@ -126,8 +126,12 @@ export function simulateTrade(
       // The bar containing the entry is replayed conservatively: the move
       // order inside it is unknown, so only the stop can fill there — a stop
       // touched on the entry candle counts as a stop, targets don't count.
+      // The trader can assert the dip came BEFORE the entry (entryDipBefore):
+      // then the stop is not checked on this one candle either.
       const isEntryBar = b.time.getTime() <= t.entryTime.getTime();
-      const stopHit = stopPrice !== null && (dir === 1 ? b.low <= stopPrice : b.high >= stopPrice);
+      const stopHit =
+        !(isEntryBar && t.entryDipBefore === true) &&
+        stopPrice !== null && (dir === 1 ? b.low <= stopPrice : b.high >= stopPrice);
       if (stopHit) {
         // conservative: stop wins ties; slippage worsens the fill
         const isBe = Math.abs(stopPrice! - entry) < 1e-9;
@@ -191,9 +195,11 @@ export function simulateTrade(
   const targetPrice = p.targetTicks === null ? null : entry + dir * p.targetTicks * spec.tickSize;
 
   for (const b of activeBars) {
-    // Entry bar: move order unknown -> only the stop can fill (conservative).
+    // Entry bar: move order unknown -> only the stop can fill (conservative);
+    // entryDipBefore (trader's assertion) skips even the stop on this candle.
     const isEntryBar = b.time.getTime() <= t.entryTime.getTime();
     const stopHit =
+      !(isEntryBar && t.entryDipBefore === true) &&
       stopPrice !== null && (dir === 1 ? b.low <= stopPrice : b.high >= stopPrice);
     const targetHit =
       !isEntryBar && targetPrice !== null && (dir === 1 ? b.high >= targetPrice : b.low <= targetPrice);

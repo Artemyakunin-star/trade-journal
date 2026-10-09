@@ -284,6 +284,9 @@ export const trades = pgTable(
     ofConfirmation: text("of_confirmation"),
     /** Execution quality grade for THIS trade (ideas have their own grade). */
     grade: gradeEnum("grade"),
+    /** Trader's manual assertion: the entry-candle dip happened BEFORE the
+     *  entry, so replays must not count a stop on that one candle. */
+    entryDipBefore: boolean("entry_dip_before"),
     /** Rich per-trade write-up (TipTap JSON, incl. pasted screenshots). */
     journal: jsonb("journal"),
 

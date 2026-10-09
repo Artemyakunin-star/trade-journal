@@ -23,6 +23,7 @@ export type TradeRow = {
   mfeTicks: number | null;
   account: string;
   grade: string | null;
+  entryDipBefore?: boolean | null;
 };
 
 export type IdeaRow = {

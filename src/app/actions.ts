@@ -1136,3 +1136,16 @@ export async function deleteSimScenario(fd: FormData) {
   const back = str(fd, "returnTo");
   redirect(back.startsWith("/lab") ? back : "/lab");
 }
+
+/** Trader's assertion for one trade: the entry-candle dip happened BEFORE the
+ *  entry, so replays must not count a stop on that candle (later bars still do). */
+export async function setTradeEntryDip(fd: FormData) {
+  const uid = await requireUserId();
+  const tradeId = str(fd, "tradeId");
+  const flag = str(fd, "dip") === "1";
+  await db
+    .update(trades)
+    .set({ entryDipBefore: flag ? true : null })
+    .where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
+  revalidatePath("/", "layout");
+}
