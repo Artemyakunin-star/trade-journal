@@ -62,6 +62,19 @@ export default function IdeaCard({
           </span>
         )}
         {limitsBadge?.broken && <span className="badge rogue">rules broken</span>}
+        {(() => {
+          const closed = idea.trades.filter((t) => t.pnl !== null);
+          const noBars = closed.filter((t) => t.maeTicks === null).length;
+          return noBars > 0 ? (
+            <span
+              className="status-chip"
+              style={{ color: "var(--warn)", borderColor: "var(--warn)" }}
+              title="No price bars imported for these trades' days — charts, MAE/MFE and Lab simulations are unavailable until you import TradingView 5-sec data"
+            >
+              ⚠ no bars: {noBars}/{closed.length}
+            </span>
+          ) : null;
+        })()}
       </div>
       <div className="thesis">{idea.thesis}</div>
       <div className="inval">

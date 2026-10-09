@@ -335,7 +335,7 @@ export async function deleteManualTrade(fd: FormData) {
  *  row survives (links keep working); the others are deleted. */
 export async function mergeTrades(fd: FormData) {
   const uid = await requireUserId();
-  const ids = fd.getAll("mergeIds").map(String).filter(Boolean);
+  const ids = [...fd.getAll("mergeIds"), ...fd.getAll("t")].map(String).filter(Boolean);
   const returnTo = str(fd, "returnTo") || "/trades";
   const fail = (msg: string) =>
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}mergeError=${encodeURIComponent(msg)}`);

@@ -128,29 +128,27 @@ export default function TradesTable({
       <tr key={t.id} className="in-group">
         <td>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            {mergeForm && t.exitTime && (
-              <input
-                type="checkbox"
-                name="mergeIds"
-                value={t.id}
-                form={mergeForm}
-                title="Select for merging (partial exits of one position)"
-                style={{ accentColor: "var(--accent)", margin: 0 }}
-              />
-            )}
-            {labForm && t.exitTime && (
+            {(mergeForm || labForm) && t.exitTime && (
               <input
                 type="checkbox"
                 name="t"
                 value={t.id}
-                form={labForm}
-                title="Pick for the Lab (scenario comparison)"
+                form={mergeForm ?? labForm ?? undefined}
+                title="Select this trade — then Merge selected (parts of one position) or Run in Lab (scenario comparison)"
                 style={{ accentColor: "var(--s1)", margin: 0 }}
               />
             )}
             <Link href={`/trades/${t.id}?unit=${unit}${entryHrefSuffix}`} className="linklike" title="Open trade details">
               {fmtTimeKyiv(t.entryTime, true, tz, dateFormat)}
             </Link>
+            {t.pnl !== null && t.maeTicks === null && (
+              <span
+                title="No price bars imported for this trade's day — no chart, MAE/MFE or simulations. Import TradingView 5-sec data on the Import page."
+                style={{ color: "var(--warn)", fontSize: 12, cursor: "help" }}
+              >
+                ⚠
+              </span>
+            )}
             {editableAccountIds?.has(t.id) && (
               <form action={deleteManualTrade} style={{ display: "inline" }}>
                 <input type="hidden" name="tradeId" value={t.id} />

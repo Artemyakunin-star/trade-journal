@@ -137,6 +137,7 @@ export default async function TradesPage({
             style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}
           >
             <input type="hidden" name="returnTo" value={"/trades" + (Object.keys(sp).length ? "?" + new URLSearchParams(Object.entries(sp).filter(([k, v]) => !!v && k !== "mergeError") as [string, string][]).toString() : "")} />
+            <input type="hidden" name="tab" value="trades" />
             <button
               className="btn ghost"
               type="submit"
@@ -144,13 +145,12 @@ export default async function TradesPage({
             >
               ⇥ Merge selected
             </button>
-          </form>
-          <form id="lab-form" action="/lab" method="get" style={{ display: "inline-flex" }}>
-            <input type="hidden" name="tab" value="trades" />
             <button
               className="btn ghost"
               type="submit"
-              data-tip="Tick the blue checkboxes next to the trades you want, then open the Lab with that selection to run it through saved exit scenarios"
+              formAction="/lab"
+              formMethod="get"
+              data-tip="Tick the checkboxes next to the trades you want, then open the Lab with that selection to run it through saved exit scenarios"
             >
               ⚗ Run in Lab
             </button>
@@ -173,7 +173,6 @@ export default async function TradesPage({
             editableAccountIds={editableAccountIds}
             dateFormat={prefs.dateFormat}
             mergeForm="merge-form"
-            labForm="lab-form"
           />
         </div>
         <div className="section-note">
