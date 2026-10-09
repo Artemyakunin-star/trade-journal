@@ -237,6 +237,217 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
         </div>
       )}
 
+      {/* ---------- results ---------- */}
+      {run && !mixed && selScenarios.length === 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="section-note" style={{ margin: 0 }}>Tick at least one scenario and run again.</div>
+        </div>
+      )}
+      {run && !mixed && selScenarios.length > 0 && selTrades.length === 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="section-note" style={{ margin: 0 }}>Nothing selected — tick some {tab === "trades" ? "trades" : "ideas"} and run again.</div>
+        </div>
+      )}
+      {stats.length > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <h3>
+            Comparison{" "}
+            <span className="sub">
+              same selection for every row · {selTrades.length} trades picked{tab === "ideas" ? ` from ${selIdeas.length} ideas` : ""}
+            </span>
+          </h3>
+          <div style={{ overflowX: "auto" }}>
+            <table className="tj">
+              <thead>
+                <tr>
+                  <th>Scenario</th>
+                  <th className="num" data-tip="Trades actually replayed (bars available, matching instrument, not overlapping)">Counted</th>
+                  <th className="num">Sim net P&L</th>
+                  <th className="num">Avg / trade</th>
+                  <th className="num">Win rate</th>
+                  <th className="num">Stop</th>
+                  <th className="num">BE</th>
+                  <th className="num">T1</th>
+                  <th className="num">T2</th>
+                  <th className="num">T3</th>
+                  <th className="num" data-tip="Still open at the end of session data">Sess</th>
+                  <th className="num" data-tip="Actual net result of the same counted trades">Actual</th>
+                  <th className="num">Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.map((st) => {
+                  const d = st.simTotal - st.actualTotal;
+                  return (
+                    <tr key={st.sc.id}>
+                      <td style={{ whiteSpace: "normal" }}>
+                        <b>{st.sc.name}</b> <span style={{ color: "var(--muted)" }}>({st.sc.symbol})</span>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>{scenarioSummary(st.sc)}</div>
+                        {(st.otherInstrument > 0 || st.noBars > 0 || st.overlapSkipped > 0) && (
+                          <div style={{ fontSize: 11, color: "var(--warn)" }}>
+                            {st.otherInstrument > 0 && `${st.otherInstrument} other-instrument · `}
+                            {st.noBars > 0 && `${st.noBars} without bars · `}
+                            {st.overlapSkipped > 0 && `${st.overlapSkipped} overlapping skipped`}
+                          </div>
+                        )}
+                      </td>
+                      <td className="num">{st.counted}</td>
+                      <td className={"num " + (st.simTotal > 0 ? "pos" : st.simTotal < 0 ? "neg" : "")}>{fmtMoney(Math.round(st.simTotal))}</td>
+                      <td className="num">{st.counted ? fmtMoney(Math.round(st.simTotal / st.counted)) : "—"}</td>
+                      <td className="num">{pct(st.wins, st.counted)}</td>
+                      <td className="num">{st.stops}</td>
+                      <td className="num">{st.be}</td>
+                      <td className="num">{st.t1}</td>
+                      <td className="num">{st.t2}</td>
+                      <td className="num">{st.t3}</td>
+                      <td className="num">{st.session}</td>
+                      <td className={"num " + (st.actualTotal > 0 ? "pos" : st.actualTotal < 0 ? "neg" : "")}>{fmtMoney(Math.round(st.actualTotal))}</td>
+                      <td className={"num " + (d > 0 ? "pos" : d < 0 ? "neg" : "")}>{fmtMoney(Math.round(d))}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="section-note">
+            T1/T2/T3 count trades where that target filled at least partially; Stop and BE count full exits without any
+            target. Conservative fills, slippage on stops as set per scenario, one position at a time, a stop touched on
+            the entry candle counts as a stop. Δ = scenario minus your actual exits on the same trades.
+            <ReplayResolutionNote meta={barsMeta} />
+          </div>
+        </div>
+      )}
+
+      {/* per-idea breakdown */}
+      {stats.length > 0 && tab === "ideas" && selIdeas.length > 1 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <h3>By idea <span className="sub">actual vs each scenario, net USD</span></h3>
+          <div style={{ overflowX: "auto" }}>
+            <table className="tj">
+              <thead>
+                <tr>
+                  <th>Idea</th>
+                  <th className="num">Trades</th>
+                  <th className="num">Actual</th>
+                  {stats.map((st) => (
+                    <th key={st.sc.id} className="num">{st.sc.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {selIdeas.map((i) => {
+                  const ts = i.trades.filter((t) => t.pnl !== null);
+                  const actual = ts.reduce((a, t) => a + Number(t.pnl), 0);
+                  return (
+                    <tr key={i.id}>
+                      <td style={{ whiteSpace: "normal" }}>
+                        <Link className="linklike" href={`/ideas/${i.id}/edit`}>{i.title}</Link>
+                      </td>
+                      <td className="num">{ts.length}</td>
+                      <td className={"num " + (actual > 0 ? "pos" : actual < 0 ? "neg" : "")}>{fmtMoney(Math.round(actual))}</td>
+                      {stats.map((st) => {
+                        const rs = ts.map((t) => st.byTrade.get(t.id)).filter((r): r is SimResult => !!r && r.simulated && r.exitReason !== "skipped");
+                        const sum = rs.reduce((a, r) => a + r.simPnl, 0);
+                        return (
+                          <td key={st.sc.id} className={"num " + (sum > 0 ? "pos" : sum < 0 ? "neg" : "")}>
+                            {rs.length ? fmtMoney(Math.round(sum)) : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                {(() => {
+                  const allTs = selIdeas.flatMap((i) => i.trades.filter((t) => t.pnl !== null));
+                  const actual = allTs.reduce((a, t) => a + Number(t.pnl), 0);
+                  const totalStyle = { fontWeight: 700, borderTop: "2px solid var(--border)" } as const;
+                  return (
+                    <tr>
+                      <td style={totalStyle}>Total</td>
+                      <td className="num" style={totalStyle}>{allTs.length}</td>
+                      <td className={"num " + (actual > 0 ? "pos" : actual < 0 ? "neg" : "")} style={totalStyle}>{fmtMoney(Math.round(actual))}</td>
+                      {stats.map((st) => {
+                        const rs = allTs.map((t) => st.byTrade.get(t.id)).filter((r): r is SimResult => !!r && r.simulated && r.exitReason !== "skipped");
+                        const sum = rs.reduce((a, r) => a + r.simPnl, 0);
+                        return (
+                          <td key={st.sc.id} className={"num " + (sum > 0 ? "pos" : sum < 0 ? "neg" : "")} style={totalStyle}>
+                            {rs.length ? fmtMoney(Math.round(sum)) : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* per-trade breakdown */}
+      {stats.length > 0 && selTrades.length > 0 && selTrades.length <= 80 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <h3>By trade <span className="sub">actual vs each scenario, net USD · click the time to open the trade</span></h3>
+          <div style={{ overflowX: "auto" }}>
+            <table className="tj">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Instr</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Actual</th>
+                  {stats.map((st) => (
+                    <th key={st.sc.id} className="num">{st.sc.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {selTrades.map((t) => (
+                  <tr key={t.id}>
+                    <td>{fmtDate(dayOfTrade(t), prefs.dateFormat)}</td>
+                    <td>
+                      <Link className="linklike" href={`/trades/${t.id}`}>{fmtTimeKyiv(t.entryTime, false, tz)}</Link>
+                    </td>
+                    <td>{t.instrument}</td>
+                    <td className="num">{t.quantity}</td>
+                    <td className={"num " + (Number(t.pnl) > 0 ? "pos" : Number(t.pnl) < 0 ? "neg" : "")}>{fmtMoney(Number(t.pnl))}</td>
+                    {stats.map((st) => {
+                      const r = st.byTrade.get(t.id);
+                      const ok = r && r.simulated && r.exitReason !== "skipped";
+                      return (
+                        <td key={st.sc.id} className={"num " + (ok && r!.simPnl > 0 ? "pos" : ok && r!.simPnl < 0 ? "neg" : "")} title={ok ? r!.exitLabel ?? r!.exitReason : "not replayed"}>
+                          {ok ? fmtMoney(Math.round(r!.simPnl)) : "—"}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+                {(() => {
+                  const actual = selTrades.reduce((a, t) => a + Number(t.pnl), 0);
+                  const totalStyle = { fontWeight: 700, borderTop: "2px solid var(--border)" } as const;
+                  return (
+                    <tr>
+                      <td style={totalStyle} colSpan={3}>Total</td>
+                      <td className="num" style={totalStyle}>{selTrades.reduce((a, t) => a + t.quantity, 0)}</td>
+                      <td className={"num " + (actual > 0 ? "pos" : actual < 0 ? "neg" : "")} style={totalStyle}>{fmtMoney(Math.round(actual))}</td>
+                      {stats.map((st) => {
+                        const rs = selTrades.map((t) => st.byTrade.get(t.id)).filter((r): r is SimResult => !!r && r.simulated && r.exitReason !== "skipped");
+                        const sum = rs.reduce((a, r) => a + r.simPnl, 0);
+                        return (
+                          <td key={st.sc.id} className={"num " + (sum > 0 ? "pos" : sum < 0 ? "neg" : "")} style={totalStyle}>
+                            {rs.length ? fmtMoney(Math.round(sum)) : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       {/* ---------- saved scenarios ---------- */}
       <div className="card" style={{ marginBottom: 14 }}>
         <h3>
@@ -407,176 +618,6 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
         </form>
       </div>
 
-      {/* ---------- results ---------- */}
-      {run && !mixed && selScenarios.length === 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="section-note" style={{ margin: 0 }}>Tick at least one scenario and run again.</div>
-        </div>
-      )}
-      {run && !mixed && selScenarios.length > 0 && selTrades.length === 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="section-note" style={{ margin: 0 }}>Nothing selected — tick some {tab === "trades" ? "trades" : "ideas"} and run again.</div>
-        </div>
-      )}
-      {stats.length > 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <h3>
-            Comparison{" "}
-            <span className="sub">
-              same selection for every row · {selTrades.length} trades picked{tab === "ideas" ? ` from ${selIdeas.length} ideas` : ""}
-            </span>
-          </h3>
-          <div style={{ overflowX: "auto" }}>
-            <table className="tj">
-              <thead>
-                <tr>
-                  <th>Scenario</th>
-                  <th className="num" data-tip="Trades actually replayed (bars available, matching instrument, not overlapping)">Counted</th>
-                  <th className="num">Sim net P&L</th>
-                  <th className="num">Avg / trade</th>
-                  <th className="num">Win rate</th>
-                  <th className="num">Stop</th>
-                  <th className="num">BE</th>
-                  <th className="num">T1</th>
-                  <th className="num">T2</th>
-                  <th className="num">T3</th>
-                  <th className="num" data-tip="Still open at the end of session data">Sess</th>
-                  <th className="num" data-tip="Actual net result of the same counted trades">Actual</th>
-                  <th className="num">Δ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.map((st) => {
-                  const d = st.simTotal - st.actualTotal;
-                  return (
-                    <tr key={st.sc.id}>
-                      <td style={{ whiteSpace: "normal" }}>
-                        <b>{st.sc.name}</b> <span style={{ color: "var(--muted)" }}>({st.sc.symbol})</span>
-                        <div style={{ fontSize: 11, color: "var(--muted)" }}>{scenarioSummary(st.sc)}</div>
-                        {(st.otherInstrument > 0 || st.noBars > 0 || st.overlapSkipped > 0) && (
-                          <div style={{ fontSize: 11, color: "var(--warn)" }}>
-                            {st.otherInstrument > 0 && `${st.otherInstrument} other-instrument · `}
-                            {st.noBars > 0 && `${st.noBars} without bars · `}
-                            {st.overlapSkipped > 0 && `${st.overlapSkipped} overlapping skipped`}
-                          </div>
-                        )}
-                      </td>
-                      <td className="num">{st.counted}</td>
-                      <td className={"num " + (st.simTotal > 0 ? "pos" : st.simTotal < 0 ? "neg" : "")}>{fmtMoney(Math.round(st.simTotal))}</td>
-                      <td className="num">{st.counted ? fmtMoney(Math.round(st.simTotal / st.counted)) : "—"}</td>
-                      <td className="num">{pct(st.wins, st.counted)}</td>
-                      <td className="num">{st.stops}</td>
-                      <td className="num">{st.be}</td>
-                      <td className="num">{st.t1}</td>
-                      <td className="num">{st.t2}</td>
-                      <td className="num">{st.t3}</td>
-                      <td className="num">{st.session}</td>
-                      <td className={"num " + (st.actualTotal > 0 ? "pos" : st.actualTotal < 0 ? "neg" : "")}>{fmtMoney(Math.round(st.actualTotal))}</td>
-                      <td className={"num " + (d > 0 ? "pos" : d < 0 ? "neg" : "")}>{fmtMoney(Math.round(d))}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="section-note">
-            T1/T2/T3 count trades where that target filled at least partially; Stop and BE count full exits without any
-            target. Conservative fills, slippage on stops as set per scenario, one position at a time, a stop touched on
-            the entry candle counts as a stop. Δ = scenario minus your actual exits on the same trades.
-            <ReplayResolutionNote meta={barsMeta} />
-          </div>
-        </div>
-      )}
-
-      {/* per-idea breakdown */}
-      {stats.length > 0 && tab === "ideas" && selIdeas.length > 1 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <h3>By idea <span className="sub">actual vs each scenario, net USD</span></h3>
-          <div style={{ overflowX: "auto" }}>
-            <table className="tj">
-              <thead>
-                <tr>
-                  <th>Idea</th>
-                  <th className="num">Trades</th>
-                  <th className="num">Actual</th>
-                  {stats.map((st) => (
-                    <th key={st.sc.id} className="num">{st.sc.name}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {selIdeas.map((i) => {
-                  const ts = i.trades.filter((t) => t.pnl !== null);
-                  const actual = ts.reduce((a, t) => a + Number(t.pnl), 0);
-                  return (
-                    <tr key={i.id}>
-                      <td style={{ whiteSpace: "normal" }}>
-                        <Link className="linklike" href={`/ideas/${i.id}/edit`}>{i.title}</Link>
-                      </td>
-                      <td className="num">{ts.length}</td>
-                      <td className={"num " + (actual > 0 ? "pos" : actual < 0 ? "neg" : "")}>{fmtMoney(Math.round(actual))}</td>
-                      {stats.map((st) => {
-                        const rs = ts.map((t) => st.byTrade.get(t.id)).filter((r): r is SimResult => !!r && r.simulated && r.exitReason !== "skipped");
-                        const sum = rs.reduce((a, r) => a + r.simPnl, 0);
-                        return (
-                          <td key={st.sc.id} className={"num " + (sum > 0 ? "pos" : sum < 0 ? "neg" : "")}>
-                            {rs.length ? fmtMoney(Math.round(sum)) : "—"}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* per-trade breakdown */}
-      {stats.length > 0 && selTrades.length > 0 && selTrades.length <= 80 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <h3>By trade <span className="sub">actual vs each scenario, net USD · click the time to open the trade</span></h3>
-          <div style={{ overflowX: "auto" }}>
-            <table className="tj">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Instr</th>
-                  <th className="num">Qty</th>
-                  <th className="num">Actual</th>
-                  {stats.map((st) => (
-                    <th key={st.sc.id} className="num">{st.sc.name}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {selTrades.map((t) => (
-                  <tr key={t.id}>
-                    <td>{fmtDate(dayOfTrade(t), prefs.dateFormat)}</td>
-                    <td>
-                      <Link className="linklike" href={`/trades/${t.id}`}>{fmtTimeKyiv(t.entryTime, false, tz)}</Link>
-                    </td>
-                    <td>{t.instrument}</td>
-                    <td className="num">{t.quantity}</td>
-                    <td className={"num " + (Number(t.pnl) > 0 ? "pos" : Number(t.pnl) < 0 ? "neg" : "")}>{fmtMoney(Number(t.pnl))}</td>
-                    {stats.map((st) => {
-                      const r = st.byTrade.get(t.id);
-                      const ok = r && r.simulated && r.exitReason !== "skipped";
-                      return (
-                        <td key={st.sc.id} className={"num " + (ok && r!.simPnl > 0 ? "pos" : ok && r!.simPnl < 0 ? "neg" : "")} title={ok ? r!.exitLabel ?? r!.exitReason : "not replayed"}>
-                          {ok ? fmtMoney(Math.round(r!.simPnl)) : "—"}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </>
   );
 }
