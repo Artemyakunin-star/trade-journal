@@ -239,13 +239,19 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
 
       {/* ---------- results ---------- */}
       {run && !mixed && selScenarios.length === 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="section-note" style={{ margin: 0 }}>Tick at least one scenario and run again.</div>
+        <div className="card" style={{ marginBottom: 14, borderColor: "var(--warn)" }}>
+          <h3 style={{ color: "var(--warn)", marginBottom: 4 }}>⚠ No scenario ticked</h3>
+          <div style={{ fontSize: 13, color: "var(--ink-2)" }}>
+            Tick at least one scenario in the “Scenarios:” row below and press Run comparison again.
+          </div>
         </div>
       )}
       {run && !mixed && selScenarios.length > 0 && selTrades.length === 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="section-note" style={{ margin: 0 }}>Nothing selected — tick some {tab === "trades" ? "trades" : "ideas"} and run again.</div>
+        <div className="card" style={{ marginBottom: 14, borderColor: "var(--warn)" }}>
+          <h3 style={{ color: "var(--warn)", marginBottom: 4 }}>⚠ Nothing selected</h3>
+          <div style={{ fontSize: 13, color: "var(--ink-2)" }}>
+            Tick some {tab === "trades" ? "trades" : "ideas"} in the list below and press Run comparison again.
+          </div>
         </div>
       )}
       {stats.length > 0 && (
