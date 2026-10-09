@@ -287,7 +287,13 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
             </span>
           ))}
           <input className="tj-input" name="be" type="number" min={0} step="any" placeholder="BE after, t" title="Empty = never move to break-even" style={{ width: 96 }} />
-          <input className="tj-input" name="slip" type="number" min={0} step={1} defaultValue={1} title="Slippage on stops, ticks" style={{ width: 58 }} />
+          <label
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}
+            title="Slippage on stops, in ticks — every simulated stop fill is worsened by this much. 0 = ideal fills"
+          >
+            Slippage, t
+            <input className="tj-input" name="slip" type="number" min={0} step={1} defaultValue={1} style={{ width: 64 }} />
+          </label>
           <button className="btn btn-sm" type="submit">Save scenario</button>
         </form>
         <div className="section-note">
