@@ -468,8 +468,15 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                     {stats.map((st) => {
                       const r = st.byTrade.get(t.id);
                       const ok = r && r.simulated && r.exitReason !== "skipped";
+                      const why = !r
+                        ? "Not replayed: the trade's instrument differs from this scenario's"
+                        : !r.simulated
+                          ? "Not replayed: no price bars imported for this trade's day"
+                          : r.exitReason === "skipped"
+                            ? "Skipped: the previous simulated position was still open at this entry (one position at a time)"
+                            : "";
                       return (
-                        <td key={st.sc.id} className={"num " + (ok && r!.simPnl > 0 ? "pos" : ok && r!.simPnl < 0 ? "neg" : "")} title={ok ? `${r!.exitLabel ?? r!.exitReason} — click to open the trade with this scenario on the chart` : "not replayed"}>
+                        <td key={st.sc.id} className={"num " + (ok && r!.simPnl > 0 ? "pos" : ok && r!.simPnl < 0 ? "neg" : "")} title={ok ? `${r!.exitLabel ?? r!.exitReason} — click to open the trade with this scenario on the chart` : why}>
                           {ok ? (
                             <>
                               <Link href={scenarioHref(st.sc, t.id)} style={{ color: "inherit", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>
