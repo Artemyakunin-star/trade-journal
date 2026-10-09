@@ -176,7 +176,7 @@ export default async function MissedPage({
                 T{i}
                 <input className="tj-input" name={`t${i}`} defaultValue={(sp as Record<string, string | undefined>)[`t${i}`] ?? ""} placeholder={unitSuffix} style={{ width: 54 }} />
                 ×
-                <input className="tj-input" name={`q${i}`} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? ""} placeholder="1" style={{ width: 38 }} />
+                <input className="tj-input" name={`q${i}`} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? ""} placeholder="1" style={{ width: 48 }} />
               </span>
             ))}
             <button className="btn ghost btn-sm" type="submit">Apply</button>

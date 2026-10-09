@@ -17,7 +17,7 @@ import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { checkIdea } from "@/lib/rules";
 import IdeaChecklist from "@/components/IdeaChecklist";
 import { docs, executions } from "@/db/schema";
-import { fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { convUnitVal, fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { getVisibleTradeColumns } from "@/lib/prefs";
 import { loadMissedBars, loadTradeBars, ownTargetsOf, simulateMissed, simulateSequential } from "@/lib/whatif";
@@ -257,6 +257,18 @@ export default async function EditIdeaPage({
       unit: sp.unit, stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip,
       ...patch,
     };
+    // Switching units converts the size inputs (idea = one instrument), so the
+    // simulation keeps meaning the same thing instead of being reinterpreted.
+    if (patch.unit && patch.unit !== unit) {
+      const to = patch.unit as PnlUnit;
+      const ideaSpec = specs[idea.instrument] ?? fallbackSpec;
+      for (const k of ["stop", "target", "t1", "t2", "t3", "be"] as const) {
+        cur[k] = convUnitVal(cur[k], unit, to, ideaSpec);
+      }
+      if (!cur.t1) { cur.q1 = undefined; }
+      if (!cur.t2) { cur.q2 = undefined; }
+      if (!cur.t3) { cur.q3 = undefined; }
+    }
     for (const [k, v] of Object.entries(cur)) if (v) p.set(k, v);
     const s = p.toString();
     return `/ideas/${id}/edit${s ? "?" + s : ""}`;
@@ -360,7 +372,7 @@ export default async function EditIdeaPage({
               T{i}
               <input className="tj-input" name={`t${i}`} type="number" min={0} step="any" defaultValue={(sp as Record<string, string | undefined>)[`t${i}`] ?? ""} placeholder={unitSuffix} style={{ width: 66 }} />
               ×
-              <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 44 }} />
+              <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 58 }} />
             </label>
           ))}
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>

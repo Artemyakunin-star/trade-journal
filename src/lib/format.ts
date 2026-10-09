@@ -140,6 +140,23 @@ export const PNL_UNITS: { key: PnlUnit; label: string }[] = [
   { key: "points", label: "Points" },
 ];
 
+/** Convert a what-if size input (stop/target/BE, per contract) between units,
+ *  so switching the unit toggle keeps the simulation meaning the same. */
+export function convUnitVal(
+  raw: string | undefined,
+  from: PnlUnit,
+  to: PnlUnit,
+  spec: { tickSize: number; tickValue: number },
+): string | undefined {
+  if (!raw) return undefined;
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v <= 0) return undefined;
+  if (from === to) return raw;
+  const ticks = from === "ticks" ? v : from === "points" ? v / spec.tickSize : v / spec.tickValue;
+  const out = to === "ticks" ? Math.round(ticks) : Number((to === "points" ? ticks * spec.tickSize : ticks * spec.tickValue).toFixed(2));
+  return out > 0 ? String(out) : undefined;
+}
+
 /**
  * Format a closed trade's result in the chosen unit.
  * Ticks/points are PER CONTRACT (price move × direction), independent of quantity.

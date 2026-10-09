@@ -14,7 +14,7 @@ import { getAllIdeas, type TradeRow } from "@/lib/metrics";
 import { loadTradeBars, simulateTrade, type SimResult } from "@/lib/whatif";
 import type { SimOverlay } from "@/components/charts/PriceChart";
 import { getSettings, tzLabel } from "@/lib/settings";
-import { fmtDateLong, fmtExcursion, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { convUnitVal, fmtDateLong, fmtExcursion, fmtMoney2, fmtPrice, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -132,12 +132,30 @@ export default async function TradeDetailPage({
           Trade · {trade.instrument} {long ? "Long" : "Short"} ×{trade.quantity}{" "}
           <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {fmtDateLong(date)}</span>
         </h1>
-        <span className="seg">
-          {PNL_UNITS.map((u) => (
-            <Link key={u.key} href={`/trades/${trade.id}?unit=${u.key}`} className={unit === u.key ? "on" : ""}>
-              {u.label}
-            </Link>
-          ))}
+        <span className="seg" title="Switching units converts the what-if sizes, the simulation stays the same">
+          {PNL_UNITS.map((u) => {
+            // Convert the active what-if params so the sim survives the switch.
+            const p = new URLSearchParams({ unit: u.key });
+            const set = (k: string, v: string | undefined) => { if (v) p.set(k, v); };
+            set("wstop", convUnitVal(sp.wstop, unit, u.key, spec));
+            set("wtarget", convUnitVal(sp.wtarget, unit, u.key, spec));
+            for (const i of [1, 2, 3]) {
+              const t = convUnitVal((sp as Record<string, string | undefined>)[`t${i}`], unit, u.key, spec);
+              if (t) {
+                p.set(`t${i}`, t);
+                const q = (sp as Record<string, string | undefined>)[`q${i}`];
+                if (q) p.set(`q${i}`, q);
+              }
+            }
+            if (beAfterT1) p.set("bet1", "1");
+            if (wNoBe) p.set("nobe", "1");
+            else set("be", convUnitVal(sp.be, unit, u.key, spec));
+            return (
+              <Link key={u.key} href={`/trades/${trade.id}?${p.toString()}`} className={unit === u.key ? "on" : ""}>
+                {u.label}
+              </Link>
+            );
+          })}
         </span>
         <Link href={`/day/${date}`} className="btn ghost">Open day</Link>
         <Link href={`/trades?date=${date}&unit=${unit}`} className="btn ghost">Day trades</Link>
@@ -283,7 +301,7 @@ export default async function TradeDetailPage({
                 <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 3 }} title={`Target ${i}: distance in ${unitSuffix} per contract × contracts to close there`}>
                   <input className="tj-input" name={`t${i}`} type="number" min={0} step="any" placeholder={`T${i}, ${unitSuffix}`} defaultValue={(sp as Record<string, string | undefined>)[`t${i}`] ?? ""} style={{ width: 78 }} />
                   ×
-                  <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 42 }} />
+                  <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 58 }} />
                 </span>
               ))}
               <BeField defaultBe={sp.be ?? ""} defaultNoBe={wNoBe} suffix={unitSuffix} compact />

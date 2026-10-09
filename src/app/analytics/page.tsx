@@ -20,7 +20,7 @@ import {
   type RangeKey,
   type Tile,
 } from "@/lib/metrics";
-import { fmtDateShort, fmtExcursion, fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
+import { convUnitVal, fmtDateShort, fmtExcursion, fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
 import { loadTradeBars, simulateSequential, summarize, sweep } from "@/lib/whatif";
@@ -249,6 +249,19 @@ export default async function AnalyticsPage({
       stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip, unit: sp.unit,
       ...patch,
     };
+    // Switching units: convert the size inputs when one instrument is filtered
+    // (unambiguous spec); across all instruments a $<->ticks conversion differs
+    // per symbol, so the sizes are cleared instead of silently reinterpreted.
+    if (patch.unit && patch.unit !== unit) {
+      const to = patch.unit as PnlUnit;
+      const oneSpec = sp.instrument ? specs[sp.instrument] : undefined;
+      for (const k of ["stop", "target", "t1", "t2", "t3", "be"] as const) {
+        cur[k] = oneSpec ? convUnitVal(cur[k], unit, to, oneSpec) : undefined;
+      }
+      if (!cur.t1) cur.q1 = undefined;
+      if (!cur.t2) cur.q2 = undefined;
+      if (!cur.t3) cur.q3 = undefined;
+    }
     for (const [k, v] of Object.entries(cur)) if (v) p.set(k, v);
     return "/analytics?" + p.toString();
   };
@@ -317,7 +330,7 @@ export default async function AnalyticsPage({
               T{i}
               <input className="tj-input" name={`t${i}`} type="number" min={0} step="any" defaultValue={(sp as Record<string, string | undefined>)[`t${i}`] ?? ""} placeholder={unitSuffix} style={{ width: 66 }} />
               ×
-              <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 44 }} />
+              <input className="tj-input" name={`q${i}`} type="number" min={1} step={1} defaultValue={(sp as Record<string, string | undefined>)[`q${i}`] ?? "1"} style={{ width: 58 }} />
             </label>
           ))}
           <BeField defaultBe={sp.be ?? ""} defaultNoBe={noBe} suffix={unitSuffix} />
