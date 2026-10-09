@@ -101,8 +101,17 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
         : [];
   const selIdeas = run && tab === "ideas" ? ideaPool.filter((i) => iIds.has(i.id)) : [];
 
+  // Mixed instruments can't be compared by one tick-based scenario — warn and
+  // refuse the run (also right on arrival with a handed-over selection).
+  const previewTrades =
+    tab === "trades"
+      ? pool.filter((t) => tIds.has(t.id))
+      : ideaPool.filter((i) => iIds.has(i.id)).flatMap((i) => i.trades.filter((t) => t.pnl !== null));
+  const selSymbols = [...new Set((run ? selTrades : previewTrades).map((t) => t.instrument))].sort();
+  const mixed = selSymbols.length > 1;
+
   let stats: ScenarioStats[] = [];
-  if (run && selScenarios.length > 0 && selTrades.length > 0) {
+  if (run && !mixed && selScenarios.length > 0 && selTrades.length > 0) {
     const bars = await loadTradeBars(selTrades, 8);
     stats = selScenarios.map((sc) => {
       const subset = selTrades.filter((t) => t.instrument === sc.symbol);
@@ -376,12 +385,22 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
       </div>
 
       {/* ---------- results ---------- */}
-      {run && selScenarios.length === 0 && (
+      {mixed && (
+        <div className="card" style={{ marginBottom: 14, borderColor: "var(--warn)" }}>
+          <h3 style={{ color: "var(--warn)" }}>Different instruments selected</h3>
+          <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.6 }}>
+            Your selection mixes <b>{selSymbols.join(", ")}</b>. A scenario is written in ticks for ONE instrument, so a
+            comparison across different symbols would be apples to oranges. Keep one instrument in the selection — or run
+            each instrument separately.
+          </div>
+        </div>
+      )}
+      {run && !mixed && selScenarios.length === 0 && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="section-note" style={{ margin: 0 }}>Tick at least one scenario and run again.</div>
         </div>
       )}
-      {run && selScenarios.length > 0 && selTrades.length === 0 && (
+      {run && !mixed && selScenarios.length > 0 && selTrades.length === 0 && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="section-note" style={{ margin: 0 }}>Nothing selected — tick some {tab === "trades" ? "trades" : "ideas"} and run again.</div>
         </div>
