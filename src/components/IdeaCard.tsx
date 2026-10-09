@@ -69,6 +69,19 @@ export default function IdeaCard({
         )}
         {limitsBadge?.broken && <span className="badge rogue">rules broken</span>}
         {(() => {
+          const days = [...new Set(idea.trades.filter((t) => t.pnl !== null).map((t) => kyivDateOf(t.entryTime, tz)))].sort();
+          const mism = !!idea.date && days.length > 0 && !(days.length === 1 && days[0] === idea.date);
+          return mism ? (
+            <span
+              className="status-chip"
+              style={{ color: "var(--warn)", borderColor: "var(--warn)" }}
+              title={`Idea is dated ${fmtDate(idea.date!, dateFormat)}, but its trades ran on ${days.map((d) => fmtDate(d, dateFormat)).join(", ")} — open the idea to fix the date in one click`}
+            >
+              ⚠ date mismatch
+            </span>
+          ) : null;
+        })()}
+        {(() => {
           if (!barDays) return null;
           const closed = idea.trades.filter((t) => t.pnl !== null);
           const noBars = closed.filter((t) => !hasBarsFor(barDays, t.instrument, kyivDateOf(t.entryTime, tz))).length;

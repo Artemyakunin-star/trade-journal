@@ -1149,3 +1149,16 @@ export async function setTradeEntryDip(fd: FormData) {
     .where(and(eq(trades.id, tradeId), eq(trades.userId, uid)));
   revalidatePath("/", "layout");
 }
+
+/** One-click fix for a date mismatch: set the idea's trading day. */
+export async function setIdeaDate(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "ideaId");
+  const date = str(fd, "date");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  await db
+    .update(ideas)
+    .set({ date, updatedAt: new Date() })
+    .where(and(eq(ideas.id, id), eq(ideas.userId, uid)));
+  revalidatePath("/", "layout");
+}

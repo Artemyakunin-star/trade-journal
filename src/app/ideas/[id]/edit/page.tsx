@@ -10,7 +10,7 @@ import AttachTradesPicker from "@/components/AttachTradesPicker";
 import DocEditor from "@/components/DocEditor";
 import Tiles from "@/components/Tiles";
 import { db } from "@/db";
-import { attachTradesToIdea, createMissedTrade, deleteIdea, deleteManualTrade, deleteMissedTrade, setMissedManual, setTradeIdea } from "@/app/actions";
+import { attachTradesToIdea, createMissedTrade, deleteIdea, deleteManualTrade, deleteMissedTrade, setIdeaDate, setMissedManual, setTradeIdea } from "@/app/actions";
 import { getAllIdeas, getAllTrades, rrStats, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
@@ -79,6 +79,10 @@ export default async function EditIdeaPage({
 
   // Day frame for the idea's date — shown inside the self-check.
   const ideaDate = idea.date;
+  // Date sanity: the idea's trading day vs the days its trades actually ran.
+  const tradeDays = [...new Set(idea.trades.map((t) => kyivDateOf(t.entryTime, tz)))].sort();
+  const dateMismatch = !!idea.date && tradeDays.length > 0 && !(tradeDays.length === 1 && tradeDays[0] === idea.date);
+
   const frame = ideaDate
     ? await db.query.dayFrames.findFirst({
         where: (f, { and: and_, eq: eq_ }) => and_(eq_(f.userId, uid), eq_(f.date, ideaDate)),
@@ -307,6 +311,26 @@ export default async function EditIdeaPage({
           <button className="btn danger btn-sm" type="submit">Delete idea</button>
         </form>
       </div>
+
+      {dateMismatch && (
+        <div className="card" style={{ marginBottom: 14, borderColor: "var(--warn)" }}>
+          <h3 style={{ color: "var(--warn)", marginBottom: 4 }}>⚠ Date mismatch</h3>
+          <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.6, marginBottom: 8 }}>
+            This idea is dated <b>{fmtDate(idea.date!, prefs.dateFormat)}</b>, but its trades ran on{" "}
+            <b>{tradeDays.map((d) => fmtDate(d, prefs.dateFormat)).join(", ")}</b>. The day frame, Day page and
+            filters all follow the idea's date — a wrong one quietly skews them.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {tradeDays.map((d) => (
+              <form key={d} action={setIdeaDate}>
+                <input type="hidden" name="ideaId" value={idea.id} />
+                <input type="hidden" name="date" value={d} />
+                <button className="btn btn-sm" type="submit">Set idea date to {fmtDate(d, prefs.dateFormat)}</button>
+              </form>
+            ))}
+          </div>
+        </div>
+      )}
 
       <IdeaChecklist
         ideaId={idea.id}

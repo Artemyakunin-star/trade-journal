@@ -185,6 +185,10 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
       setup: i.setup ?? null,
       instrument: i.instrument,
       closed: closedT.length,
+      dateMismatch:
+        !!i.date &&
+        closedT.length > 0 &&
+        !closedT.every((t) => kyivDateOf(t.entryTime, tz) === i.date),
       netStr: fmtMoney(net),
       netCls: net > 0 ? "pos" : net < 0 ? "neg" : "",
       checked: run || hasIdeaSel ? iIds.has(i.id) : true,

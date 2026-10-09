@@ -23,6 +23,7 @@ export type LabPickIdea = {
   setup: string | null;
   instrument: string;
   closed: number;
+  dateMismatch?: boolean;
   netStr: string;
   netCls: string;
   checked: boolean;
@@ -78,6 +79,14 @@ function IdeaRows({ idea, open, toggle }: { idea: LabPickIdea; open: boolean; to
             {open ? "▾" : "▸"}
           </button>
           {idea.date}
+          {idea.dateMismatch && (
+            <span
+              title="The idea's date differs from its trades' dates — open the idea to fix it in one click"
+              style={{ color: "var(--warn)", marginLeft: 5, cursor: "help" }}
+            >
+              ⚠
+            </span>
+          )}
         </td>
         <td style={{ whiteSpace: "normal" }}>
           <Link className="linklike" href={`/ideas/${idea.id}/edit`}>{idea.title}</Link>
