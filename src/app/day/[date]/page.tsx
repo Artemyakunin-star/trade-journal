@@ -123,6 +123,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     dayIdeas.map((i) => [i.id, checkIdea(i.instrument, i.trades, prefs.tradingRules, specsM, exitsByTrade)]),
   );
   const brokenIdeas = dayIdeas.filter((i) => ideaChecks.get(i.id)?.broken).length;
+  const barDays = await (await import("@/lib/coverage")).barCoverageDays(tz);
 
   // Chart instruments: the day's trades, or — when no trades are visible
   // (e.g. account filter) — any instruments that have imported bars that day.
@@ -342,7 +343,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
           </h3>
           <div className="grid2" style={{ gridTemplateColumns: "1fr" }}>
             {dayIdeas.map((i) => (
-              <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} />
+              <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} barDays={barDays} tz={tz} />
             ))}
             {dayIdeas.length === 0 && <div className="section-note">No ideas linked to this day yet.</div>}
           </div>

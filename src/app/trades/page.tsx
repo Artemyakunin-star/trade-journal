@@ -35,6 +35,7 @@ export default async function TradesPage({
   const linkedIds = new Set(execTradeIds.map((e) => e.tradeId));
   const editableAccountIds = new Set(allTrades.filter((t) => !linkedIds.has(t.id)).map((t) => t.id));
   const tz = prefs.timezone;
+  const barDays = await (await import("@/lib/coverage")).barCoverageDays(tz);
   const unit = (PNL_UNITS.find((u) => u.key === sp.unit)?.key ?? "usd") as PnlUnit;
   const specs = Object.fromEntries(
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
@@ -173,6 +174,7 @@ export default async function TradesPage({
             editableAccountIds={editableAccountIds}
             dateFormat={prefs.dateFormat}
             mergeForm="merge-form"
+            barDays={barDays}
           />
         </div>
         <div className="section-note">

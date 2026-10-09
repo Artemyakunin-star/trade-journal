@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, STATUS_LABEL, TRIGGER_LABEL, type DateFmt } from "@/lib/format";
+import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL, TRIGGER_LABEL, type DateFmt } from "@/lib/format";
 import type { IdeaRow } from "@/lib/metrics";
 import { ideaPnl, rrStats } from "@/lib/metrics";
+import { hasBarsFor } from "@/lib/coverage";
 
 export type IdeaLimitsBadge = {
   entries: number;
@@ -18,11 +19,16 @@ export default function IdeaCard({
   editable = true,
   dateFormat = "eu",
   limitsBadge,
+  barDays,
+  tz,
 }: {
   idea: IdeaRow;
   editable?: boolean;
   dateFormat?: DateFmt;
   limitsBadge?: IdeaLimitsBadge | null;
+  /** "SYMBOL|YYYY-MM-DD" days with imported bars (lib/coverage) — enables the no-bars chip. */
+  barDays?: Set<string> | null;
+  tz?: string;
 }) {
   const pnl = ideaPnl(idea);
   const rr = rrStats(idea.trades);
@@ -63,8 +69,9 @@ export default function IdeaCard({
         )}
         {limitsBadge?.broken && <span className="badge rogue">rules broken</span>}
         {(() => {
+          if (!barDays) return null;
           const closed = idea.trades.filter((t) => t.pnl !== null);
-          const noBars = closed.filter((t) => t.maeTicks === null).length;
+          const noBars = closed.filter((t) => !hasBarsFor(barDays, t.instrument, kyivDateOf(t.entryTime, tz))).length;
           return noBars > 0 ? (
             <span
               className="status-chip"

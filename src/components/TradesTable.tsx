@@ -19,6 +19,7 @@ import {
 } from "@/lib/format";
 import type { IdeaRow, TradeRow } from "@/lib/metrics";
 import { tradePnl, ideaPnl } from "@/lib/metrics";
+import { hasBarsFor } from "@/lib/coverage";
 
 type Spec = { tickSize: number; tickValue: number };
 
@@ -73,6 +74,7 @@ export default function TradesTable({
   entryHrefSuffix = "",
   mergeForm = null,
   labForm = null,
+  barDays = null,
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
@@ -98,6 +100,8 @@ export default function TradesTable({
   mergeForm?: string | null;
   /** id of an external <form action="/lab">: renders a pick-for-Lab checkbox (name="t") per closed trade. */
   labForm?: string | null;
+  /** "SYMBOL|YYYY-MM-DD" days with imported bars (lib/coverage) — enables the ⚠ no-bars marker. */
+  barDays?: Set<string> | null;
 }) {
   const show = (key: string) => visibleCols === null || visibleCols.has(key);
   const showIdeaCol = showAttach && show("idea");
@@ -141,7 +145,7 @@ export default function TradesTable({
             <Link href={`/trades/${t.id}?unit=${unit}${entryHrefSuffix}`} className="linklike" title="Open trade details">
               {fmtTimeKyiv(t.entryTime, true, tz, dateFormat)}
             </Link>
-            {t.pnl !== null && t.maeTicks === null && (
+            {barDays && t.pnl !== null && !hasBarsFor(barDays, t.instrument, kyivDateOf(t.entryTime, tz)) && (
               <span
                 title="No price bars imported for this trade's day — no chart, MAE/MFE or simulations. Import TradingView 5-sec data on the Import page."
                 style={{ color: "var(--warn)", fontSize: 12, cursor: "help" }}

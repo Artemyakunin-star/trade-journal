@@ -57,6 +57,7 @@ export default async function EditIdeaPage({
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
   );
   const fallbackSpec = { tickSize: 0.25, tickValue: 5 };
+  const barDays = await (await import("@/lib/coverage")).barCoverageDays(tz);
 
   // ---------- trading-rules check (Settings -> Trading rules) ----------
   const ideaTradeIds = idea.trades.map((t) => t.id);
@@ -413,6 +414,7 @@ export default async function EditIdeaPage({
             sim={anyRule ? simMap : null}
             actionsFor={rowActions}
             entryHrefSuffix={simQ}
+            barDays={barDays}
           />
         </div>
         <div className="section-note">

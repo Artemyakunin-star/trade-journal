@@ -48,6 +48,7 @@ export default async function IdeasPage({
 
   // Trading-rules check per visible idea (Settings -> Trading rules).
   const instRows = await db.query.instruments.findMany();
+  const barDays = await (await import("@/lib/coverage")).barCoverageDays(tz);
   const specs = Object.fromEntries(instRows.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]));
   const checkTradeIds = ideas.flatMap((i) => i.trades.map((t) => t.id));
   const exitRows = checkTradeIds.length
@@ -217,7 +218,7 @@ export default async function IdeasPage({
                 style={{ accentColor: "var(--s1)", width: 15, height: 15, marginTop: 16, flex: "0 0 auto" }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <IdeaCard idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} />
+                <IdeaCard idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} barDays={barDays} tz={tz} />
               </div>
             </div>
           ))}
