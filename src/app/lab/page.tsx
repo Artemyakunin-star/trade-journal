@@ -71,8 +71,14 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
   if (instrument) pool = pool.filter((t) => t.instrument === instrument);
   if (account) pool = pool.filter((t) => t.account === account);
   pool = pool.sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime()).slice(-300);
-  // A handed-over selection floats to the top of the pick list.
-  if (hasTradeSel) pool = [...pool.filter((t) => tIds.has(t.id)), ...pool.filter((t) => !tIds.has(t.id))];
+  // A handed-over selection must be in the pool even when the filters or the
+  // 300-row cap would cut it, then floats to the top of the pick list.
+  if (hasTradeSel) {
+    const inPool = new Set(pool.map((t) => t.id));
+    const missing = closed.filter((t) => tIds.has(t.id) && !inPool.has(t.id));
+    pool = [...pool, ...missing];
+    pool = [...pool.filter((t) => tIds.has(t.id)), ...pool.filter((t) => !tIds.has(t.id))];
+  }
 
   const dayOfIdea = (i: (typeof allIdeas)[number]) => i.date ?? kyivDateOf(i.createdAt, tz);
   let ideaPool = allIdeas.filter((i) => i.trades.some((t) => t.pnl !== null));
@@ -81,7 +87,12 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
   if (instrument) ideaPool = ideaPool.filter((i) => i.instrument === instrument);
   if (setup) ideaPool = ideaPool.filter((i) => i.setup === setup);
   ideaPool = ideaPool.sort((a, b) => dayOfIdea(a).localeCompare(dayOfIdea(b))).slice(-150);
-  if (hasIdeaSel) ideaPool = [...ideaPool.filter((i) => iIds.has(i.id)), ...ideaPool.filter((i) => !iIds.has(i.id))];
+  if (hasIdeaSel) {
+    const inPool = new Set(ideaPool.map((i) => i.id));
+    const missingI = allIdeas.filter((i) => iIds.has(i.id) && !inPool.has(i.id) && i.trades.some((t) => t.pnl !== null));
+    ideaPool = [...ideaPool, ...missingI];
+    ideaPool = [...ideaPool.filter((i) => iIds.has(i.id)), ...ideaPool.filter((i) => !iIds.has(i.id))];
+  }
 
   const accounts = [...new Set(closed.map((t) => t.account))].sort();
   const setups = [...new Set(allIdeas.map((i) => i.setup).filter((s): s is string => !!s))].sort();
@@ -179,6 +190,17 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
           <Link href="/lab?tab=ideas" className={tab === "ideas" ? "on" : ""}>Ideas</Link>
         </span>
       </div>
+
+      {mixed && (
+        <div className="card" style={{ marginBottom: 14, borderColor: "var(--warn)" }}>
+          <h3 style={{ color: "var(--warn)" }}>Different instruments selected</h3>
+          <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.6 }}>
+            Your selection mixes <b>{selSymbols.join(", ")}</b>. A scenario is written in ticks for ONE instrument, so a
+            comparison across different symbols would be apples to oranges. Keep one instrument in the selection — or run
+            each instrument separately. The comparison will not run until the selection is one symbol.
+          </div>
+        </div>
+      )}
 
       {/* ---------- saved scenarios ---------- */}
       <div className="card" style={{ marginBottom: 14 }}>
@@ -385,16 +407,6 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
       </div>
 
       {/* ---------- results ---------- */}
-      {mixed && (
-        <div className="card" style={{ marginBottom: 14, borderColor: "var(--warn)" }}>
-          <h3 style={{ color: "var(--warn)" }}>Different instruments selected</h3>
-          <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.6 }}>
-            Your selection mixes <b>{selSymbols.join(", ")}</b>. A scenario is written in ticks for ONE instrument, so a
-            comparison across different symbols would be apples to oranges. Keep one instrument in the selection — or run
-            each instrument separately.
-          </div>
-        </div>
-      )}
       {run && !mixed && selScenarios.length === 0 && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="section-note" style={{ margin: 0 }}>Tick at least one scenario and run again.</div>
