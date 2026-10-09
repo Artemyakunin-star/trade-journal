@@ -9,6 +9,8 @@ import { getAllIdeas, getAllTrades, type TradeRow } from "@/lib/metrics";
 import { fmtDate, fmtMoney, fmtTimeKyiv, kyivDateOf } from "@/lib/format";
 import { loadTradeBars, simulateSequential, type SimResult } from "@/lib/whatif";
 import RunGuardButton from "@/components/RunGuardButton";
+import LabIdeaPick, { type LabPickIdea } from "@/components/LabIdeaPick";
+import { barCoverageDays, hasBarsFor } from "@/lib/coverage";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +166,36 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
       };
     });
   }
+
+  // Preformatted rows for the expandable ideas pick list.
+  const cov = tab === "ideas" ? await barCoverageDays(tz) : new Set<string>();
+  const pickIdeas: LabPickIdea[] = ideaPool.map((i) => {
+    const closedT = i.trades
+      .filter((t) => t.pnl !== null)
+      .sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
+    const net = closedT.reduce((a, t) => a + Number(t.pnl), 0);
+    return {
+      id: i.id,
+      date: fmtDate(dayOfIdea(i), prefs.dateFormat),
+      title: i.title,
+      setup: i.setup ?? null,
+      instrument: i.instrument,
+      closed: closedT.length,
+      netStr: fmtMoney(net),
+      netCls: net > 0 ? "pos" : net < 0 ? "neg" : "",
+      checked: run || hasIdeaSel ? iIds.has(i.id) : true,
+      trades: closedT.map((t) => ({
+        id: t.id,
+        date: fmtDate(kyivDateOf(t.entryTime, tz), prefs.dateFormat),
+        time: fmtTimeKyiv(t.entryTime, false, tz),
+        dir: t.direction === "LONG" ? "Long" : "Short",
+        qty: t.quantity,
+        pnlStr: fmtMoney(Number(t.pnl)),
+        pnlCls: Number(t.pnl) > 0 ? "pos" : Number(t.pnl) < 0 ? "neg" : "",
+        noBars: !hasBarsFor(cov, t.instrument, kyivDateOf(t.entryTime, tz)),
+      })),
+    };
+  });
 
   // Hidden copies of the filters so the big run-form keeps them.
   const hidden = (
@@ -362,47 +394,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
               </table>
             </div>
           ) : (
-            <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
-              <table className="tj">
-                <thead>
-                  <tr>
-                    <th></th>
-                    <th>Date</th>
-                    <th>Idea</th>
-                    <th>Setup</th>
-                    <th>Instr</th>
-                    <th className="num">Trades</th>
-                    <th className="num">Net P&L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ideaPool.map((i) => {
-                    const closedT = i.trades.filter((t) => t.pnl !== null);
-                    const net = closedT.reduce((a, t) => a + Number(t.pnl), 0);
-                    return (
-                      <tr key={i.id}>
-                        <td>
-                          <input type="checkbox" name="i" value={i.id} data-instr={i.instrument} defaultChecked={run || hasIdeaSel ? iIds.has(i.id) : true} style={{ accentColor: "var(--s1)" }} />
-                        </td>
-                        <td>{fmtDate(dayOfIdea(i), prefs.dateFormat)}</td>
-                        <td style={{ whiteSpace: "normal" }}>
-                          <Link className="linklike" href={`/ideas/${i.id}/edit`}>{i.title}</Link>
-                        </td>
-                        <td style={{ whiteSpace: "normal" }}>{i.setup ?? "—"}</td>
-                        <td>{i.instrument}</td>
-                        <td className="num">{closedT.length}</td>
-                        <td className={"num " + (net > 0 ? "pos" : net < 0 ? "neg" : "")}>{fmtMoney(net)}</td>
-                      </tr>
-                    );
-                  })}
-                  {ideaPool.length === 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ color: "var(--muted)" }}>No ideas with closed trades match the filters.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <LabIdeaPick ideas={pickIdeas} />
           )}
         </form>
       </div>
