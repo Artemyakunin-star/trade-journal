@@ -24,7 +24,7 @@ export default async function TradeDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string }>;
+  searchParams: Promise<{ unit?: string; wstop?: string; wtarget?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string }>;
 }) {
   const uid = await requireUserId();
   const { id } = await params;
@@ -72,6 +72,7 @@ export default async function TradeDetailPage({
       qty: Math.max(1, Math.round(Number((sp as Record<string, string | undefined>)[`q${i}`] ?? 1) || 1)),
     }))
     .filter((x): x is { ticks: number; qty: number } => x.ticks !== null);
+  const slippageTicks = sp.slip != null && Number(sp.slip) >= 0 ? Number(sp.slip) : 1;
   const barsMeta: import("@/lib/whatif").BarsMeta = { tf: new Map() };
   let whatIf: SimResult | null = null;
   if ((wStop !== null || wTarget !== null || wBe !== null || targetSlots.length > 0) && trade.pnl !== null) {
@@ -85,7 +86,7 @@ export default async function TradeDetailPage({
       beAfterFirstTarget: beAfterT1,
       beTriggerTicks: wBe,
       ignoreActualExit: true,
-      slippageTicks: 1,
+      slippageTicks,
     });
   }
   const unitSuffix = unit === "usd" ? "$" : unit === "ticks" ? "t" : "pt";
@@ -152,6 +153,7 @@ export default async function TradeDetailPage({
             if (beAfterT1) p.set("bet1", "1");
             if (wNoBe) p.set("nobe", "1");
             else set("be", convUnitVal(sp.be, unit, u.key, spec));
+            if (sp.slip) p.set("slip", sp.slip);
             return (
               <Link key={u.key} href={`/trades/${trade.id}?${p.toString()}`} className={unit === u.key ? "on" : ""}>
                 {u.label}
@@ -307,6 +309,10 @@ export default async function TradeDetailPage({
                 </span>
               ))}
               <BeField defaultBe={sp.be ?? ""} defaultNoBe={wNoBe} suffix={unitSuffix} compact />
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--ink-2)" }} title="Slippage on stops, in ticks — every simulated stop fill is worsened by this much. 0 = ideal fills">
+                Slippage, t
+                <input className="tj-input" name="slip" type="number" min={0} step={1} defaultValue={sp.slip ?? "1"} style={{ width: 58 }} />
+              </label>
               <button className="btn btn-sm" type="submit">Try</button>
               {(sp.wstop || sp.wtarget || sp.be || sp.nobe || targetSlots.length > 0 || beAfterT1) && (
                 <Link href={`/trades/${trade.id}?unit=${unit}`} className="btn ghost btn-sm">Reset</Link>

@@ -222,6 +222,21 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
     return "/lab" + (s ? "?" + s : "");
   })();
 
+  // Open a trade with a scenario's full rule set applied (ticks), so the
+  // chart shows the SIM overlay immediately.
+  const scenarioHref = (sc: SimScenario, tradeId: string) => {
+    const p = new URLSearchParams({ unit: "ticks" });
+    if (sc.stopTicks) p.set("wstop", String(sc.stopTicks));
+    sc.targets.forEach((tg, i) => {
+      p.set(`t${i + 1}`, String(tg.ticks));
+      p.set(`q${i + 1}`, String(tg.qty));
+    });
+    if (sc.beTicks) p.set("be", String(sc.beTicks));
+    else p.set("nobe", "1");
+    p.set("slip", String(sc.slippageTicks));
+    return `/trades/${tradeId}?${p.toString()}`;
+  };
+
   const scenarioSummary = (s: SimScenario) =>
     `stop ${s.stopTicks ?? "—"}t · ${s.targets.length ? s.targets.map((t, i) => `T${i + 1} ${t.ticks}t×${t.qty}`).join(" ") : "no targets"} · BE ${s.beTicks ? `${s.beTicks}t` : "off"} · slip ${s.slippageTicks}t`;
 
@@ -451,8 +466,14 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                       const r = st.byTrade.get(t.id);
                       const ok = r && r.simulated && r.exitReason !== "skipped";
                       return (
-                        <td key={st.sc.id} className={"num " + (ok && r!.simPnl > 0 ? "pos" : ok && r!.simPnl < 0 ? "neg" : "")} title={ok ? r!.exitLabel ?? r!.exitReason : "not replayed"}>
-                          {ok ? fmtMoney(Math.round(r!.simPnl)) : "—"}
+                        <td key={st.sc.id} className={"num " + (ok && r!.simPnl > 0 ? "pos" : ok && r!.simPnl < 0 ? "neg" : "")} title={ok ? `${r!.exitLabel ?? r!.exitReason} — click to open the trade with this scenario on the chart` : "not replayed"}>
+                          {ok ? (
+                            <Link href={scenarioHref(st.sc, t.id)} style={{ color: "inherit", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>
+                              {fmtMoney(Math.round(r!.simPnl))}
+                            </Link>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                       );
                     })}
