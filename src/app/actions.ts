@@ -1087,3 +1087,50 @@ export async function saveIdeaChecklist(input: {
   }
   revalidatePath("/", "layout");
 }
+
+// ---------- Lab: saved exit scenarios ----------
+
+/** Create a saved exit scenario (ticks + contracts, like the simulator row). */
+export async function saveSimScenario(fd: FormData) {
+  const uid = await requireUserId();
+  const name = str(fd, "name").trim();
+  const symbol = str(fd, "symbol").trim();
+  if (!name || !symbol) return;
+  const posNum = (k: string): number | null => {
+    const v = Number(str(fd, k));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+  const targets: { ticks: number; qty: number }[] = [];
+  for (const i of [1, 2, 3]) {
+    const ticks = posNum(`t${i}`);
+    const qty = posNum(`q${i}`);
+    if (ticks) targets.push({ ticks, qty: Math.max(1, Math.round(qty ?? 1)) });
+  }
+  const stopTicks = posNum("stop");
+  const beTicks = posNum("be");
+  if (!stopTicks && targets.length === 0 && !beTicks) return; // an empty scenario checks nothing
+  const slipRaw = Number(str(fd, "slip"));
+  const slippageTicks = Number.isFinite(slipRaw) && slipRaw >= 0 ? slipRaw : 1;
+
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  const { createId } = await import("@paralleldrive/cuid2");
+  const next = [
+    ...prefs.simScenarios,
+    { id: createId(), name, symbol, stopTicks, targets, beTicks, slippageTicks },
+  ];
+  await setSetting(uid, "simScenarios", next);
+  revalidatePath("/lab");
+  redirect("/lab");
+}
+
+/** Delete a saved exit scenario. */
+export async function deleteSimScenario(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  await setSetting(uid, "simScenarios", prefs.simScenarios.filter((s) => s.id !== id));
+  revalidatePath("/lab");
+  redirect("/lab");
+}

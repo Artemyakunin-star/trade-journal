@@ -18,6 +18,19 @@ export type AppSettings = {
   playbookOptions: string[];
   /** Per-instrument trading rules (size cap, stop, targets, BE window, idea limits). */
   tradingRules: TradingRules;
+  /** Saved exit scenarios for the Lab (batch what-if comparison). */
+  simScenarios: SimScenario[];
+};
+
+/** A saved exit scenario: fixed ticks + contracts, like the simulator row. */
+export type SimScenario = {
+  id: string;
+  name: string;
+  symbol: string; // instrument it applies to
+  stopTicks: number | null;
+  targets: { ticks: number; qty: number }[]; // up to 3, in order
+  beTicks: number | null; // null = no break-even move
+  slippageTicks: number;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -35,6 +48,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     "News / no trading",
   ],
   tradingRules: {},
+  simScenarios: [],
 };
 
 export const TIMEZONES = [
@@ -87,6 +101,37 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     }
   }
 
+  // Saved Lab scenarios: validate shape, drop garbage rows.
+  const simScenarios: SimScenario[] = [];
+  const rawScen = map.get("simScenarios");
+  if (Array.isArray(rawScen)) {
+    for (const s of rawScen) {
+      if (!s || typeof s !== "object") continue;
+      const o = s as Record<string, unknown>;
+      if (typeof o.id !== "string" || typeof o.name !== "string" || typeof o.symbol !== "string") continue;
+      const targets = Array.isArray(o.targets)
+        ? (o.targets as unknown[])
+            .map((t) => {
+              const tt = t as Record<string, unknown>;
+              const ticks = posNum(tt?.ticks);
+              const qty = posNum(tt?.qty);
+              return ticks && qty ? { ticks, qty: Math.round(qty) } : null;
+            })
+            .filter((t): t is { ticks: number; qty: number } => t !== null)
+            .slice(0, 3)
+        : [];
+      simScenarios.push({
+        id: o.id,
+        name: o.name,
+        symbol: o.symbol,
+        stopTicks: posNum(o.stopTicks),
+        targets,
+        beTicks: posNum(o.beTicks),
+        slippageTicks: typeof o.slippageTicks === "number" && o.slippageTicks >= 0 ? o.slippageTicks : 1,
+      });
+    }
+  }
+
   return {
     timezone,
     importTimezone,
@@ -96,6 +141,7 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     ofConfOptions: strArr("ofConfOptions", DEFAULT_SETTINGS.ofConfOptions),
     playbookOptions: strArr("playbookOptions", DEFAULT_SETTINGS.playbookOptions),
     tradingRules,
+    simScenarios,
   };
 }
 

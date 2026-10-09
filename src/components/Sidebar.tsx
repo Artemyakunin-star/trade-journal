@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/missed", ico: "⊘", label: "Missed" },
   { href: "/calendar", ico: "▤", label: "Calendar" },
   { href: "/analytics", ico: "∿", label: "Analytics" },
+  { href: "/lab", ico: "⚗", label: "Lab" },
   { href: "/day", ico: "☀", label: "Day" },
   { href: "/rules", ico: "⚖", label: "Rules" },
   { href: "/import", ico: "⇪", label: "Import" },
