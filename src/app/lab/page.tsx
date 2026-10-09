@@ -319,7 +319,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
       )}
 
       {/* per-idea breakdown */}
-      {stats.length > 0 && tab === "ideas" && selIdeas.length > 1 && (
+      {stats.length > 0 && tab === "ideas" && selIdeas.length > 0 && (
         <div className="card" style={{ marginBottom: 14 }}>
           <h3>By idea <span className="sub">actual vs each scenario, net USD</span></h3>
           <div style={{ overflowX: "auto" }}>
@@ -327,6 +327,8 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
               <thead>
                 <tr>
                   <th>Idea</th>
+                  <th>Date</th>
+                  <th data-tip="First entry — last exit of the idea's closed trades">Time</th>
                   <th className="num">Trades</th>
                   <th className="num">Actual</th>
                   {stats.map((st) => (
@@ -338,10 +340,18 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                 {selIdeas.map((i) => {
                   const ts = i.trades.filter((t) => t.pnl !== null);
                   const actual = ts.reduce((a, t) => a + Number(t.pnl), 0);
+                  const first = ts.length ? new Date(Math.min(...ts.map((t) => t.entryTime.getTime()))) : null;
+                  const last = ts.length
+                    ? new Date(Math.max(...ts.map((t) => (t.exitTime ?? t.entryTime).getTime())))
+                    : null;
                   return (
                     <tr key={i.id}>
                       <td style={{ whiteSpace: "normal" }}>
                         <Link className="linklike" href={`/ideas/${i.id}/edit`}>{i.title}</Link>
+                      </td>
+                      <td style={{ fontVariantNumeric: "tabular-nums" }}>{fmtDate(dayOfIdea(i), prefs.dateFormat)}</td>
+                      <td style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                        {first && last ? `${fmtTimeKyiv(first, false, tz)}–${fmtTimeKyiv(last, false, tz)}` : "—"}
                       </td>
                       <td className="num">{ts.length}</td>
                       <td className={"num " + (actual > 0 ? "pos" : actual < 0 ? "neg" : "")}>{fmtMoney(Math.round(actual))}</td>
@@ -363,7 +373,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                   const totalStyle = { fontWeight: 700, borderTop: "2px solid var(--border)" } as const;
                   return (
                     <tr>
-                      <td style={totalStyle}>Total</td>
+                      <td style={totalStyle} colSpan={3}>Total</td>
                       <td className="num" style={totalStyle}>{allTs.length}</td>
                       <td className={"num " + (actual > 0 ? "pos" : actual < 0 ? "neg" : "")} style={totalStyle}>{fmtMoney(Math.round(actual))}</td>
                       {stats.map((st) => {
