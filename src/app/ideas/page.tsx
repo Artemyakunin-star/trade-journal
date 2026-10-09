@@ -76,6 +76,16 @@ export default async function IdeasPage({
           <Link href="/ideas?view=list" className={view === "list" ? "on" : ""}>List</Link>
         </span>
         <Link href="/ideas/new" className="btn">+ New idea</Link>
+        <form id="lab-form" action="/lab" method="get" style={{ display: "inline-flex" }}>
+          <input type="hidden" name="tab" value="ideas" />
+          <button
+            className="btn ghost"
+            type="submit"
+            data-tip="Tick the checkboxes on the ideas you want, then open the Lab with that selection to run it through saved exit scenarios"
+          >
+            ⚗ Run in Lab
+          </button>
+        </form>
       </div>
 
       <form className="filters" method="get">
@@ -137,6 +147,7 @@ export default async function IdeasPage({
           <table className="tj">
             <thead>
               <tr>
+                <th title="Pick for the Lab (scenario comparison)"></th>
                 <th>Date</th>
                 <th>Idea</th>
                 <th>Instr</th>
@@ -157,6 +168,11 @@ export default async function IdeasPage({
                 const irr = rrStats(i.trades);
                 return (
                   <tr key={i.id}>
+                    <td>
+                      {i.trades.some((t) => t.pnl !== null) && (
+                        <input type="checkbox" name="i" value={i.id} form="lab-form" title="Pick for the Lab" style={{ accentColor: "var(--s1)", margin: 0 }} />
+                      )}
+                    </td>
                     <td style={{ fontVariantNumeric: "tabular-nums", color: "var(--ink-2)" }}>
                       <Link href={`/day/${dayOf(i)}`} className="linklike" title="Open this day">{fmtDate(dayOf(i), prefs.dateFormat)}</Link>
                     </td>
@@ -190,7 +206,20 @@ export default async function IdeasPage({
       ) : (
         <div className="grid2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))" }}>
           {ideas.map((i) => (
-            <IdeaCard key={i.id} idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} />
+            <div key={i.id} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <input
+                type="checkbox"
+                name="i"
+                value={i.id}
+                form="lab-form"
+                title="Pick for the Lab (scenario comparison)"
+                disabled={!i.trades.some((t) => t.pnl !== null)}
+                style={{ accentColor: "var(--s1)", width: 15, height: 15, marginTop: 16, flex: "0 0 auto" }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <IdeaCard idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} />
+              </div>
+            </div>
           ))}
         </div>
       )}

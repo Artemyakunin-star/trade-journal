@@ -72,6 +72,7 @@ export default function TradesTable({
   actionsFor = null,
   entryHrefSuffix = "",
   mergeForm = null,
+  labForm = null,
 }: {
   trades: TradeRow[];
   ideas: IdeaRow[]; // ideas represented in `trades` (for group headers)
@@ -95,6 +96,8 @@ export default function TradesTable({
   entryHrefSuffix?: string;
   /** id of an external <form>: renders a merge checkbox per closed trade that submits with it. */
   mergeForm?: string | null;
+  /** id of an external <form action="/lab">: renders a pick-for-Lab checkbox (name="t") per closed trade. */
+  labForm?: string | null;
 }) {
   const show = (key: string) => visibleCols === null || visibleCols.has(key);
   const showIdeaCol = showAttach && show("idea");
@@ -133,6 +136,16 @@ export default function TradesTable({
                 form={mergeForm}
                 title="Select for merging (partial exits of one position)"
                 style={{ accentColor: "var(--accent)", margin: 0 }}
+              />
+            )}
+            {labForm && t.exitTime && (
+              <input
+                type="checkbox"
+                name="t"
+                value={t.id}
+                form={labForm}
+                title="Pick for the Lab (scenario comparison)"
+                style={{ accentColor: "var(--s1)", margin: 0 }}
               />
             )}
             <Link href={`/trades/${t.id}?unit=${unit}${entryHrefSuffix}`} className="linklike" title="Open trade details">

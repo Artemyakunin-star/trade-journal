@@ -46,6 +46,9 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
   const sIds = many(sp.s);
   const tIds = new Set(many(sp.t));
   const iIds = new Set(many(sp.i));
+  // A selection handed over from the Trades/Ideas pages (before any run here).
+  const hasTradeSel = tIds.size > 0;
+  const hasIdeaSel = iIds.size > 0;
 
   const [allTrades, allIdeas, prefs, instrumentRows] = await Promise.all([
     getAllTrades(uid),
@@ -68,6 +71,8 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
   if (instrument) pool = pool.filter((t) => t.instrument === instrument);
   if (account) pool = pool.filter((t) => t.account === account);
   pool = pool.sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime()).slice(-300);
+  // A handed-over selection floats to the top of the pick list.
+  if (hasTradeSel) pool = [...pool.filter((t) => tIds.has(t.id)), ...pool.filter((t) => !tIds.has(t.id))];
 
   const dayOfIdea = (i: (typeof allIdeas)[number]) => i.date ?? kyivDateOf(i.createdAt, tz);
   let ideaPool = allIdeas.filter((i) => i.trades.some((t) => t.pnl !== null));
@@ -76,6 +81,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
   if (instrument) ideaPool = ideaPool.filter((i) => i.instrument === instrument);
   if (setup) ideaPool = ideaPool.filter((i) => i.setup === setup);
   ideaPool = ideaPool.sort((a, b) => dayOfIdea(a).localeCompare(dayOfIdea(b))).slice(-150);
+  if (hasIdeaSel) ideaPool = [...ideaPool.filter((i) => iIds.has(i.id)), ...ideaPool.filter((i) => !iIds.has(i.id))];
 
   const accounts = [...new Set(closed.map((t) => t.account))].sort();
   const setups = [...new Set(allIdeas.map((i) => i.setup).filter((s): s is string => !!s))].sort();
@@ -228,7 +234,13 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
       <div className="card" style={{ marginBottom: 14 }}>
         <h3>
           {tab === "trades" ? "Pick trades" : "Pick ideas"}{" "}
-          <span className="sub">filter the pool, untick what doesn&apos;t belong, choose scenarios, run</span>
+          <span className="sub">
+            {!run && tab === "trades" && hasTradeSel
+              ? `${tIds.size} picked on the Trades page (on top) — tick scenarios and run`
+              : !run && tab === "ideas" && hasIdeaSel
+                ? `${iIds.size} picked on the Ideas page (on top) — tick scenarios and run`
+                : "filter the pool, untick what doesn't belong, choose scenarios, run"}
+          </span>
         </h3>
         <form className="filters" method="get" style={{ marginBottom: 10 }}>
           <input type="hidden" name="tab" value={tab} />
@@ -298,7 +310,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                   {pool.map((t) => (
                     <tr key={t.id}>
                       <td>
-                        <input type="checkbox" name="t" value={t.id} defaultChecked={run ? tIds.has(t.id) : true} style={{ accentColor: "var(--s1)" }} />
+                        <input type="checkbox" name="t" value={t.id} defaultChecked={run || hasTradeSel ? tIds.has(t.id) : true} style={{ accentColor: "var(--s1)" }} />
                       </td>
                       <td>{fmtDate(dayOfTrade(t), prefs.dateFormat)}</td>
                       <td>{fmtTimeKyiv(t.entryTime, false, tz)}</td>
@@ -338,7 +350,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                     return (
                       <tr key={i.id}>
                         <td>
-                          <input type="checkbox" name="i" value={i.id} defaultChecked={run ? iIds.has(i.id) : true} style={{ accentColor: "var(--s1)" }} />
+                          <input type="checkbox" name="i" value={i.id} defaultChecked={run || hasIdeaSel ? iIds.has(i.id) : true} style={{ accentColor: "var(--s1)" }} />
                         </td>
                         <td>{fmtDate(dayOfIdea(i), prefs.dateFormat)}</td>
                         <td style={{ whiteSpace: "normal" }}>
