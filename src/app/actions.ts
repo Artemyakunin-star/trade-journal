@@ -1121,7 +1121,8 @@ export async function saveSimScenario(fd: FormData) {
   ];
   await setSetting(uid, "simScenarios", next);
   revalidatePath("/lab");
-  redirect("/lab");
+  const back = str(fd, "returnTo");
+  redirect(back.startsWith("/lab") ? back : "/lab");
 }
 
 /** Delete a saved exit scenario. */
@@ -1132,5 +1133,6 @@ export async function deleteSimScenario(fd: FormData) {
   const prefs = await getSettings(uid);
   await setSetting(uid, "simScenarios", prefs.simScenarios.filter((s) => s.id !== id));
   revalidatePath("/lab");
-  redirect("/lab");
+  const back = str(fd, "returnTo");
+  redirect(back.startsWith("/lab") ? back : "/lab");
 }

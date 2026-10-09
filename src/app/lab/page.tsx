@@ -211,6 +211,17 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
     </>
   );
 
+  // Current page state — scenario save/delete returns here so a hand-picked
+  // selection (and a finished run) survives adding one more scenario.
+  const returnTo = (() => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) {
+      for (const val of many(v)) if (val) p.append(k, val);
+    }
+    const s = p.toString();
+    return "/lab" + (s ? "?" + s : "");
+  })();
+
   const scenarioSummary = (s: SimScenario) =>
     `stop ${s.stopTicks ?? "—"}t · ${s.targets.length ? s.targets.map((t, i) => `T${i + 1} ${t.ticks}t×${t.qty}`).join(" ") : "no targets"} · BE ${s.beTicks ? `${s.beTicks}t` : "off"} · slip ${s.slippageTicks}t`;
 
@@ -489,6 +500,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                     <td>
                       <form action={deleteSimScenario}>
                         <input type="hidden" name="id" value={s.id} />
+                        <input type="hidden" name="returnTo" value={returnTo} />
                         <button className="btn ghost btn-sm" type="submit" title="Delete this scenario">✕</button>
                       </form>
                     </td>
@@ -499,6 +511,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
           </div>
         )}
         <form action={saveSimScenario} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <input type="hidden" name="returnTo" value={returnTo} />
           <input className="tj-input" name="name" placeholder="Name — e.g. Standard 2TP + BE" required style={{ width: 210 }} />
           <select className="tj-select" name="symbol" defaultValue={instrument ?? "MES"}>
             {symbols.map((s) => (
