@@ -123,6 +123,10 @@ export function simulateTrade(
 
     for (const b of activeBars) {
       if (open <= 0) break;
+      // The bar containing the entry is replayed conservatively: the move
+      // order inside it is unknown, so only the stop can fill there — a stop
+      // touched on the entry candle counts as a stop, targets don't count.
+      const isEntryBar = b.time.getTime() <= t.entryTime.getTime();
       const stopHit = stopPrice !== null && (dir === 1 ? b.low <= stopPrice : b.high >= stopPrice);
       if (stopHit) {
         // conservative: stop wins ties; slippage worsens the fill
@@ -131,6 +135,7 @@ export function simulateTrade(
         closeAt(fill, open, isBe ? "BE" : "stop", b.time);
         break;
       }
+      if (isEntryBar) continue;
       // Targets inside this bar, nearest first (conservative order).
       while (nextLeg < legs.length && open > 0) {
         const leg = legs[nextLeg];
@@ -186,10 +191,12 @@ export function simulateTrade(
   const targetPrice = p.targetTicks === null ? null : entry + dir * p.targetTicks * spec.tickSize;
 
   for (const b of activeBars) {
+    // Entry bar: move order unknown -> only the stop can fill (conservative).
+    const isEntryBar = b.time.getTime() <= t.entryTime.getTime();
     const stopHit =
       stopPrice !== null && (dir === 1 ? b.low <= stopPrice : b.high >= stopPrice);
     const targetHit =
-      targetPrice !== null && (dir === 1 ? b.high >= targetPrice : b.low <= targetPrice);
+      !isEntryBar && targetPrice !== null && (dir === 1 ? b.high >= targetPrice : b.low <= targetPrice);
 
     if (stopHit) {
       // conservative: stop wins ties; slippage worsens the fill
@@ -197,6 +204,7 @@ export function simulateTrade(
       const gross = (fill - entry) * dir * qty * pv;
       return { ...base, exitReason: beArmed && Math.abs(stopPrice! - entry) < 1e-9 ? "breakeven" : "stop", simPnl: gross - commission, exitTime: b.time, exitPrice: fill };
     }
+    if (isEntryBar) continue;
     if (targetHit) {
       const gross = (targetPrice! - entry) * dir * qty * pv;
       return { ...base, exitReason: "target", simPnl: gross - commission, exitTime: b.time, exitPrice: targetPrice! };
@@ -257,11 +265,20 @@ export function simulateSequential(
   return trades.map((t) => results.get(t.id)!);
 }
 
+/** Timeframe used for a replay, per instrument — drives accuracy badges. */
+export type BarsMeta = { tf: Map<string, "S5" | "S30" | "M1"> };
+export const TF_MS = { S5: 5_000, S30: 30_000, M1: 60_000 } as const;
+export const TF_LABEL = { S5: "5-sec bars", S30: "30-sec bars", M1: "1-minute bars" } as const;
+
 /** Bars for each trade's window (entry..exit, or entry..+4h for open trades).
- *  extendHours > 0 loads bars past the exit too — needed for "no BE" holds. */
+ *  extendHours > 0 loads bars past the exit too — needed for "no BE" holds.
+ *  The bar CONTAINING the entry moment is included (the simulator treats it
+ *  conservatively: only the stop can fill there). Pass `meta` to learn which
+ *  timeframe each instrument's replay runs on. */
 export async function loadTradeBars(
   trades: TradeRow[],
   extendHours = 0,
+  meta?: BarsMeta,
 ): Promise<Map<string, Bar[]>> {
   const out = new Map<string, Bar[]>();
   const instruments = [...new Set(trades.map((t) => t.instrument))];
@@ -272,12 +289,13 @@ export async function loadTradeBars(
   // TradingView / other platforms may only have the coarser ones).
   for (const inst of instruments) {
     const its = trades.filter((t) => t.instrument === inst);
-    const from = new Date(Math.min(...its.map((t) => t.entryTime.getTime())));
+    const from = new Date(Math.min(...its.map((t) => t.entryTime.getTime())) - TF_MS.M1);
     const to = new Date(
       Math.max(...its.map((t) => (t.exitTime ?? new Date(t.entryTime.getTime() + 4 * 3600_000)).getTime())) +
         extendHours * 3600_000,
     );
     let parsed: Bar[] = [];
+    let tfUsed: keyof typeof TF_MS = "S5";
     // Micro contracts (MNQ…) can run on the mini's bars (NQ…) — same prices.
     const sib = siblingOf(inst);
     for (const src of sib ? [inst, sib] : [inst]) {
@@ -289,18 +307,22 @@ export async function loadTradeBars(
           .orderBy(asc(bars.time));
         if (rows.length) {
           parsed = rows.map((r) => ({ time: r.time, high: Number(r.high), low: Number(r.low), close: Number(r.close) }));
+          tfUsed = tf;
           break;
         }
       }
       if (parsed.length) break;
     }
+    if (parsed.length) meta?.tf.set(inst, tfUsed);
     for (const t of its) {
       const end =
         (t.exitTime ?? new Date(t.entryTime.getTime() + 4 * 3600_000)).getTime() + extendHours * 3600_000;
-      const start = t.entryTime.getTime();
+      // Include the bar whose window CONTAINS the entry (bar timestamps mark
+      // the bar's open): everything newer than entry minus one bar length.
+      const start = t.entryTime.getTime() - TF_MS[tfUsed];
       out.set(
         t.id,
-        parsed.filter((b) => b.time.getTime() >= start && b.time.getTime() <= end),
+        parsed.filter((b) => b.time.getTime() > start && b.time.getTime() <= end),
       );
     }
   }

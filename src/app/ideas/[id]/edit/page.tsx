@@ -16,6 +16,7 @@ import type { IdeaRow } from "@/lib/metrics";
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { checkIdea } from "@/lib/rules";
 import IdeaChecklist from "@/components/IdeaChecklist";
+import ReplayResolutionNote from "@/components/ReplayResolutionNote";
 import { docs, executions } from "@/db/schema";
 import { convUnitVal, fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -111,7 +112,8 @@ export default async function EditIdeaPage({
   };
 
   const simTrades = idea.trades.filter((t) => t.pnl !== null).sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
-  const tradeBars = await loadTradeBars(simTrades, 8);
+  const barsMeta: import("@/lib/whatif").BarsMeta = { tf: new Map() };
+  const tradeBars = await loadTradeBars(simTrades, 8, barsMeta);
   const anyRule = stopVal !== null || targetVal !== null || targetSlots.length > 0 || beVal !== null;
   const results = simulateSequential(
     simTrades,
@@ -394,6 +396,7 @@ export default async function EditIdeaPage({
           )}
         </form>
         <Tiles tiles={tiles} />
+        <ReplayResolutionNote meta={barsMeta} />
         <div style={{ display: "flex", justifyContent: "flex-end", margin: "10px 0 6px" }}>
           <ColumnsFilter visible={visibleCols} />
         </div>

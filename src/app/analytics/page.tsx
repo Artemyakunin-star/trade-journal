@@ -20,6 +20,7 @@ import {
   type RangeKey,
   type Tile,
 } from "@/lib/metrics";
+import ReplayResolutionNote from "@/components/ReplayResolutionNote";
 import { convUnitVal, fmtDateShort, fmtExcursion, fmtMoney, fmtTimeKyiv, kyivDateOf, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSelectedAccounts } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
@@ -121,7 +122,8 @@ export default async function AnalyticsPage({
   if (isTime(sp.tfrom)) trades = trades.filter((t) => todOf(t.entryTime) >= sp.tfrom!);
   if (isTime(sp.tto)) trades = trades.filter((t) => todOf(t.entryTime) <= sp.tto!);
 
-  const tradeBars = await loadTradeBars(trades, 8); // extend past exits: sims are not cut by early real-life outs
+  const barsMeta: import("@/lib/whatif").BarsMeta = { tf: new Map() };
+  const tradeBars = await loadTradeBars(trades, 8, barsMeta); // extend past exits: sims are not cut by early real-life outs
   const anyRule = stopVal !== null || targetVal !== null || targetSlots.length > 0 || beVal !== null;
   // One position at a time: while a simulated trade is still open, later real
   // re-entries are skipped (you would not have re-entered in that world).
@@ -292,6 +294,7 @@ export default async function AnalyticsPage({
           </span>
         </h3>
         <Tiles tiles={tiles} />
+        <ReplayResolutionNote meta={barsMeta} />
         <div className="section-note">
           Empty stop/target = keep that side as you actually traded it. Trades without imported bars are counted with
           their real result.

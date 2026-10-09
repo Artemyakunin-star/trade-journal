@@ -7,9 +7,10 @@ import { deleteSimScenario, saveSimScenario } from "@/app/actions";
 import { getSettings, type SimScenario } from "@/lib/settings";
 import { getAllIdeas, getAllTrades, type TradeRow } from "@/lib/metrics";
 import { fmtDate, fmtMoney, fmtTimeKyiv, kyivDateOf } from "@/lib/format";
-import { loadTradeBars, simulateSequential, type SimResult } from "@/lib/whatif";
+import { loadTradeBars, simulateSequential, TF_LABEL, type BarsMeta, type SimResult } from "@/lib/whatif";
 import RunGuardButton from "@/components/RunGuardButton";
 import LabIdeaPick, { type LabPickIdea } from "@/components/LabIdeaPick";
+import ReplayResolutionNote from "@/components/ReplayResolutionNote";
 import { barCoverageDays, hasBarsFor } from "@/lib/coverage";
 
 export const dynamic = "force-dynamic";
@@ -124,9 +125,10 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
   const selSymbols = [...new Set((run ? selTrades : previewTrades).map((t) => t.instrument))].sort();
   const mixed = selSymbols.length > 1;
 
+  const barsMeta: BarsMeta = { tf: new Map() };
   let stats: ScenarioStats[] = [];
   if (run && !mixed && selScenarios.length > 0 && selTrades.length > 0) {
-    const bars = await loadTradeBars(selTrades, 8);
+    const bars = await loadTradeBars(selTrades, 8, barsMeta);
     stats = selScenarios.map((sc) => {
       const subset = selTrades.filter((t) => t.instrument === sc.symbol);
       const results = simulateSequential(
@@ -473,8 +475,9 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
           </div>
           <div className="section-note">
             T1/T2/T3 count trades where that target filled at least partially; Stop and BE count full exits without any
-            target. Replay on 5-sec bars with conservative fills, slippage on stops as set per scenario, one position at
-            a time. Δ = scenario minus your actual exits on the same trades.
+            target. Conservative fills, slippage on stops as set per scenario, one position at a time, a stop touched on
+            the entry candle counts as a stop. Δ = scenario minus your actual exits on the same trades.
+            <ReplayResolutionNote meta={barsMeta} />
           </div>
         </div>
       )}

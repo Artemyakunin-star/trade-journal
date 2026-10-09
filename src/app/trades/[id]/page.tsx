@@ -9,6 +9,7 @@ import { executions, trades as tradesTable } from "@/db/schema";
 import PriceChart from "@/components/charts/PriceChart";
 import DocEditor from "@/components/DocEditor";
 import BeField from "@/components/BeField";
+import ReplayResolutionNote from "@/components/ReplayResolutionNote";
 import { deleteManualTrade, setTradeAccount, setTradeIdea, setTradeNote } from "@/app/actions";
 import { getAllIdeas, type TradeRow } from "@/lib/metrics";
 import { loadTradeBars, simulateTrade, type SimResult } from "@/lib/whatif";
@@ -71,11 +72,12 @@ export default async function TradeDetailPage({
       qty: Math.max(1, Math.round(Number((sp as Record<string, string | undefined>)[`q${i}`] ?? 1) || 1)),
     }))
     .filter((x): x is { ticks: number; qty: number } => x.ticks !== null);
+  const barsMeta: import("@/lib/whatif").BarsMeta = { tf: new Map() };
   let whatIf: SimResult | null = null;
   if ((wStop !== null || wTarget !== null || wBe !== null || targetSlots.length > 0) && trade.pnl !== null) {
     // The replay always runs PAST the actual exit: an early break-even out in
     // real life must not cut the simulation short.
-    const tb = await loadTradeBars([trade as unknown as TradeRow], 8);
+    const tb = await loadTradeBars([trade as unknown as TradeRow], 8, barsMeta);
     whatIf = simulateTrade(trade as unknown as TradeRow, tb.get(trade.id) ?? [], spec, {
       stopTicks: wStop,
       targetTicks: wTarget,
@@ -326,6 +328,7 @@ export default async function TradeDetailPage({
             <div className="section-note">
               The replay runs PAST your actual exit — an early break-even out in real life doesn&apos;t stop it. Empty BE
               field = no break-even move · slippage 1 tick on stops · full sweep across ALL trades lives in Analytics.
+              <ReplayResolutionNote meta={barsMeta} />
             </div>
           </div>
 
