@@ -34,6 +34,7 @@ type ScenarioStats = {
   t2: number;
   t3: number;
   session: number;
+  entryBarStops: number;
   byTrade: Map<string, SimResult>;
 };
 
@@ -164,6 +165,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
         t2: countedR.filter((r) => lbl(r, "T2")).length,
         t3: countedR.filter((r) => lbl(r, "T3")).length,
         session: countedR.filter((r) => r.exitReason === "sessionEnd").length,
+        entryBarStops: countedR.filter((r) => r.entryBarStop === true).length,
         byTrade,
       };
     });
@@ -315,8 +317,9 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                       <td style={{ whiteSpace: "normal" }}>
                         <b>{st.sc.name}</b> <span style={{ color: "var(--muted)" }}>({st.sc.symbol})</span>
                         <div style={{ fontSize: 11, color: "var(--muted)" }}>{scenarioSummary(st.sc)}</div>
-                        {(st.otherInstrument > 0 || st.noBars > 0 || st.overlapSkipped > 0) && (
+                        {(st.otherInstrument > 0 || st.noBars > 0 || st.overlapSkipped > 0 || st.entryBarStops > 0) && (
                           <div style={{ fontSize: 11, color: "var(--warn)" }}>
+                            {st.entryBarStops > 0 && `⚠ ${st.entryBarStops} stop${st.entryBarStops === 1 ? "" : "s"} on the entry candle · `}
                             {st.otherInstrument > 0 && `${st.otherInstrument} other-instrument · `}
                             {st.noBars > 0 && `${st.noBars} without bars · `}
                             {st.overlapSkipped > 0 && `${st.overlapSkipped} overlapping skipped`}
@@ -468,9 +471,19 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                       return (
                         <td key={st.sc.id} className={"num " + (ok && r!.simPnl > 0 ? "pos" : ok && r!.simPnl < 0 ? "neg" : "")} title={ok ? `${r!.exitLabel ?? r!.exitReason} — click to open the trade with this scenario on the chart` : "not replayed"}>
                           {ok ? (
-                            <Link href={scenarioHref(st.sc, t.id)} style={{ color: "inherit", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>
-                              {fmtMoney(Math.round(r!.simPnl))}
-                            </Link>
+                            <>
+                              <Link href={scenarioHref(st.sc, t.id)} style={{ color: "inherit", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>
+                                {fmtMoney(Math.round(r!.simPnl))}
+                              </Link>
+                              {r!.entryBarStop === true && (
+                                <span
+                                  title="Entry and stop on the SAME candle — the move order inside it is unknown, this result may be distorted. Open the trade; if the dip was before your entry, tick the flag there."
+                                  style={{ color: "var(--warn)", marginLeft: 4, cursor: "help" }}
+                                >
+                                  ⚠
+                                </span>
+                              )}
+                            </>
                           ) : (
                             "—"
                           )}

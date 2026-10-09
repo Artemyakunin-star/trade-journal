@@ -336,6 +336,12 @@ export default async function TradeDetailPage({
               field = no break-even move · slippage 1 tick on stops · full sweep across ALL trades lives in Analytics.
               <ReplayResolutionNote meta={barsMeta} />
             </div>
+            {whatIf?.entryBarStop === true && (
+              <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--warn)" }}>
+                ⚠ The simulated stop fell on the ENTRY candle — the move order inside it is unknown, so this result may
+                be distorted. If you remember the dip happened before your entry, tick the box below.
+              </div>
+            )}
             <form action={setTradeEntryDip} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
               <input type="hidden" name="tradeId" value={trade.id} />
               <label

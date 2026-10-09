@@ -40,6 +40,9 @@ export type SimResult = {
   exitTime: Date | null;
   /** Simulated exit price (fill incl. slippage for stops); null when as-traded/skipped. */
   exitPrice: number | null;
+  /** The stop filled on the candle CONTAINING the entry — move order unknown,
+   *  result may be distorted (see the per-trade entryDipBefore override). */
+  entryBarStop?: boolean;
 };
 
 type Spec = { tickSize: number; tickValue: number };
@@ -112,6 +115,7 @@ export function simulateTrade(
     let lastPrice: number | null = null;
     let nextLeg = 0;
     let anyTargetFilled = false;
+    let entryBarStop = false;
 
     const closeAt = (price: number, n: number, label: string, time: Date) => {
       gross += (price - entry) * dir * n * pv;
@@ -137,6 +141,7 @@ export function simulateTrade(
         const isBe = Math.abs(stopPrice! - entry) < 1e-9;
         const fill = stopPrice! - dir * p.slippageTicks * spec.tickSize;
         closeAt(fill, open, isBe ? "BE" : "stop", b.time);
+        if (isEntryBar) entryBarStop = true;
         break;
       }
       if (isEntryBar) continue;
@@ -189,6 +194,7 @@ export function simulateTrade(
       simPnl: gross - commission,
       exitTime: lastTime,
       exitPrice: lastPrice,
+      entryBarStop,
     };
   }
 
@@ -208,7 +214,7 @@ export function simulateTrade(
       // conservative: stop wins ties; slippage worsens the fill
       const fill = stopPrice! - dir * p.slippageTicks * spec.tickSize;
       const gross = (fill - entry) * dir * qty * pv;
-      return { ...base, exitReason: beArmed && Math.abs(stopPrice! - entry) < 1e-9 ? "breakeven" : "stop", simPnl: gross - commission, exitTime: b.time, exitPrice: fill };
+      return { ...base, exitReason: beArmed && Math.abs(stopPrice! - entry) < 1e-9 ? "breakeven" : "stop", simPnl: gross - commission, exitTime: b.time, exitPrice: fill, entryBarStop: isEntryBar };
     }
     if (isEntryBar) continue;
     if (targetHit) {
