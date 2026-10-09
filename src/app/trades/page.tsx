@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { requireUserId } from "@/lib/auth";
 import TradesTable from "@/components/TradesTable";
+import RunGuardButton from "@/components/RunGuardButton";
 import { mergeTrades } from "@/app/actions";
 import AccountFilter from "@/components/AccountFilter";
 import ColumnsFilter from "@/components/ColumnsFilter";
@@ -146,15 +147,15 @@ export default async function TradesPage({
             >
               ⇥ Merge selected
             </button>
-            <button
+            <RunGuardButton
+              selName="t"
               className="btn ghost"
-              type="submit"
               formAction="/lab"
               formMethod="get"
-              data-tip="Tick the checkboxes next to the trades you want, then open the Lab with that selection to run it through saved exit scenarios"
+              title="Tick the checkboxes next to the trades you want, then open the Lab with that selection to run it through saved exit scenarios"
             >
               ⚗ Run in Lab
-            </button>
+            </RunGuardButton>
           </form>
         </h3>
         {sp.mergeError && (

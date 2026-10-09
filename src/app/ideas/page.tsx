@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { requireUserId } from "@/lib/auth";
 import IdeaCard from "@/components/IdeaCard";
+import RunGuardButton from "@/components/RunGuardButton";
 import { getAllIdeas, ideaPnl, rrStats } from "@/lib/metrics";
 import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL, TRIGGER_LABEL } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -79,13 +80,13 @@ export default async function IdeasPage({
         <Link href="/ideas/new" className="btn">+ New idea</Link>
         <form id="lab-form" action="/lab" method="get" style={{ display: "inline-flex" }}>
           <input type="hidden" name="tab" value="ideas" />
-          <button
+          <RunGuardButton
+            selName="i"
             className="btn ghost"
-            type="submit"
-            data-tip="Tick the checkboxes on the ideas you want, then open the Lab with that selection to run it through saved exit scenarios"
+            title="Tick the checkboxes on the ideas you want, then open the Lab with that selection to run it through saved exit scenarios"
           >
             ⚗ Run in Lab
-          </button>
+          </RunGuardButton>
         </form>
       </div>
 
@@ -171,7 +172,7 @@ export default async function IdeasPage({
                   <tr key={i.id}>
                     <td>
                       {i.trades.some((t) => t.pnl !== null) && (
-                        <input type="checkbox" name="i" value={i.id} form="lab-form" title="Pick for the Lab" style={{ accentColor: "var(--s1)", margin: 0 }} />
+                        <input type="checkbox" name="i" value={i.id} data-instr={i.instrument} form="lab-form" title="Pick for the Lab" style={{ accentColor: "var(--s1)", margin: 0 }} />
                       )}
                     </td>
                     <td style={{ fontVariantNumeric: "tabular-nums", color: "var(--ink-2)" }}>
@@ -212,6 +213,7 @@ export default async function IdeasPage({
                 type="checkbox"
                 name="i"
                 value={i.id}
+                data-instr={i.instrument}
                 form="lab-form"
                 title="Pick for the Lab (scenario comparison)"
                 disabled={!i.trades.some((t) => t.pnl !== null)}

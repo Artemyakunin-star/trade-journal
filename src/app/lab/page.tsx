@@ -8,6 +8,7 @@ import { getSettings, type SimScenario } from "@/lib/settings";
 import { getAllIdeas, getAllTrades, type TradeRow } from "@/lib/metrics";
 import { fmtDate, fmtMoney, fmtTimeKyiv, kyivDateOf } from "@/lib/format";
 import { loadTradeBars, simulateSequential, type SimResult } from "@/lib/whatif";
+import RunGuardButton from "@/components/RunGuardButton";
 
 export const dynamic = "force-dynamic";
 
@@ -317,9 +318,9 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                 {s.name} <span style={{ color: "var(--muted)" }}>({s.symbol})</span>
               </label>
             ))}
-            <button className="btn" type="submit" name="run" value="1" style={{ marginLeft: "auto" }}>
+            <RunGuardButton selName={tab === "trades" ? "t" : "i"} className="btn" name="run" value="1" style={{ marginLeft: "auto" }}>
               Run comparison
-            </button>
+            </RunGuardButton>
           </div>
 
           {tab === "trades" ? (
@@ -341,7 +342,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                   {pool.map((t) => (
                     <tr key={t.id}>
                       <td>
-                        <input type="checkbox" name="t" value={t.id} defaultChecked={run || hasTradeSel ? tIds.has(t.id) : true} style={{ accentColor: "var(--s1)" }} />
+                        <input type="checkbox" name="t" value={t.id} data-instr={t.instrument} defaultChecked={run || hasTradeSel ? tIds.has(t.id) : true} style={{ accentColor: "var(--s1)" }} />
                       </td>
                       <td>{fmtDate(dayOfTrade(t), prefs.dateFormat)}</td>
                       <td>{fmtTimeKyiv(t.entryTime, false, tz)}</td>
@@ -381,7 +382,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                     return (
                       <tr key={i.id}>
                         <td>
-                          <input type="checkbox" name="i" value={i.id} defaultChecked={run || hasIdeaSel ? iIds.has(i.id) : true} style={{ accentColor: "var(--s1)" }} />
+                          <input type="checkbox" name="i" value={i.id} data-instr={i.instrument} defaultChecked={run || hasIdeaSel ? iIds.has(i.id) : true} style={{ accentColor: "var(--s1)" }} />
                         </td>
                         <td>{fmtDate(dayOfIdea(i), prefs.dateFormat)}</td>
                         <td style={{ whiteSpace: "normal" }}>

@@ -137,6 +137,7 @@ export default function TradesTable({
                 type="checkbox"
                 name="t"
                 value={t.id}
+                data-instr={t.instrument}
                 form={mergeForm ?? labForm ?? undefined}
                 title="Select this trade — then Merge selected (parts of one position) or Run in Lab (scenario comparison)"
                 style={{ accentColor: "var(--s1)", margin: 0 }}
