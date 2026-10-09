@@ -439,6 +439,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                 <tr>
                   <th>Date</th>
                   <th>Time</th>
+                  {tab === "ideas" && <th>Idea</th>}
                   <th>Instr</th>
                   <th className="num">Qty</th>
                   <th className="num">Actual</th>
@@ -462,6 +463,18 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                         </span>
                       )}
                     </td>
+                    {tab === "ideas" && (
+                      <td style={{ whiteSpace: "normal", maxWidth: 220 }}>
+                        {(() => {
+                          const owner = t.ideaId ? allIdeas.find((ii) => ii.id === t.ideaId) : null;
+                          return owner ? (
+                            <Link className="linklike" href={`/ideas/${owner.id}/edit`}>{owner.title}</Link>
+                          ) : (
+                            "—"
+                          );
+                        })()}
+                      </td>
+                    )}
                     <td>{t.instrument}</td>
                     <td className="num">{t.quantity}</td>
                     <td className={"num " + (Number(t.pnl) > 0 ? "pos" : Number(t.pnl) < 0 ? "neg" : "")}>{fmtMoney(Number(t.pnl))}</td>
@@ -504,7 +517,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
                   const totalStyle = { fontWeight: 700, borderTop: "2px solid var(--border)" } as const;
                   return (
                     <tr>
-                      <td style={totalStyle} colSpan={3}>Total</td>
+                      <td style={totalStyle} colSpan={tab === "ideas" ? 4 : 3}>Total</td>
                       <td className="num" style={totalStyle}>{selTrades.reduce((a, t) => a + t.quantity, 0)}</td>
                       <td className={"num " + (actual > 0 ? "pos" : actual < 0 ? "neg" : "")} style={totalStyle}>{fmtMoney(Math.round(actual))}</td>
                       {stats.map((st) => {
