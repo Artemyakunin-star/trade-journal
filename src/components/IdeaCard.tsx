@@ -55,6 +55,15 @@ export default function IdeaCard({
         {(idea.setups ?? (idea.setup ? [idea.setup] : [])).map((s) => (
           <span key={s} className="status-chip" title="Playbook setup">{s}</span>
         ))}
+        {(idea.redFlags?.length ?? 0) > 0 && (
+          <span
+            className="status-chip"
+            style={{ color: "var(--warn)", borderColor: "var(--warn)" }}
+            title={`Taken despite: ${idea.redFlags!.join("; ")}`}
+          >
+            ⚑ {idea.redFlags!.length} against
+          </span>
+        )}
         <span className={"badge " + (TRIGGER_LABEL[idea.trigger] ?? "")}>{TRIGGER_LABEL[idea.trigger] ?? idea.trigger.toLowerCase()}</span>
         <span className={"status-chip " + status.cls}>{status.text}</span>
         {!idea.planId && !idea.docId && <span className="badge rogue">outside plan</span>}

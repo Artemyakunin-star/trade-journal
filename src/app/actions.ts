@@ -1055,6 +1055,7 @@ export async function saveIdeaChecklist(input: {
   confirmBefore: boolean | null;
   confirmTypes: string[];
   entryPlanned: boolean | null;
+  redFlags: string[];
 }) {
   const uid = await requireUserId();
   const idea = await db.query.ideas.findFirst({
@@ -1064,6 +1065,7 @@ export async function saveIdeaChecklist(input: {
   const clean = (xs: string[]) => [...new Set((xs ?? []).map((s) => String(s).trim()).filter(Boolean))].slice(0, 8);
   const setups = clean(input.setups);
   const confirmTypes = clean(input.confirmTypes);
+  const redFlags = clean(input.redFlags);
   const b = (v: boolean | null) => (typeof v === "boolean" ? v : null);
   await db
     .update(ideas)
@@ -1074,6 +1076,7 @@ export async function saveIdeaChecklist(input: {
       confirmBefore: b(input.confirmBefore),
       confirmTypes,
       confirmType: confirmTypes[0] ?? null,
+      redFlags,
       entryPlanned: b(input.entryPlanned),
       updatedAt: new Date(),
     })
@@ -1086,6 +1089,8 @@ export async function saveIdeaChecklist(input: {
   if (newSetups.length) await setSetting(uid, "playbookOptions", [...prefs.playbookOptions, ...newSetups]);
   const newConf = confirmTypes.filter((s) => !prefs.ofConfOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
   if (newConf.length) await setSetting(uid, "ofConfOptions", [...prefs.ofConfOptions, ...newConf]);
+  const newFlags = redFlags.filter((s) => !prefs.redFlagOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
+  if (newFlags.length) await setSetting(uid, "redFlagOptions", [...prefs.redFlagOptions, ...newFlags]);
   revalidatePath("/", "layout");
 }
 

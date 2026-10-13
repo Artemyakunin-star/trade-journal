@@ -16,6 +16,8 @@ export type AppSettings = {
   ofConfOptions: string[];
   /** The user's playbook: named scenarios selectable in the day frame. */
   playbookOptions: string[];
+  /** Red-flag vocabulary: things that argue AGAINST an idea. */
+  redFlagOptions: string[];
   /** Per-instrument trading rules (size cap, stop, targets, BE window, idea limits). */
   tradingRules: TradingRules;
   /** Saved exit scenarios for the Lab (batch what-if comparison). */
@@ -46,6 +48,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
     "Breakout + retest → continuation",
     "Fake breakout → mean reversion",
     "News / no trading",
+  ],
+  redFlagOptions: [
+    "Slowdown at the breakout, no clear pullback",
+    "Liquidity resting against the trade",
+    "ES / NQ divergence — siblings disagree",
+    "Against a higher-timeframe level",
+    "Late entry — move already extended",
   ],
   tradingRules: {},
   simScenarios: [],
@@ -140,6 +149,7 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     keyLevelOptions: strArr("keyLevelOptions", DEFAULT_SETTINGS.keyLevelOptions),
     ofConfOptions: strArr("ofConfOptions", DEFAULT_SETTINGS.ofConfOptions),
     playbookOptions: strArr("playbookOptions", DEFAULT_SETTINGS.playbookOptions),
+    redFlagOptions: strArr("redFlagOptions", DEFAULT_SETTINGS.redFlagOptions),
     tradingRules,
     simScenarios,
   };

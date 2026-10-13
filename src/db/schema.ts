@@ -235,6 +235,8 @@ export const ideas = pgTable(
     confirmType: text("confirm_type"),
     /** Multi-select version: all confirmations seen (confirmType = first). */
     confirmTypes: jsonb("confirm_types").$type<string[]>(),
+    /** What was AGAINST the idea (seen and taken anyway) — honest risk notes. */
+    redFlags: jsonb("red_flags").$type<string[]>(),
     /** "Entry per plan — from the zone, not chasing." */
     entryPlanned: boolean("entry_planned"),
     comment: text("comment"), // psychological state, free text

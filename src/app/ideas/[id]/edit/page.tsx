@@ -339,6 +339,7 @@ export default async function EditIdeaPage({
         frame={frame ? { bias: frame.bias, scenarios: frame.scenarios ?? [], rules: frame.rules } : null}
         playbookOptions={prefs.playbookOptions}
         ofConfOptions={prefs.ofConfOptions}
+        redFlagOptions={prefs.redFlagOptions}
         trigger={idea.trigger}
         ideaStatus={idea.status}
         limitsBroken={ruleCheck.broken}
@@ -347,6 +348,7 @@ export default async function EditIdeaPage({
         initialConfirmBefore={idea.confirmBefore}
         initialConfirmTypes={idea.confirmTypes ?? (idea.confirmType ? [idea.confirmType] : [])}
         initialEntryPlanned={idea.entryPlanned}
+        initialRedFlags={idea.redFlags ?? []}
       />
 
       <div className="card" style={{ marginBottom: 14 }}>

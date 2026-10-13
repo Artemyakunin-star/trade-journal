@@ -24,6 +24,7 @@ export default function IdeaChecklist({
   frame,
   playbookOptions,
   ofConfOptions,
+  redFlagOptions,
   trigger,
   ideaStatus,
   limitsBroken,
@@ -32,6 +33,7 @@ export default function IdeaChecklist({
   initialConfirmBefore,
   initialConfirmTypes,
   initialEntryPlanned,
+  initialRedFlags,
 }: {
   ideaId: string;
   direction: "LONG" | "SHORT";
@@ -39,6 +41,7 @@ export default function IdeaChecklist({
   frame: Frame;
   playbookOptions: string[];
   ofConfOptions: string[];
+  redFlagOptions: string[];
   /** The idea's trigger (PLAN/LEVEL/NEWS/FOMO/TILT/REVENGE) — feeds the suggestion. */
   trigger: string;
   ideaStatus: string;
@@ -49,12 +52,17 @@ export default function IdeaChecklist({
   initialConfirmBefore: boolean | null;
   initialConfirmTypes: string[];
   initialEntryPlanned: boolean | null;
+  initialRedFlags: string[];
 }) {
   const [setups, setSetups] = useState<string[]>(initialSetups);
   const [rulesFollowed, setRulesFollowed] = useState<boolean | null>(initialRulesFollowed);
   const [confirmBefore, setConfirmBefore] = useState<boolean | null>(initialConfirmBefore);
   const [confirmTypes, setConfirmTypes] = useState<string[]>(initialConfirmTypes);
   const [entryPlanned, setEntryPlanned] = useState<boolean | null>(initialEntryPlanned);
+  const [redFlags, setRedFlags] = useState<string[]>(initialRedFlags);
+  const [extraFlag, setExtraFlag] = useState<string[]>([]);
+  const [addingFlag, setAddingFlag] = useState(false);
+  const [newFlag, setNewFlag] = useState("");
   const [extraSetup, setExtraSetup] = useState<string[]>([]);
   const [addingSetup, setAddingSetup] = useState(false);
   const [newSetup, setNewSetup] = useState("");
@@ -66,6 +74,7 @@ export default function IdeaChecklist({
 
   const setupOptions = [...playbookOptions, ...extraSetup.filter((e) => !playbookOptions.includes(e)), ...initialSetups.filter((e) => !playbookOptions.includes(e) && !extraSetup.includes(e))];
   const confOptions = [...ofConfOptions, ...extraConf.filter((e) => !ofConfOptions.includes(e)), ...initialConfirmTypes.filter((e) => !ofConfOptions.includes(e) && !extraConf.includes(e))];
+  const flagOptions = [...redFlagOptions, ...extraFlag.filter((e) => !redFlagOptions.includes(e)), ...initialRedFlags.filter((e) => !redFlagOptions.includes(e) && !extraFlag.includes(e))];
 
   type Vals = {
     setups: string[];
@@ -73,9 +82,10 @@ export default function IdeaChecklist({
     confirmBefore: boolean | null;
     confirmTypes: string[];
     entryPlanned: boolean | null;
+    redFlags: string[];
   };
   const persist = (patch: Partial<Vals>) => {
-    const vals: Vals = { setups, rulesFollowed, confirmBefore, confirmTypes, entryPlanned, ...patch };
+    const vals: Vals = { setups, rulesFollowed, confirmBefore, confirmTypes, entryPlanned, redFlags, ...patch };
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       setSaved("saving");
@@ -134,6 +144,7 @@ export default function IdeaChecklist({
       reasons.push("clean, in frame, played out");
     }
     if (reasons.length === 0) reasons.push("all checks ✓");
+    if (redFlags.length > 0) reasons.push(`${redFlags.length} red flag${redFlags.length === 1 ? "" : "s"} noted (not graded)`);
     return { key, reasons };
   })();
 
@@ -324,6 +335,50 @@ export default function IdeaChecklist({
           <b>Entry.</b> From the planned zone, not chasing, stop where it was planned?
         </>,
         checkbox(entryPlanned, (v) => { setEntryPlanned(v); persist({ entryPlanned: v }); }, "entry per plan"),
+      )}
+
+      {/* red flags — what was AGAINST the idea */}
+      {row(
+        redFlags.length > 0 ? false : null,
+        <>
+          <b>Against the idea.</b> What did you SEE against this trade and took it anyway? Honest notes build the
+          red-flag statistics.
+        </>,
+        <>
+          {flagOptions.map((o) =>
+            chip(o, redFlags.includes(o), () => {
+              const next = redFlags.includes(o) ? redFlags.filter((x) => x !== o) : [...redFlags, o];
+              setRedFlags(next);
+              persist({ redFlags: next });
+            }),
+          )}
+          {!addingFlag ? (
+            <button className="btn ghost btn-sm" type="button" onClick={() => setAddingFlag(true)}>+</button>
+          ) : (
+            <input
+              className="tj-input"
+              placeholder="new red flag…"
+              value={newFlag}
+              autoFocus
+              onChange={(e) => setNewFlag(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const name = newFlag.trim();
+                  if (!name) return;
+                  if (!flagOptions.some((o) => o.toLowerCase() === name.toLowerCase())) setExtraFlag((x) => [...x, name]);
+                  const next = [...redFlags, name];
+                  setRedFlags(next);
+                  setNewFlag("");
+                  setAddingFlag(false);
+                  persist({ redFlags: next });
+                }
+                if (e.key === "Escape") setAddingFlag(false);
+              }}
+              style={{ width: 220, fontSize: 12 }}
+            />
+          )}
+        </>,
       )}
 
       {/* suggested grade */}

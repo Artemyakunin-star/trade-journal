@@ -48,6 +48,7 @@ export type IdeaRow = {
   confirmBefore: boolean | null;
   confirmType: string | null;
   confirmTypes: string[] | null;
+  redFlags: string[] | null;
   entryPlanned: boolean | null;
   createdAt: Date;
   invalidatedAt: Date | null;
