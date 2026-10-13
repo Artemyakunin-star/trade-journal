@@ -225,12 +225,16 @@ export const ideas = pgTable(
     // ---- CLCE self-check (filled after the session, against the day frame) ----
     /** Playbook setup this idea plays (shared vocabulary with the day frame). */
     setup: text("setup"),
+    /** Multi-select version: ALL playbook setups this idea shows (setup = first). */
+    setups: jsonb("setups").$type<string[]>(),
     /** "I followed the rules of the day" (the frame's free-text rules). */
     rulesFollowed: boolean("rules_followed"),
     /** "Confirmation came BEFORE the entry." */
     confirmBefore: boolean("confirm_before"),
     /** Which confirmation (order-flow vocabulary, shared with trades). */
     confirmType: text("confirm_type"),
+    /** Multi-select version: all confirmations seen (confirmType = first). */
+    confirmTypes: jsonb("confirm_types").$type<string[]>(),
     /** "Entry per plan — from the zone, not chasing." */
     entryPlanned: boolean("entry_planned"),
     comment: text("comment"), // psychological state, free text

@@ -339,10 +339,13 @@ export default async function EditIdeaPage({
         frame={frame ? { bias: frame.bias, scenarios: frame.scenarios ?? [], rules: frame.rules } : null}
         playbookOptions={prefs.playbookOptions}
         ofConfOptions={prefs.ofConfOptions}
-        initialSetup={idea.setup}
+        trigger={idea.trigger}
+        ideaStatus={idea.status}
+        limitsBroken={ruleCheck.broken}
+        initialSetups={idea.setups ?? (idea.setup ? [idea.setup] : [])}
         initialRulesFollowed={idea.rulesFollowed}
         initialConfirmBefore={idea.confirmBefore}
-        initialConfirmType={idea.confirmType}
+        initialConfirmTypes={idea.confirmTypes ?? (idea.confirmType ? [idea.confirmType] : [])}
         initialEntryPlanned={idea.entryPlanned}
       />
 

@@ -43,9 +43,11 @@ export type IdeaRow = {
   status: string;
   // CLCE self-check
   setup: string | null;
+  setups: string[] | null;
   rulesFollowed: boolean | null;
   confirmBefore: boolean | null;
   confirmType: string | null;
+  confirmTypes: string[] | null;
   entryPlanned: boolean | null;
   createdAt: Date;
   invalidatedAt: Date | null;

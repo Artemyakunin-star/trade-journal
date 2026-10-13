@@ -1,9 +1,12 @@
 "use client";
 // CLCE self-check inside an idea: the day frame is shown right here and the
-// trader marks himself against it after the session. Autosaves like DayFrame.
+// trader marks himself against it after the session. Setups and confirmations
+// are multi-select chips; a suggested grade is computed live (the manual grade
+// stays the trader's call). Autosaves like DayFrame.
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { saveIdeaChecklist } from "@/app/actions";
+import { GRADE_LABEL, gradeClass } from "@/lib/format";
 
 type Frame = { bias: string | null; scenarios: string[]; rules: string | null } | null;
 
@@ -21,10 +24,13 @@ export default function IdeaChecklist({
   frame,
   playbookOptions,
   ofConfOptions,
-  initialSetup,
+  trigger,
+  ideaStatus,
+  limitsBroken,
+  initialSetups,
   initialRulesFollowed,
   initialConfirmBefore,
-  initialConfirmType,
+  initialConfirmTypes,
   initialEntryPlanned,
 }: {
   ideaId: string;
@@ -33,16 +39,21 @@ export default function IdeaChecklist({
   frame: Frame;
   playbookOptions: string[];
   ofConfOptions: string[];
-  initialSetup: string | null;
+  /** The idea's trigger (PLAN/LEVEL/NEWS/FOMO/TILT/REVENGE) — feeds the suggestion. */
+  trigger: string;
+  ideaStatus: string;
+  /** Any trading-rules violation on this idea (limits, size, stop) — −1 grade step. */
+  limitsBroken: boolean;
+  initialSetups: string[];
   initialRulesFollowed: boolean | null;
   initialConfirmBefore: boolean | null;
-  initialConfirmType: string | null;
+  initialConfirmTypes: string[];
   initialEntryPlanned: boolean | null;
 }) {
-  const [setup, setSetup] = useState<string | null>(initialSetup);
+  const [setups, setSetups] = useState<string[]>(initialSetups);
   const [rulesFollowed, setRulesFollowed] = useState<boolean | null>(initialRulesFollowed);
   const [confirmBefore, setConfirmBefore] = useState<boolean | null>(initialConfirmBefore);
-  const [confirmType, setConfirmType] = useState<string | null>(initialConfirmType);
+  const [confirmTypes, setConfirmTypes] = useState<string[]>(initialConfirmTypes);
   const [entryPlanned, setEntryPlanned] = useState<boolean | null>(initialEntryPlanned);
   const [extraSetup, setExtraSetup] = useState<string[]>([]);
   const [addingSetup, setAddingSetup] = useState(false);
@@ -53,18 +64,18 @@ export default function IdeaChecklist({
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const setupOptions = [...playbookOptions, ...extraSetup.filter((e) => !playbookOptions.includes(e))];
-  const confOptions = [...ofConfOptions, ...extraConf.filter((e) => !ofConfOptions.includes(e))];
+  const setupOptions = [...playbookOptions, ...extraSetup.filter((e) => !playbookOptions.includes(e)), ...initialSetups.filter((e) => !playbookOptions.includes(e) && !extraSetup.includes(e))];
+  const confOptions = [...ofConfOptions, ...extraConf.filter((e) => !ofConfOptions.includes(e)), ...initialConfirmTypes.filter((e) => !ofConfOptions.includes(e) && !extraConf.includes(e))];
 
   type Vals = {
-    setup: string | null;
+    setups: string[];
     rulesFollowed: boolean | null;
     confirmBefore: boolean | null;
-    confirmType: string | null;
+    confirmTypes: string[];
     entryPlanned: boolean | null;
   };
   const persist = (patch: Partial<Vals>) => {
-    const vals: Vals = { setup, rulesFollowed, confirmBefore, confirmType, entryPlanned, ...patch };
+    const vals: Vals = { setups, rulesFollowed, confirmBefore, confirmTypes, entryPlanned, ...patch };
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       setSaved("saving");
@@ -82,7 +93,61 @@ export default function IdeaChecklist({
   const bias = frame?.bias ?? null;
   const dirOk: boolean | null = bias === "LONG" || bias === "SHORT" ? bias === direction : null;
   const scen = frame?.scenarios ?? [];
-  const inFrame: boolean | null = setup && scen.length > 0 ? scen.includes(setup) : null;
+  const inFrame: boolean | null = setups.length > 0 && scen.length > 0 ? setups.some((s) => scen.includes(s)) : null;
+  const hasFrame = !!frame && (!!frame.bias || scen.length > 0 || !!frame.rules);
+
+  // ---- suggested grade (live; the manual grade in the form below stays yours) ----
+  const suggestion = (() => {
+    const reasons: string[] = [];
+    if (trigger === "REVENGE") return { key: "F", reasons: ["revenge trade — always F"] };
+    // context gate
+    if (dirOk === false || inFrame === false) {
+      reasons.push(dirOk === false ? "against the frame's bias → D" : "setup outside today's frame → D");
+      if (limitsBroken) reasons.push("trading rules broken");
+      if (trigger === "TILT" || trigger === "FOMO") reasons.push(trigger.toLowerCase());
+      return { key: trigger === "TILT" || trigger === "FOMO" || limitsBroken ? "F" : "D", reasons };
+    }
+    const checks: [string, boolean | null][] = [
+      ["confirmation before entry", confirmBefore],
+      ["entry per plan", entryPlanned],
+    ];
+    if (frame?.rules) checks.push(["rules of the day", rulesFollowed]);
+    const misses = checks.filter(([, v]) => v !== true);
+    for (const [name] of misses) reasons.push(`${name} ✗`);
+    const ladder = ["A", "B", "C", "D"];
+    let i = Math.min(misses.length, 3);
+    if (!hasFrame && i === 0) {
+      i = 1;
+      reasons.push("no day frame — capped at B");
+    }
+    if (limitsBroken) {
+      i = Math.min(i + 1, 3);
+      reasons.push("trading rules broken −1");
+    }
+    if (trigger === "TILT" || trigger === "FOMO") {
+      i = Math.min(i + 1, 3);
+      reasons.push(`${trigger.toLowerCase()} −1`);
+    }
+    let key = ladder[i];
+    if (key === "A" && ideaStatus === "PLAYED_OUT" && trigger === "PLAN") {
+      key = "A_PLUS";
+      reasons.push("clean, in frame, played out");
+    }
+    if (reasons.length === 0) reasons.push("all checks ✓");
+    return { key, reasons };
+  })();
+
+  const chip = (name: string, on: boolean, toggle: () => void) => (
+    <button
+      key={name}
+      type="button"
+      className={"btn btn-sm" + (on ? "" : " ghost")}
+      style={{ fontSize: 12 }}
+      onClick={toggle}
+    >
+      {name}
+    </button>
+  );
 
   const row = (mark: boolean | null, label: React.ReactNode, control?: React.ReactNode) => (
     <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "7px 0", borderTop: "1px solid var(--border)" }}>
@@ -116,12 +181,12 @@ export default function IdeaChecklist({
       </h3>
 
       {/* ---- the day frame, visible while filling ---- */}
-      {frame && (frame.bias || scen.length > 0 || frame.rules) ? (
+      {hasFrame ? (
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
           <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Day frame:</span>
-          {frame.bias && (
-            <b style={{ fontSize: 12.5, color: frame.bias === "LONG" ? "var(--pos)" : frame.bias === "SHORT" ? "var(--neg)" : "var(--ink-2)" }}>
-              {frame.bias === "LONG" ? "Long" : frame.bias === "SHORT" ? "Short" : "Neutral"}
+          {frame!.bias && (
+            <b style={{ fontSize: 12.5, color: frame!.bias === "LONG" ? "var(--pos)" : frame!.bias === "SHORT" ? "var(--neg)" : "var(--ink-2)" }}>
+              {frame!.bias === "LONG" ? "Long" : frame!.bias === "SHORT" ? "Short" : "Neutral"}
             </b>
           )}
           {scen.map((s) => (
@@ -129,7 +194,7 @@ export default function IdeaChecklist({
               {s}
             </span>
           ))}
-          {frame.rules && <span style={{ fontSize: 12, color: "var(--muted)" }}>· {frame.rules}</span>}
+          {frame!.rules && <span style={{ fontSize: 12, color: "var(--muted)" }}>· {frame!.rules}</span>}
         </div>
       ) : (
         <div className="section-note" style={{ marginTop: 0 }}>
@@ -153,55 +218,46 @@ export default function IdeaChecklist({
         </>,
       )}
 
-      {/* C: setup vs the day's allowed scenarios */}
+      {/* C: setups vs the day's allowed scenarios — multi-select chips */}
       {row(
         inFrame,
         <>
-          <b>Context — setup.</b> Which playbook setup does this idea play?{" "}
-          {setup && scen.length > 0 && (inFrame ? <span style={{ color: "var(--pos)" }}>Inside today&apos;s frame.</span> : <span style={{ color: "var(--crit)" }}>Outside today&apos;s frame.</span>)}
+          <b>Context — setup.</b> Which playbook setups does this idea show? Pick all that apply.{" "}
+          {setups.length > 0 && scen.length > 0 && (inFrame ? <span style={{ color: "var(--pos)" }}>Inside today&apos;s frame.</span> : <span style={{ color: "var(--crit)" }}>None of them is in today&apos;s frame.</span>)}
         </>,
         <>
-          <select
-            className="tj-select"
-            value={setup ?? ""}
-            onChange={(e) => {
-              const v = e.target.value || null;
-              setSetup(v);
-              persist({ setup: v });
-            }}
-            style={{ minWidth: 220 }}
-          >
-            <option value="">— no setup chosen —</option>
-            {setupOptions.map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
-          </select>
+          {setupOptions.map((o) =>
+            chip(o, setups.includes(o), () => {
+              const next = setups.includes(o) ? setups.filter((x) => x !== o) : [...setups, o];
+              setSetups(next);
+              persist({ setups: next });
+            }),
+          )}
           {!addingSetup ? (
             <button className="btn ghost btn-sm" type="button" onClick={() => setAddingSetup(true)}>+</button>
           ) : (
-            <span style={{ display: "inline-flex", gap: 4 }}>
-              <input
-                className="tj-input"
-                placeholder="new setup name…"
-                value={newSetup}
-                autoFocus
-                onChange={(e) => setNewSetup(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    const name = newSetup.trim();
-                    if (!name) return;
-                    if (!setupOptions.some((o) => o.toLowerCase() === name.toLowerCase())) setExtraSetup((x) => [...x, name]);
-                    setSetup(name);
-                    setNewSetup("");
-                    setAddingSetup(false);
-                    persist({ setup: name });
-                  }
-                  if (e.key === "Escape") setAddingSetup(false);
-                }}
-                style={{ width: 200, fontSize: 12 }}
-              />
-            </span>
+            <input
+              className="tj-input"
+              placeholder="new setup name…"
+              value={newSetup}
+              autoFocus
+              onChange={(e) => setNewSetup(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const name = newSetup.trim();
+                  if (!name) return;
+                  if (!setupOptions.some((o) => o.toLowerCase() === name.toLowerCase())) setExtraSetup((x) => [...x, name]);
+                  const next = [...setups, name];
+                  setSetups(next);
+                  setNewSetup("");
+                  setAddingSetup(false);
+                  persist({ setups: next });
+                }
+                if (e.key === "Escape") setAddingSetup(false);
+              }}
+              style={{ width: 200, fontSize: 12 }}
+            />
           )}
         </>,
       )}
@@ -217,29 +273,21 @@ export default function IdeaChecklist({
           )
         : null}
 
-      {/* confirmation */}
+      {/* confirmation — multi-select types */}
       {row(
         confirmBefore,
         <>
-          <b>Confirmation.</b> Did you wait for a confirmation BEFORE the entry?
+          <b>Confirmation.</b> Did you wait for a confirmation BEFORE the entry? Pick everything you saw.
         </>,
         <>
           {checkbox(confirmBefore, (v) => { setConfirmBefore(v); persist({ confirmBefore: v }); }, "confirmation came first")}
-          <select
-            className="tj-select"
-            value={confirmType ?? ""}
-            onChange={(e) => {
-              const v = e.target.value || null;
-              setConfirmType(v);
-              persist({ confirmType: v });
-            }}
-            style={{ minWidth: 170 }}
-          >
-            <option value="">— which one —</option>
-            {confOptions.map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
-          </select>
+          {confOptions.map((o) =>
+            chip(o, confirmTypes.includes(o), () => {
+              const next = confirmTypes.includes(o) ? confirmTypes.filter((x) => x !== o) : [...confirmTypes, o];
+              setConfirmTypes(next);
+              persist({ confirmTypes: next });
+            }),
+          )}
           {!addingConf ? (
             <button className="btn ghost btn-sm" type="button" onClick={() => setAddingConf(true)}>+</button>
           ) : (
@@ -255,10 +303,11 @@ export default function IdeaChecklist({
                   const name = newConf.trim();
                   if (!name) return;
                   if (!confOptions.some((o) => o.toLowerCase() === name.toLowerCase())) setExtraConf((x) => [...x, name]);
-                  setConfirmType(name);
+                  const next = [...confirmTypes, name];
+                  setConfirmTypes(next);
                   setNewConf("");
                   setAddingConf(false);
-                  persist({ confirmType: name });
+                  persist({ confirmTypes: next });
                 }
                 if (e.key === "Escape") setAddingConf(false);
               }}
@@ -277,10 +326,21 @@ export default function IdeaChecklist({
         checkbox(entryPlanned, (v) => { setEntryPlanned(v); persist({ entryPlanned: v }); }, "entry per plan"),
       )}
 
+      {/* suggested grade */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 0 2px", borderTop: "1px solid var(--border)" }}>
+        <span style={{ fontSize: 12.5, color: "var(--ink-2)" }}>
+          <b>Suggested grade:</b>
+        </span>
+        <span className={"grade " + gradeClass(suggestion.key)}>{GRADE_LABEL[suggestion.key] ?? suggestion.key}</span>
+        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{suggestion.reasons.join(" · ")}</span>
+        <span style={{ fontSize: 11.5, color: "var(--muted)", marginLeft: "auto" }}>the Grade field below stays yours</span>
+      </div>
+
       <div className="section-note">
         Direction and “inside the frame” are computed from the morning plan — they can&apos;t be edited after the fact.
-        The ticks are your honest answers; a new setup or confirmation added here joins your vocabulary for good.
-        Unticked = ✗, untouched rows show —.
+        The chips are multi-select; a new setup or confirmation added here joins your vocabulary for good. The suggested
+        grade updates live from context → ticks → rule violations → trigger (revenge = F); you still set the final grade
+        yourself.
       </div>
     </div>
   );

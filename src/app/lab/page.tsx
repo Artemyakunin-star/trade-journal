@@ -90,7 +90,8 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
   if (isDate(from)) ideaPool = ideaPool.filter((i) => dayOfIdea(i) >= from!);
   if (isDate(to)) ideaPool = ideaPool.filter((i) => dayOfIdea(i) <= to!);
   if (instrument) ideaPool = ideaPool.filter((i) => i.instrument === instrument);
-  if (setup) ideaPool = ideaPool.filter((i) => i.setup === setup);
+  const setupsOf = (i: (typeof allIdeas)[number]) => i.setups ?? (i.setup ? [i.setup] : []);
+  if (setup) ideaPool = ideaPool.filter((i) => setupsOf(i).includes(setup));
   ideaPool = ideaPool.sort((a, b) => dayOfIdea(a).localeCompare(dayOfIdea(b))).slice(-150);
   if (hasIdeaSel) {
     const inPool = new Set(ideaPool.map((i) => i.id));
@@ -100,7 +101,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
   }
 
   const accounts = [...new Set(closed.map((t) => t.account))].sort();
-  const setups = [...new Set(allIdeas.map((i) => i.setup).filter((s): s is string => !!s))].sort();
+  const setups = [...new Set(allIdeas.flatMap((i) => i.setups ?? (i.setup ? [i.setup] : [])))].sort();
   const symbols = instrumentRows.map((i) => i.symbol);
 
   // ---------- the run ----------
@@ -182,7 +183,7 @@ export default async function LabPage({ searchParams }: { searchParams: Promise<
       id: i.id,
       date: fmtDate(dayOfIdea(i), prefs.dateFormat),
       title: i.title,
-      setup: i.setup ?? null,
+      setup: setupsOf(i).join(" · ") || null,
       instrument: i.instrument,
       closed: closedT.length,
       dateMismatch:

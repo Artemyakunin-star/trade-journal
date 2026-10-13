@@ -1050,10 +1050,10 @@ export async function saveTradingRule(fd: FormData) {
  *  grow the playbook vocabulary; new confirmation types grow the OF one. */
 export async function saveIdeaChecklist(input: {
   ideaId: string;
-  setup: string | null;
+  setups: string[];
   rulesFollowed: boolean | null;
   confirmBefore: boolean | null;
-  confirmType: string | null;
+  confirmTypes: string[];
   entryPlanned: boolean | null;
 }) {
   const uid = await requireUserId();
@@ -1061,16 +1061,19 @@ export async function saveIdeaChecklist(input: {
     where: (i, { and: and_, eq: eq_ }) => and_(eq_(i.id, input.ideaId), eq_(i.userId, uid)),
   });
   if (!idea) return;
-  const setup = input.setup?.trim() || null;
-  const confirmType = input.confirmType?.trim() || null;
+  const clean = (xs: string[]) => [...new Set((xs ?? []).map((s) => String(s).trim()).filter(Boolean))].slice(0, 8);
+  const setups = clean(input.setups);
+  const confirmTypes = clean(input.confirmTypes);
   const b = (v: boolean | null) => (typeof v === "boolean" ? v : null);
   await db
     .update(ideas)
     .set({
-      setup,
+      setups,
+      setup: setups[0] ?? null, // legacy single-value mirror
       rulesFollowed: b(input.rulesFollowed),
       confirmBefore: b(input.confirmBefore),
-      confirmType,
+      confirmTypes,
+      confirmType: confirmTypes[0] ?? null,
       entryPlanned: b(input.entryPlanned),
       updatedAt: new Date(),
     })
@@ -1079,12 +1082,10 @@ export async function saveIdeaChecklist(input: {
   // Grow the shared vocabularies.
   const { getSettings } = await import("@/lib/settings");
   const prefs = await getSettings(uid);
-  if (setup && !prefs.playbookOptions.some((o) => o.toLowerCase() === setup.toLowerCase())) {
-    await setSetting(uid, "playbookOptions", [...prefs.playbookOptions, setup]);
-  }
-  if (confirmType && !prefs.ofConfOptions.some((o) => o.toLowerCase() === confirmType.toLowerCase())) {
-    await setSetting(uid, "ofConfOptions", [...prefs.ofConfOptions, confirmType]);
-  }
+  const newSetups = setups.filter((s) => !prefs.playbookOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
+  if (newSetups.length) await setSetting(uid, "playbookOptions", [...prefs.playbookOptions, ...newSetups]);
+  const newConf = confirmTypes.filter((s) => !prefs.ofConfOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
+  if (newConf.length) await setSetting(uid, "ofConfOptions", [...prefs.ofConfOptions, ...newConf]);
   revalidatePath("/", "layout");
 }
 
