@@ -209,7 +209,7 @@ export default async function IdeasPage({
       ) : (
         <div className="grid2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))" }}>
           {ideas.map((i) => (
-            <div key={i.id} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div key={i.id} style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
               <input
                 type="checkbox"
                 name="i"

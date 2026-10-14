@@ -110,7 +110,7 @@ export default function IdeaCard({
       <div className="thesis">{idea.thesis}</div>
       <div className="inval">
         <b>INVALIDATION</b>
-        {idea.invalidation}
+        <span className="txt">{idea.invalidation}</span>
       </div>
       <div className="nums">
         <div>
