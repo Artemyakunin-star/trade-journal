@@ -4,7 +4,7 @@ import Link from "next/link";
 import { requireUserId } from "@/lib/auth";
 import TradesTable from "@/components/TradesTable";
 import RunGuardButton from "@/components/RunGuardButton";
-import { mergeTrades } from "@/app/actions";
+import { groupTradesIntoIdea, mergeTrades } from "@/app/actions";
 import AccountFilter from "@/components/AccountFilter";
 import ColumnsFilter from "@/components/ColumnsFilter";
 import { db } from "@/db";
@@ -161,6 +161,29 @@ export default async function TradesPage({
         {sp.mergeError && (
           <div className="section-note" style={{ color: "var(--crit)" }}>Merge failed: {sp.mergeError}</div>
         )}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", margin: "2px 0 10px" }}>
+          <span style={{ fontSize: 12.5, color: "var(--ink-2)" }} title="Tick trades (e.g. a rogue spree without an idea), write what it really was, and they become one idea with that explanation">
+            Group ticked trades into one idea:
+          </span>
+          <input
+            className="tj-input"
+            name="gtitle"
+            form="merge-form"
+            placeholder="what was it — e.g. revenge, tried to catch the bottom"
+            style={{ flex: "1 1 280px" }}
+          />
+          <select name="gtrigger" form="merge-form" defaultValue="REVENGE" className="tj-select" title="Why these trades happened">
+            <option value="REVENGE">revenge</option>
+            <option value="TILT">tilt</option>
+            <option value="FOMO">fomo</option>
+            <option value="LEVEL">level</option>
+            <option value="NEWS">news</option>
+            <option value="PLAN">plan</option>
+          </select>
+          <button className="btn btn-sm" type="submit" form="merge-form" formAction={groupTradesIntoIdea}>
+            ⊕ Group into idea
+          </button>
+        </div>
         <div style={{ overflowX: "auto" }}>
           <TradesTable
             trades={trades}

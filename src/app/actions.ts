@@ -1333,3 +1333,46 @@ export async function deleteNote(fd: FormData) {
   await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, uid)));
   revalidatePath("/notes");
 }
+
+/** Group the ticked trades under ONE explanatory idea ("revenge, tried to
+ *  catch the bottom"): creates the idea and attaches the selection to it. */
+export async function groupTradesIntoIdea(fd: FormData) {
+  const uid = await requireUserId();
+  const ids = [...new Set(fd.getAll("t").map(String).filter(Boolean))];
+  const title = str(fd, "gtitle").trim();
+  const trigger = str(fd, "gtrigger");
+  if (!ids.length || !title) return;
+  const allowed = ["PLAN", "LEVEL", "NEWS", "FOMO", "TILT", "REVENGE"];
+  const trig = allowed.includes(trigger) ? trigger : "TILT";
+
+  const rows = await db.query.trades.findMany({
+    where: (t, { and: and_, eq: eq_, inArray: in_ }) => and_(eq_(t.userId, uid), in_(t.id, ids)),
+  });
+  if (!rows.length) return;
+  const sorted = [...rows].sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
+  const first = sorted[0];
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  const { kyivDateOf } = await import("@/lib/format");
+  const date = kyivDateOf(first.entryTime, prefs.timezone);
+
+  const [idea] = await db
+    .insert(ideas)
+    .values({
+      userId: uid,
+      date,
+      instrument: first.instrument,
+      direction: first.direction,
+      title,
+      thesis: title,
+      invalidation: "—",
+      trigger: trig as "PLAN" | "LEVEL" | "NEWS" | "FOMO" | "TILT" | "REVENGE",
+    })
+    .returning();
+  await db
+    .update(trades)
+    .set({ ideaId: idea.id })
+    .where(and(eq(trades.userId, uid), inArray(trades.id, ids)));
+  revalidatePath("/", "layout");
+  redirect(`/ideas/${idea.id}/edit`);
+}
