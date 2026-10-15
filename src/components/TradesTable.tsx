@@ -20,6 +20,7 @@ import {
 import type { IdeaRow, TradeRow } from "@/lib/metrics";
 import { tradePnl, ideaPnl } from "@/lib/metrics";
 import { hasBarsFor } from "@/lib/coverage";
+import GroupSelectBox from "@/components/GroupSelectBox";
 
 type Spec = { tickSize: number; tickValue: number };
 
@@ -139,6 +140,7 @@ export default function TradesTable({
                 value={t.id}
                 data-instr={t.instrument}
                 data-rogue={t.ideaId ? undefined : "1"}
+                data-group={t.ideaId ?? "rogue"}
                 form={mergeForm ?? labForm ?? undefined}
                 title="Select this trade — then Merge selected (parts of one position) or Run in Lab (scenario comparison)"
                 style={{ accentColor: "var(--s1)", margin: 0 }}
@@ -365,7 +367,7 @@ export default function TradesTable({
           const its = byIdea.get(idea.id)!;
           const pnl = ideaPnl({ ...idea, trades: its });
           return (
-            <IdeaGroup key={idea.id} idea={idea} pnl={pnl} colSpan={colCount}>
+            <IdeaGroup key={idea.id} idea={idea} pnl={pnl} colSpan={colCount} selectable={!!(mergeForm || labForm)}>
               {its.map(row)}
             </IdeaGroup>
           );
@@ -374,6 +376,7 @@ export default function TradesTable({
           <>
             <tr className="group-head rogue-head">
               <td colSpan={colCount}>
+                {(mergeForm || labForm) && <GroupSelectBox group="rogue" />}
                 ⚠ Rogue — no idea ({rogue.length}) ·{" "}
                 <span className={rogue.reduce((a, t) => a + tradePnl(t), 0) >= 0 ? "pos" : "neg"}>
                   {fmtMoney(rogue.reduce((a, t) => a + tradePnl(t), 0))}
@@ -400,17 +403,20 @@ function IdeaGroup({
   idea,
   pnl,
   colSpan,
+  selectable = false,
   children,
 }: {
   idea: IdeaRow;
   pnl: number;
   colSpan: number;
+  selectable?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <>
       <tr className="group-head">
         <td colSpan={colSpan}>
+          {selectable && <GroupSelectBox group={idea.id} />}
           <Link href={`/ideas/${idea.id}/edit`} className="linklike" title="Open this idea" style={{ fontWeight: 600 }}>
             {idea.title}
           </Link>{" "}
