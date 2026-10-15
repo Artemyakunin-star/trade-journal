@@ -5,6 +5,7 @@ import { requireUserId } from "@/lib/auth";
 import TradesTable from "@/components/TradesTable";
 import RunGuardButton from "@/components/RunGuardButton";
 import { groupTradesIntoIdea, mergeTrades } from "@/app/actions";
+import SelectRoguesButton from "@/components/SelectRoguesButton";
 import AccountFilter from "@/components/AccountFilter";
 import ColumnsFilter from "@/components/ColumnsFilter";
 import { db } from "@/db";
@@ -165,6 +166,7 @@ export default async function TradesPage({
           <span style={{ fontSize: 12.5, color: "var(--ink-2)" }} title="Tick trades (e.g. a rogue spree without an idea), write what it really was, and they become one idea with that explanation">
             Group ticked trades into one idea:
           </span>
+          <SelectRoguesButton />
           <input
             className="tj-input"
             name="gtitle"

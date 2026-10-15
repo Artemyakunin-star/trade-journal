@@ -138,6 +138,7 @@ export default function TradesTable({
                 name="t"
                 value={t.id}
                 data-instr={t.instrument}
+                data-rogue={t.ideaId ? undefined : "1"}
                 form={mergeForm ?? labForm ?? undefined}
                 title="Select this trade — then Merge selected (parts of one position) or Run in Lab (scenario comparison)"
                 style={{ accentColor: "var(--s1)", margin: 0 }}
