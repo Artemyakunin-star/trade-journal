@@ -174,6 +174,7 @@ export async function setTradeStop(fd: FormData) {
 export async function saveIdeaJournal(id: string, content: unknown) {
   const uid = await requireUserId();
   if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  await snapshotJournal(uid, "idea", id, await journalContentOf(uid, "idea", id));
   await db.update(ideas).set({ journal: content, updatedAt: new Date() }).where(and(eq(ideas.id, id), eq(ideas.userId, uid)));
   revalidatePath(`/ideas/${id}/edit`);
 }
@@ -182,6 +183,7 @@ export async function saveIdeaJournal(id: string, content: unknown) {
 export async function saveTradeJournal(id: string, content: unknown) {
   const uid = await requireUserId();
   if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  await snapshotJournal(uid, "trade", id, await journalContentOf(uid, "trade", id));
   await db.update(trades).set({ journal: content, updatedAt: new Date() }).where(and(eq(trades.id, id), eq(trades.userId, uid)));
   revalidatePath(`/trades/${id}`);
 }
@@ -538,6 +540,7 @@ function pruneEmptyImages(node: TipTapNode): TipTapNode {
 export async function saveDoc(id: string, title: string, content: unknown) {
   const uid = await requireUserId();
   if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  await snapshotJournal(uid, "doc", id, await journalContentOf(uid, "doc", id));
   await db
     .update(docs)
     .set({ title: title.trim() || "Untitled", content, updatedAt: new Date() })
@@ -933,6 +936,7 @@ export async function updateMissedTrade(fd: FormData) {
 export async function saveMissedJournal(id: string, content: unknown) {
   const uid = await requireUserId();
   if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  await snapshotJournal(uid, "missed", id, await journalContentOf(uid, "missed", id));
   const { missedTrades } = await import("@/db/schema");
   await db
     .update(missedTrades)
@@ -1167,4 +1171,101 @@ export async function setIdeaDate(fd: FormData) {
     .set({ date, updatedAt: new Date() })
     .where(and(eq(ideas.id, id), eq(ideas.userId, uid)));
   revalidatePath("/", "layout");
+}
+
+// ---------- journal version history ----------
+
+/** Store the journal state BEFORE an overwrite. Throttled: during one editing
+ *  burst (saves closer than 2 minutes apart) only the pre-burst state is kept.
+ *  The last 30 versions per document survive. */
+async function snapshotJournal(uid: string, kind: string, refId: string, prev: unknown, force = false) {
+  if (!prev || typeof prev !== "object") return;
+  const { journalVersions } = await import("@/db/schema");
+  if (!force) {
+    const last = await db.query.journalVersions.findFirst({
+      where: (v, { and: and_, eq: eq_ }) => and_(eq_(v.userId, uid), eq_(v.kind, kind), eq_(v.refId, refId)),
+      orderBy: (v, { desc: desc_ }) => [desc_(v.createdAt)],
+    });
+    if (last && Date.now() - last.createdAt.getTime() < 2 * 60_000) return;
+  }
+  await db.insert(journalVersions).values({ userId: uid, kind, refId, content: prev });
+  await db.execute(sql`
+    DELETE FROM journal_versions WHERE id IN (
+      SELECT id FROM journal_versions
+      WHERE user_id = ${uid} AND kind = ${kind} AND ref_id = ${refId}
+      ORDER BY created_at DESC OFFSET 30
+    )`);
+}
+
+/** Current journal content of a target document (ownership enforced). */
+async function journalContentOf(uid: string, kind: string, refId: string): Promise<unknown> {
+  if (kind === "doc") {
+    const r = await db.query.docs.findFirst({ where: (d, { and: and_, eq: eq_ }) => and_(eq_(d.id, refId), eq_(d.userId, uid)) });
+    return r?.content ?? null;
+  }
+  if (kind === "trade") {
+    const r = await db.query.trades.findFirst({ where: (t, { and: and_, eq: eq_ }) => and_(eq_(t.id, refId), eq_(t.userId, uid)) });
+    return r?.journal ?? null;
+  }
+  if (kind === "idea") {
+    const r = await db.query.ideas.findFirst({ where: (i, { and: and_, eq: eq_ }) => and_(eq_(i.id, refId), eq_(i.userId, uid)) });
+    return r?.journal ?? null;
+  }
+  if (kind === "missed") {
+    const { missedTrades } = await import("@/db/schema");
+    const r = await db.query.missedTrades.findFirst({ where: (m, { and: and_, eq: eq_ }) => and_(eq_(m.id, refId), eq_(m.userId, uid)) });
+    return r?.journal ?? null;
+  }
+  return null;
+}
+
+async function writeJournalContent(uid: string, kind: string, refId: string, content: unknown) {
+  if (kind === "doc") {
+    await db.update(docs).set({ content, updatedAt: new Date() }).where(and(eq(docs.id, refId), eq(docs.userId, uid)));
+  } else if (kind === "trade") {
+    await db.update(trades).set({ journal: content, updatedAt: new Date() }).where(and(eq(trades.id, refId), eq(trades.userId, uid)));
+  } else if (kind === "idea") {
+    await db.update(ideas).set({ journal: content, updatedAt: new Date() }).where(and(eq(ideas.id, refId), eq(ideas.userId, uid)));
+  } else if (kind === "missed") {
+    const { missedTrades } = await import("@/db/schema");
+    await db.update(missedTrades).set({ journal: content, updatedAt: new Date() }).where(and(eq(missedTrades.id, refId), eq(missedTrades.userId, uid)));
+  }
+}
+
+/** Version list for the History panel (newest first). */
+export async function listJournalVersions(kind: string, refId: string): Promise<{ id: string; createdAt: string }[]> {
+  const uid = await requireUserId();
+  const { journalVersions } = await import("@/db/schema");
+  const rows = await db.query.journalVersions.findMany({
+    where: (v, { and: and_, eq: eq_ }) => and_(eq_(v.userId, uid), eq_(v.kind, kind), eq_(v.refId, refId)),
+    orderBy: (v, { desc: desc_ }) => [desc_(v.createdAt)],
+    limit: 30,
+  });
+  return rows.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString() }));
+}
+
+/** One version's content, for previewing in the editor. */
+export async function getJournalVersion(id: string): Promise<unknown | null> {
+  const uid = await requireUserId();
+  const { journalVersions } = await import("@/db/schema");
+  const r = await db.query.journalVersions.findFirst({
+    where: (v, { and: and_, eq: eq_ }) => and_(eq_(v.id, id), eq_(v.userId, uid)),
+  });
+  return r ? JSON.parse(JSON.stringify(r.content)) : null;
+}
+
+/** Roll the journal back to a version. The pre-restore state is itself saved
+ *  as a version first, so a restore can always be undone. */
+export async function restoreJournalVersion(id: string): Promise<unknown | null> {
+  const uid = await requireUserId();
+  const { journalVersions } = await import("@/db/schema");
+  const v = await db.query.journalVersions.findFirst({
+    where: (vv, { and: and_, eq: eq_ }) => and_(eq_(vv.id, id), eq_(vv.userId, uid)),
+  });
+  if (!v) return null;
+  const current = await journalContentOf(uid, v.kind, v.refId);
+  await snapshotJournal(uid, v.kind, v.refId, current, true);
+  await writeJournalContent(uid, v.kind, v.refId, v.content);
+  revalidatePath("/", "layout");
+  return JSON.parse(JSON.stringify(v.content));
 }

@@ -346,6 +346,21 @@ export const executions = pgTable(
   ],
 );
 
+/** Version history for every rich journal (plans docs, trade/idea/missed
+ *  write-ups): the state BEFORE each editing burst, for one-click rollback. */
+export const journalVersions = pgTable(
+  "journal_versions",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull(),
+    kind: text("kind").notNull(), // "doc" | "trade" | "idea" | "missed"
+    refId: text("ref_id").notNull(),
+    content: jsonb("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("journal_versions_ref_idx").on(t.userId, t.kind, t.refId, t.createdAt)],
+);
+
 // ---------- price data ----------
 
 /**

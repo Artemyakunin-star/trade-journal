@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import { saveDoc, saveIdeaJournal, saveMissedJournal, saveTradeJournal } from "@/app/actions";
+import { getJournalVersion, listJournalVersions, restoreJournalVersion, saveDoc, saveIdeaJournal, saveMissedJournal, saveTradeJournal } from "@/app/actions";
 
 type Props = {
   docId: string;
@@ -63,6 +63,11 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
   const [status, setStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Version history: list panel + in-editor preview (autosave suspended).
+  const [versions, setVersions] = useState<{ id: string; createdAt: string }[] | null>(null);
+  const [preview, setPreview] = useState<{ id: string; createdAt: string } | null>(null);
+  const suppressSave = useRef(false);
+  const beforePreview = useRef<unknown>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -92,7 +97,9 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
         return true;
       },
     },
-    onUpdate: () => scheduleSave(),
+    onUpdate: () => {
+      if (!suppressSave.current) scheduleSave();
+    },
   });
 
   const doSave = useCallback(async () => {
@@ -134,6 +141,51 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
       flush();
     };
   }, [doSave]);
+
+  const fmtVer = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
+
+  const openHistory = async () => {
+    if (versions) {
+      setVersions(null);
+      return;
+    }
+    const list = await listJournalVersions(kind, docId);
+    setVersions(list);
+  };
+
+  const previewVersion = async (v: { id: string; createdAt: string }) => {
+    if (!editor) return;
+    const content = await getJournalVersion(v.id);
+    if (!content) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current); // a pending save would write the preview
+    if (!preview) beforePreview.current = editor.getJSON(); // remember the live state once
+    suppressSave.current = true;
+    editor.commands.setContent(content as object);
+    editor.setEditable(false);
+    setPreview(v);
+  };
+
+  const cancelPreview = () => {
+    if (!editor) return;
+    editor.commands.setContent((beforePreview.current as object) ?? { type: "doc", content: [{ type: "paragraph" }] });
+    editor.setEditable(true);
+    suppressSave.current = false;
+    setPreview(null);
+    setVersions(null);
+  };
+
+  const restorePreview = async () => {
+    if (!editor || !preview) return;
+    await restoreJournalVersion(preview.id); // snapshots the pre-restore state server-side
+    editor.setEditable(true);
+    suppressSave.current = false;
+    setPreview(null);
+    setVersions(null);
+    setStatus("saved");
+  };
 
   if (!editor) return <div className="section-note">Loading editor…</div>;
 
@@ -182,6 +234,31 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
         {btn("―", () => editor.chain().focus().setHorizontalRule().run(), false, "Divider (type --- )")}
         <span className="doc-sep" />
         {btn("🖼 Image", () => fileInputRef.current?.click(), false, "Insert image from file — or just paste a screenshot (Ctrl+V)")}
+        <span style={{ position: "relative", display: "inline-block" }}>
+          {btn("🕘 History", () => void openHistory(), !!versions, "Versions of this journal — preview and roll back")}
+          {versions && !preview && (
+            <div
+              style={{
+                position: "absolute", top: "110%", right: 0, zIndex: 50, minWidth: 220, maxHeight: 280, overflowY: "auto",
+                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 12px 32px rgba(0,0,0,.35)", padding: 6,
+              }}
+            >
+              {versions.length === 0 && <div style={{ fontSize: 12, color: "var(--muted)", padding: 8 }}>No versions yet — they appear as you edit.</div>}
+              {versions.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => void previewVersion(v)}
+                  style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "7px 9px", borderRadius: 7, fontSize: 12.5, color: "var(--ink)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                >
+                  {fmtVer(v.createdAt)}
+                </button>
+              ))}
+            </div>
+          )}
+        </span>
         <span style={{ marginLeft: "auto", fontSize: 11.5, color: status === "saved" ? "var(--pos)" : "var(--muted)" }}>
           {status === "saved" ? "Saved" : status === "saving" ? "Saving…" : "Editing…"}
         </span>
@@ -198,6 +275,20 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
           e.target.value = "";
         }}
       />
+      {preview && (
+        <div
+          style={{
+            display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", margin: "8px 0",
+            padding: "8px 12px", border: "1px solid var(--warn)", borderRadius: 10, fontSize: 12.5, color: "var(--ink-2)",
+          }}
+        >
+          <b style={{ color: "var(--warn)" }}>Viewing version from {fmtVer(preview.createdAt)}</b> — read-only preview, nothing is saved yet.
+          <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8 }}>
+            <button className="btn btn-sm" type="button" onClick={() => void restorePreview()}>Restore this version</button>
+            <button className="btn ghost btn-sm" type="button" onClick={cancelPreview}>Cancel</button>
+          </span>
+        </div>
+      )}
       <EditorContent editor={editor} />
       <div className="section-note">
         Paste screenshots with Ctrl+V (or drag a file in). Markdown shortcuts: # heading, - list, &gt; quote, --- divider.

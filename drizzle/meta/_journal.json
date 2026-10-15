@@ -162,6 +162,13 @@
       "when": 1791392415544,
       "tag": "0022_idea_red_flags",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791392415545,
+      "tag": "0023_journal_versions",
+      "breakpoints": true
     }
   ]
 }
