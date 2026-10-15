@@ -1269,3 +1269,67 @@ export async function restoreJournalVersion(id: string): Promise<unknown | null>
   revalidatePath("/", "layout");
   return JSON.parse(JSON.stringify(v.content));
 }
+
+// ---------- market notes (hypotheses with an evidence trail) ----------
+
+/** Create a note: short text + categories (checkboxes + optional new one). */
+export async function createNote(fd: FormData) {
+  const uid = await requireUserId();
+  const text = str(fd, "text").trim();
+  if (!text) return;
+  const cats = [...new Set(fd.getAll("cat").map(String).map((s) => s.trim()).filter(Boolean))];
+  const newCat = str(fd, "newcat").trim();
+  if (newCat && !cats.some((c) => c.toLowerCase() === newCat.toLowerCase())) cats.push(newCat);
+  const { notes } = await import("@/db/schema");
+  await db.insert(notes).values({ userId: uid, text, categories: cats });
+
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  const missing = cats.filter((c) => !prefs.noteCategoryOptions.some((o) => o.toLowerCase() === c.toLowerCase()));
+  if (missing.length) await setSetting(uid, "noteCategoryOptions", [...prefs.noteCategoryOptions, ...missing]);
+  revalidatePath("/notes");
+}
+
+/** Confirm or refute a note on a given day — the evidence trail. */
+export async function addNoteEvidence(fd: FormData) {
+  const uid = await requireUserId();
+  const noteId = str(fd, "noteId");
+  const verdict = str(fd, "verdict") === "REFUTED" ? "REFUTED" : "CONFIRMED";
+  const date = str(fd, "date");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  const comment = str(fd, "comment").trim() || null;
+  const { notes, noteEvidence } = await import("@/db/schema");
+  const note = await db.query.notes.findFirst({
+    where: (n, { and: and_, eq: eq_ }) => and_(eq_(n.id, noteId), eq_(n.userId, uid)),
+  });
+  if (!note) return;
+  await db.insert(noteEvidence).values({ userId: uid, noteId, verdict, date, comment });
+  await db.update(notes).set({ updatedAt: new Date() }).where(eq(notes.id, noteId));
+  revalidatePath("/notes");
+}
+
+export async function deleteNoteEvidence(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const { noteEvidence } = await import("@/db/schema");
+  await db.delete(noteEvidence).where(and(eq(noteEvidence.id, id), eq(noteEvidence.userId, uid)));
+  revalidatePath("/notes");
+}
+
+export async function toggleNoteArchived(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const { notes } = await import("@/db/schema");
+  const n = await db.query.notes.findFirst({ where: (nn, { and: and_, eq: eq_ }) => and_(eq_(nn.id, id), eq_(nn.userId, uid)) });
+  if (!n) return;
+  await db.update(notes).set({ archived: !n.archived, updatedAt: new Date() }).where(eq(notes.id, id));
+  revalidatePath("/notes");
+}
+
+export async function deleteNote(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const { notes } = await import("@/db/schema");
+  await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, uid)));
+  revalidatePath("/notes");
+}

@@ -18,6 +18,8 @@ export type AppSettings = {
   playbookOptions: string[];
   /** Red-flag vocabulary: things that argue AGAINST an idea. */
   redFlagOptions: string[];
+  /** Category vocabulary for market notes (hypotheses). */
+  noteCategoryOptions: string[];
   /** Per-instrument trading rules (size cap, stop, targets, BE window, idea limits). */
   tradingRules: TradingRules;
   /** Saved exit scenarios for the Lab (batch what-if comparison). */
@@ -55,6 +57,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
     "ES / NQ divergence — siblings disagree",
     "Against a higher-timeframe level",
     "Late entry — move already extended",
+  ],
+  noteCategoryOptions: [
+    "News day",
+    "After expansion",
+    "Range behavior",
+    "Breakout",
+    "Open / first hour",
   ],
   tradingRules: {},
   simScenarios: [],
@@ -150,6 +159,7 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     ofConfOptions: strArr("ofConfOptions", DEFAULT_SETTINGS.ofConfOptions),
     playbookOptions: strArr("playbookOptions", DEFAULT_SETTINGS.playbookOptions),
     redFlagOptions: strArr("redFlagOptions", DEFAULT_SETTINGS.redFlagOptions),
+    noteCategoryOptions: strArr("noteCategoryOptions", DEFAULT_SETTINGS.noteCategoryOptions),
     tradingRules,
     simScenarios,
   };

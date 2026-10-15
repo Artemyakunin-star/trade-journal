@@ -13,6 +13,7 @@ const ITEMS = [
   { href: "/lab", ico: "⚗", label: "Lab" },
   { href: "/day", ico: "☀", label: "Day" },
   { href: "/rules", ico: "⚖", label: "Rules" },
+  { href: "/notes", ico: "✎", label: "Notes" },
   { href: "/import", ico: "⇪", label: "Import" },
   { href: "/faq", ico: "?", label: "Help / FAQ" },
   { href: "/feedback", ico: "✉", label: "Feedback" },

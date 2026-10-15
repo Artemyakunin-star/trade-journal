@@ -346,6 +346,41 @@ export const executions = pgTable(
   ],
 );
 
+/** Market notes: observations-hypotheses with an evidence trail. The note's
+ *  weight = its confirmations minus refutations, each tied to a trading day. */
+export const notes = pgTable("notes", {
+  id: text("id").primaryKey().$defaultFn(createId),
+  userId: text("user_id").notNull(),
+  text: text("text").notNull(),
+  categories: jsonb("categories").$type<string[]>(),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const noteEvidence = pgTable(
+  "note_evidence",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull(),
+    noteId: text("note_id")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
+    verdict: text("verdict").notNull(), // "CONFIRMED" | "REFUTED"
+    date: date("date", { mode: "string" }).notNull(),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("note_evidence_note_idx").on(t.noteId, t.date)],
+);
+
+export const notesRelations = relations(notes, ({ many }) => ({
+  evidence: many(noteEvidence),
+}));
+export const noteEvidenceRelations = relations(noteEvidence, ({ one }) => ({
+  note: one(notes, { fields: [noteEvidence.noteId], references: [notes.id] }),
+}));
+
 /** Version history for every rich journal (plans docs, trade/idea/missed
  *  write-ups): the state BEFORE each editing burst, for one-click rollback. */
 export const journalVersions = pgTable(
