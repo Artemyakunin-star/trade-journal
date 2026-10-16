@@ -56,6 +56,15 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
   const [editText, setEditText] = useState("");
   const [editEmotion, setEditEmotion] = useState<string | null>(null);
   const [editImages, setEditImages] = useState<string[]>([]);
+  const [editTs, setEditTs] = useState("");
+
+  // ISO -> value for <input type="datetime-local"> in the browser's timezone
+  // (same convention the composer's 🕐 field uses).
+  const toLocalInput = (iso: string) => {
+    const d = new Date(iso);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
   const [ideaFor, setIdeaFor] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -226,6 +235,7 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
                           setEditText(en.text);
                           setEditEmotion(en.emotion);
                           setEditImages(en.imageUrls);
+                          setEditTs(toLocalInput(en.tsIso));
                         }}
                       >
                         edit
@@ -271,12 +281,23 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
                   {thumbs(editImages, (url) => setEditImages((prev) => prev.filter((u) => u !== url)))}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     {EMOTIONS.map((e) => emoChip(e, editEmotion === e.key, () => setEditEmotion(editEmotion === e.key ? null : e.key)))}
+                    <label style={{ display: "inline-flex", gap: 4, alignItems: "center", fontSize: 11.5, color: "var(--muted)" }} title="Fix the entry's time — e.g. you wrote it down later than it happened">
+                      🕐
+                      <input
+                        className="tj-input"
+                        type="datetime-local"
+                        value={editTs}
+                        onChange={(e) => setEditTs(e.target.value)}
+                        style={{ fontSize: 12 }}
+                      />
+                    </label>
                     <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
                       <button
                         className="btn btn-sm"
                         type="button"
                         onClick={async () => {
-                          await updateLogEntry({ id: en.id, text: editText, emotion: editEmotion, ts: null, imageUrls: editImages });
+                          const tsIso = editTs && !Number.isNaN(new Date(editTs).getTime()) ? new Date(editTs).toISOString() : null;
+                          await updateLogEntry({ id: en.id, text: editText, emotion: editEmotion, ts: tsIso, imageUrls: editImages });
                           setEditId(null);
                           router.refresh();
                         }}
