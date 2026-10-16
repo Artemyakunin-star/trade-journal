@@ -17,6 +17,7 @@ import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { checkIdea } from "@/lib/rules";
 import IdeaChecklist from "@/components/IdeaChecklist";
 import ReplayResolutionNote from "@/components/ReplayResolutionNote";
+import ConfirmButton from "@/components/ConfirmButton";
 import { docs, executions } from "@/db/schema";
 import { convUnitVal, fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -308,7 +309,11 @@ export default async function EditIdeaPage({
         <Link href={`/trades/new?ideaId=${idea.id}${idea.date ? `&date=${idea.date}` : ""}`} className="btn">+ Trade</Link>
         <form action={deleteIdea}>
           <input type="hidden" name="id" value={idea.id} />
-          <button className="btn danger btn-sm" type="submit">Delete idea</button>
+          <ConfirmButton
+            label="Delete idea"
+            confirmLabel="Sure? Trades stay (become rogue)"
+            title="Deletes the idea, its write-up and self-check. Its trades are NOT deleted — they become rogue; live-journal entries only lose the link."
+          />
         </form>
       </div>
 
@@ -449,6 +454,22 @@ export default async function EditIdeaPage({
             barDays={barDays}
           />
         </div>
+        {idea.trades.filter((t) => t.pnl === null).length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            {idea.trades.filter((t) => t.pnl === null).map((t) => (
+              <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, color: "var(--ink-2)", borderTop: "1px solid var(--border)", padding: "6px 0" }}>
+                <span>
+                  {fmtTimeKyiv(t.entryTime, true, tz, prefs.dateFormat)} · {t.instrument} {t.direction === "LONG" ? "Long" : "Short"} ×{t.quantity} · <span style={{ color: "var(--muted)" }}>open — not in the table above</span>
+                </span>
+                <form action={setTradeIdea} style={{ display: "inline", marginLeft: "auto" }}>
+                  <input type="hidden" name="tradeId" value={t.id} />
+                  <input type="hidden" name="ideaId" value="" />
+                  <button className="btn ghost btn-sm" type="submit" title="Remove this trade from the idea — the trade stays, it just becomes rogue">detach</button>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="section-note">
           One table for everything: Net P&L is the actual result, Sim / Δ / Sim exit come from the rule set above,
           Key Level, OF conf, SL and Account are editable inline, and the Columns menu adds or removes columns

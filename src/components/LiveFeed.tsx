@@ -5,7 +5,8 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { addLogEntry, deleteLogEntry, ideaFromLogEntry, updateLogEntry } from "@/app/actions";
+import { addLogEntry, deleteIdea, deleteLogEntry, ideaFromLogEntry, updateLogEntry } from "@/app/actions";
+import ConfirmButton from "@/components/ConfirmButton";
 
 export type LiveEntry = {
   id: string;
@@ -161,7 +162,21 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 5, fontSize: 11.5 }}>
                     {emo && <span style={{ color: emo.color, fontWeight: 600 }}>{emo.label}</span>}
                     {en.ideaId && (
-                      <Link className="linklike" href={`/ideas/${en.ideaId}/edit`}>→ {en.ideaTitle ?? "idea"}</Link>
+                      <span style={{ display: "inline-flex", gap: 4, alignItems: "baseline" }}>
+                        <Link className="linklike" href={`/ideas/${en.ideaId}/edit`}>→ {en.ideaTitle ?? "idea"}</Link>
+                        <form action={deleteIdea} style={{ display: "inline" }} onSubmit={() => setTimeout(() => router.refresh(), 300)}>
+                          <input type="hidden" name="id" value={en.ideaId} />
+                          <input type="hidden" name="returnTo" value="/live" />
+                          <ConfirmButton
+                            label="✕"
+                            confirmLabel="delete the idea?"
+                            className="linklike"
+                            title="Delete this idea (created from the entry by mistake?). The entry itself stays."
+                            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: "var(--muted)", padding: 0 }}
+                            confirmStyle={{ color: "var(--crit)", fontWeight: 600 }}
+                          />
+                        </form>
+                      </span>
                     )}
                     <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8 }}>
                       {!en.ideaId && (

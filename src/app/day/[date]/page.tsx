@@ -11,7 +11,8 @@ import { db } from "@/db";
 import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import { bars, docs, executions, plans } from "@/db/schema";
 import { checkIdea, type IdeaCheck } from "@/lib/rules";
-import { addScenario, deleteScenario, setScenarioOutcome } from "@/app/actions";
+import { addScenario, deleteLogEntry, deleteScenario, setScenarioOutcome } from "@/app/actions";
+import ConfirmButton from "@/components/ConfirmButton";
 import AccountFilter from "@/components/AccountFilter";
 import {
   dayAggregates,
@@ -404,13 +405,24 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={l.imageUrl} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 8, border: "1px solid var(--border)", marginTop: 6 }} />
                   )}
-                  <div style={{ display: "flex", gap: 8, fontSize: 11.5, marginTop: 3 }}>
+                  <div style={{ display: "flex", gap: 8, fontSize: 11.5, marginTop: 3, alignItems: "baseline" }}>
                     {l.emotion && (
                       <span style={{ color: l.emotion === "CALM" ? "var(--pos)" : l.emotion === "TENSE" ? "var(--warn)" : "var(--crit)", fontWeight: 600 }}>
                         {l.emotion.toLowerCase()}
                       </span>
                     )}
                     {l.ideaId && <Link className="linklike" href={`/ideas/${l.ideaId}/edit`}>→ idea</Link>}
+                    <form action={deleteLogEntry} style={{ display: "inline", marginLeft: "auto" }}>
+                      <input type="hidden" name="id" value={l.id} />
+                      <ConfirmButton
+                        label="✕"
+                        confirmLabel="delete the entry?"
+                        className="linklike"
+                        title="Delete this feed entry"
+                        style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: "var(--muted)", padding: 0 }}
+                        confirmStyle={{ color: "var(--crit)", fontWeight: 600 }}
+                      />
+                    </form>
                   </div>
                 </div>
               </div>

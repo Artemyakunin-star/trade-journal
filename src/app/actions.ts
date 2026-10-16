@@ -104,10 +104,16 @@ export async function updateIdea(fd: FormData) {
 export async function deleteIdea(fd: FormData) {
   const uid = await requireUserId();
   const id = str(fd, "id");
+  const { sessionLog, journalVersions } = await import("@/db/schema");
+  // Trades survive the idea (they become rogue), live-journal entries just
+  // lose the link; the idea's own journal history goes with it.
   await db.update(trades).set({ ideaId: null }).where(and(eq(trades.ideaId, id), eq(trades.userId, uid)));
+  await db.update(sessionLog).set({ ideaId: null }).where(and(eq(sessionLog.ideaId, id), eq(sessionLog.userId, uid)));
+  await db.delete(journalVersions).where(and(eq(journalVersions.kind, "idea"), eq(journalVersions.refId, id), eq(journalVersions.userId, uid)));
   await db.delete(ideas).where(and(eq(ideas.id, id), eq(ideas.userId, uid)));
   revalidatePath("/", "layout");
-  redirect("/ideas");
+  const rt = str(fd, "returnTo");
+  redirect(rt.startsWith("/") ? rt : "/ideas");
 }
 
 /** Attach several rogue trades to an idea (picker on the idea page). */
@@ -1415,7 +1421,7 @@ export async function deleteLogEntry(fd: FormData) {
   const id = str(fd, "id");
   const { sessionLog } = await import("@/db/schema");
   await db.delete(sessionLog).where(and(eq(sessionLog.id, id), eq(sessionLog.userId, uid)));
-  revalidatePath("/live");
+  revalidatePath("/", "layout");
 }
 
 /** Turn a journal entry into an idea: the entry's text becomes the thesis,
