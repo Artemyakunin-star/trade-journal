@@ -346,6 +346,23 @@ export const executions = pgTable(
   ],
 );
 
+/** Live session journal: timestamped entries written DURING the session —
+ *  feelings, observations, decisions — optionally linked to an idea born of them. */
+export const sessionLog = pgTable(
+  "session_log",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull(),
+    ts: timestamp("ts", { withTimezone: true }).notNull(),
+    text: text("text").notNull(),
+    emotion: text("emotion"), // CALM | TENSE | TILT | REVENGE
+    imageUrl: text("image_url"),
+    ideaId: text("idea_id").references(() => ideas.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("session_log_user_ts_idx").on(t.userId, t.ts)],
+);
+
 /** Market notes: observations-hypotheses with an evidence trail. The note's
  *  weight = its confirmations minus refutations, each tied to a trading day. */
 export const notes = pgTable("notes", {

@@ -1376,3 +1376,72 @@ export async function groupTradesIntoIdea(fd: FormData) {
   revalidatePath("/", "layout");
   redirect(`/ideas/${idea.id}/edit`);
 }
+
+// ---------- live session journal ----------
+
+/** Add a live-journal entry. ts is an ISO string (defaults to now server-side). */
+export async function addLogEntry(input: { text: string; emotion: string | null; ts: string | null; imageUrl: string | null }) {
+  const uid = await requireUserId();
+  const text = (input.text ?? "").trim();
+  if (!text && !input.imageUrl) return;
+  const emotions = ["CALM", "TENSE", "TILT", "REVENGE"];
+  const emotion = input.emotion && emotions.includes(input.emotion) ? input.emotion : null;
+  const ts = input.ts ? new Date(input.ts) : new Date();
+  if (Number.isNaN(ts.getTime())) return;
+  const imageUrl = input.imageUrl && input.imageUrl.startsWith("/api/images/") ? input.imageUrl : null;
+  const { sessionLog } = await import("@/db/schema");
+  await db.insert(sessionLog).values({ userId: uid, ts, text: text || "(screenshot)", emotion, imageUrl });
+  revalidatePath("/live");
+}
+
+export async function updateLogEntry(input: { id: string; text: string; emotion: string | null; ts: string | null }) {
+  const uid = await requireUserId();
+  const text = (input.text ?? "").trim();
+  if (!text) return;
+  const emotions = ["CALM", "TENSE", "TILT", "REVENGE"];
+  const emotion = input.emotion && emotions.includes(input.emotion) ? input.emotion : null;
+  const { sessionLog } = await import("@/db/schema");
+  const set: Record<string, unknown> = { text, emotion };
+  if (input.ts) {
+    const ts = new Date(input.ts);
+    if (!Number.isNaN(ts.getTime())) set.ts = ts;
+  }
+  await db.update(sessionLog).set(set).where(and(eq(sessionLog.id, input.id), eq(sessionLog.userId, uid)));
+  revalidatePath("/live");
+}
+
+export async function deleteLogEntry(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const { sessionLog } = await import("@/db/schema");
+  await db.delete(sessionLog).where(and(eq(sessionLog.id, id), eq(sessionLog.userId, uid)));
+  revalidatePath("/live");
+}
+
+/** Turn a journal entry into an idea: the entry's text becomes the thesis,
+ *  the entry remembers the idea (the chain "felt -> decided -> happened"). */
+export async function ideaFromLogEntry(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const instrument = str(fd, "instrument") || "MES";
+  const direction = str(fd, "direction") === "SHORT" ? "SHORT" : "LONG";
+  const { sessionLog } = await import("@/db/schema");
+  const entry = await db.query.sessionLog.findFirst({
+    where: (l, { and: and_, eq: eq_ }) => and_(eq_(l.id, id), eq_(l.userId, uid)),
+  });
+  if (!entry) return;
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  const { kyivDateOf } = await import("@/lib/format");
+  const date = kyivDateOf(entry.ts, prefs.timezone);
+  const trigByEmotion: Record<string, string> = { TILT: "TILT", REVENGE: "REVENGE" };
+  const trig = (trigByEmotion[entry.emotion ?? ""] ?? "PLAN") as "PLAN" | "TILT" | "REVENGE";
+  const title = entry.text.length > 70 ? entry.text.slice(0, 67) + "…" : entry.text;
+  const [idea] = await db
+    .insert(ideas)
+    .values({ userId: uid, date, instrument, direction, title, thesis: entry.text, invalidation: "—", trigger: trig })
+    .returning();
+  await db.update(sessionLog).set({ ideaId: idea.id }).where(eq(sessionLog.id, id));
+  revalidatePath("/live");
+  redirect(`/ideas/${idea.id}/edit`);
+}

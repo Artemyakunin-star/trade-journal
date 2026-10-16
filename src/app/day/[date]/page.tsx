@@ -69,6 +69,13 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
   const dayTrades = allTrades.filter((t) => kyivDateOf(t.entryTime, tz) === date);
   const tradeIds = new Set(dayTrades.map((t) => t.id));
   // Missed setups logged for this day (virtual replays, never mixed with real P&L).
+  const { parseInTimeZone: parseTz } = await import("@/lib/format");
+  const logStart = parseTz(`${date} 00:00:00`, tz);
+  const logEnd = new Date(logStart.getTime() + 24 * 3600_000);
+  const dayLog = await db.query.sessionLog.findMany({
+    where: (l, { and: and_, eq: eq_, gte: gte_, lt: lt_ }) => and_(eq_(l.userId, uid), gte_(l.ts, logStart), lt_(l.ts, logEnd)),
+    orderBy: (l, { asc: asc_ }) => [asc_(l.ts)],
+  });
   const [allMissed, instRows] = await Promise.all([
     db.query.missedTrades.findMany({ where: (mm, { eq: eq_ }) => eq_(mm.userId, uid) }),
     db.query.instruments.findMany(),
@@ -381,6 +388,35 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
             <div className="section-note">Nothing logged for this day. Missed setups are added inside an idea (&quot;+ Missed&quot;).</div>
           )}
         </div>
+        {dayLog.length > 0 && (
+          <div className="card">
+            <h3>
+              Session feed <span className="sub">what you wrote during the session · {tzLabel(tz)}</span>
+            </h3>
+            {dayLog.map((l) => (
+              <div key={l.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", borderTop: "1px solid var(--border)", padding: "7px 0" }}>
+                <span style={{ fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--muted)", width: 44, flex: "0 0 auto" }}>
+                  {fmtTimeKyiv(l.ts, false, tz)}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{l.text}</div>
+                  {l.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={l.imageUrl} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 8, border: "1px solid var(--border)", marginTop: 6 }} />
+                  )}
+                  <div style={{ display: "flex", gap: 8, fontSize: 11.5, marginTop: 3 }}>
+                    {l.emotion && (
+                      <span style={{ color: l.emotion === "CALM" ? "var(--pos)" : l.emotion === "TENSE" ? "var(--warn)" : "var(--crit)", fontWeight: 600 }}>
+                        {l.emotion.toLowerCase()}
+                      </span>
+                    )}
+                    {l.ideaId && <Link className="linklike" href={`/ideas/${l.ideaId}/edit`}>→ idea</Link>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="card">
           <h3>Execution timeline <span className="sub">{tzLabel(tz)}</span></h3>
           {timeline.map(({ t, idea, n }) => {
