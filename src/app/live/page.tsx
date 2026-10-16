@@ -5,6 +5,7 @@ import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
 import { getSettings } from "@/lib/settings";
 import { fmtTimeKyiv, kyivDateOf } from "@/lib/format";
+import { openDailyDoc } from "@/app/actions";
 import LiveFeed, { type LiveEntry } from "@/components/LiveFeed";
 
 export const dynamic = "force-dynamic";
@@ -71,9 +72,17 @@ export default async function LivePage() {
               open the written plan →
             </Link>
           ) : (
-            <Link className="linklike" href="/plans" style={{ marginLeft: "auto", fontSize: 12.5 }}>
-              write today&apos;s plan →
-            </Link>
+            <form action={openDailyDoc} style={{ marginLeft: "auto" }}>
+              <input type="hidden" name="date" value={today} />
+              <button
+                type="submit"
+                className="linklike"
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12.5, padding: 0 }}
+                title="Opens today's plan (creates it if needed). Wrote the plan as a plain document or on the wrong day? Open it in Plans — the Move control at the top re-dates it."
+              >
+                write today&apos;s plan →
+              </button>
+            </form>
           )}
         </h3>
         {frame && (frame.bias || (frame.scenarios ?? []).length > 0 || frame.rules) ? (

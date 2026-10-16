@@ -515,6 +515,42 @@ export async function createDoc() {
   redirect(`/plans/${doc.id}`);
 }
 
+/** Move a plan document to another day (or attach a date-less document to a
+ *  day, making it that day's plan). One plan per day: if the target day
+ *  already has one, nothing changes and the page shows a warning. */
+export async function setDocDate(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const date = str(fd, "date");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) redirect(`/plans/${id}`);
+  const taken = await db.query.docs.findFirst({
+    where: (d, { and: and_, eq: eq_, ne: ne_ }) => and_(eq_(d.userId, uid), eq_(d.date, date), ne_(d.id, id)),
+  });
+  if (taken) redirect(`/plans/${id}?dateTaken=${date}`);
+  const doc = await db.query.docs.findFirst({ where: (d, { and: and_, eq: eq_ }) => and_(eq_(d.id, id), eq_(d.userId, uid)) });
+  if (!doc) redirect("/plans");
+  // Keep a custom title; refresh the automatic "Plan · ..." one.
+  const auto = doc.title === "Untitled" || doc.title.startsWith("Plan · ");
+  const title = auto
+    ? `Plan · ${new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(new Date(date + "T12:00:00Z"))}`
+    : doc.title;
+  await db.update(docs).set({ date, title, updatedAt: new Date() }).where(and(eq(docs.id, id), eq(docs.userId, uid)));
+  // The day frame follows the plan: if the old day had one and the new day
+  // doesn't, it moves along (it was written for this plan, just misdated).
+  if (doc.date && doc.date !== date) {
+    const { dayFrames } = await import("@/db/schema");
+    const [oldFrame, newFrame] = await Promise.all([
+      db.query.dayFrames.findFirst({ where: (f, { and: and_, eq: eq_ }) => and_(eq_(f.userId, uid), eq_(f.date, doc.date!)) }),
+      db.query.dayFrames.findFirst({ where: (f, { and: and_, eq: eq_ }) => and_(eq_(f.userId, uid), eq_(f.date, date)) }),
+    ]);
+    if (oldFrame && !newFrame) {
+      await db.update(dayFrames).set({ date, updatedAt: new Date() }).where(and(eq(dayFrames.id, oldFrame.id), eq(dayFrames.userId, uid)));
+    }
+  }
+  revalidatePath("/", "layout");
+  redirect(`/plans/${id}`);
+}
+
 /** Open (or create) the daily plan note for a calendar day. */
 export async function openDailyDoc(fd: FormData) {
   const uid = await requireUserId();
