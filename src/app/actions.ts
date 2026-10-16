@@ -1422,28 +1422,44 @@ export async function groupTradesIntoIdea(fd: FormData) {
 // ---------- live session journal ----------
 
 /** Add a live-journal entry. ts is an ISO string (defaults to now server-side). */
-export async function addLogEntry(input: { text: string; emotion: string | null; ts: string | null; imageUrl: string | null }) {
+const cleanImageUrls = (urls: unknown): string[] =>
+  (Array.isArray(urls) ? urls : []).map(String).filter((u) => u.startsWith("/api/images/")).slice(0, 20);
+
+export async function addLogEntry(input: { text: string; emotion: string | null; ts: string | null; imageUrls?: string[] }) {
   const uid = await requireUserId();
   const text = (input.text ?? "").trim();
-  if (!text && !input.imageUrl) return;
+  const imageUrls = cleanImageUrls(input.imageUrls);
+  if (!text && imageUrls.length === 0) return;
   const emotions = ["CALM", "TENSE", "TILT", "REVENGE"];
   const emotion = input.emotion && emotions.includes(input.emotion) ? input.emotion : null;
   const ts = input.ts ? new Date(input.ts) : new Date();
   if (Number.isNaN(ts.getTime())) return;
-  const imageUrl = input.imageUrl && input.imageUrl.startsWith("/api/images/") ? input.imageUrl : null;
   const { sessionLog } = await import("@/db/schema");
-  await db.insert(sessionLog).values({ userId: uid, ts, text: text || "(screenshot)", emotion, imageUrl });
+  await db.insert(sessionLog).values({
+    userId: uid,
+    ts,
+    text: text || "(screenshot)",
+    emotion,
+    imageUrls: imageUrls.length ? imageUrls : null,
+  });
   revalidatePath("/live");
 }
 
-export async function updateLogEntry(input: { id: string; text: string; emotion: string | null; ts: string | null }) {
+export async function updateLogEntry(input: { id: string; text: string; emotion: string | null; ts: string | null; imageUrls?: string[] }) {
   const uid = await requireUserId();
   const text = (input.text ?? "").trim();
-  if (!text) return;
+  const imageUrls = cleanImageUrls(input.imageUrls);
+  if (!text && imageUrls.length === 0) return;
   const emotions = ["CALM", "TENSE", "TILT", "REVENGE"];
   const emotion = input.emotion && emotions.includes(input.emotion) ? input.emotion : null;
   const { sessionLog } = await import("@/db/schema");
-  const set: Record<string, unknown> = { text, emotion };
+  const set: Record<string, unknown> = { text: text || "(screenshot)", emotion };
+  if (input.imageUrls !== undefined) {
+    // The editor sends the full list, so this both adds and removes; the
+    // legacy single-image column is superseded once the entry is edited.
+    set.imageUrls = imageUrls.length ? imageUrls : null;
+    set.imageUrl = null;
+  }
   if (input.ts) {
     const ts = new Date(input.ts);
     if (!Number.isNaN(ts.getTime())) set.ts = ts;

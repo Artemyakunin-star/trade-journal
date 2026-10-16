@@ -356,7 +356,8 @@ export const sessionLog = pgTable(
     ts: timestamp("ts", { withTimezone: true }).notNull(),
     text: text("text").notNull(),
     emotion: text("emotion"), // CALM | TENSE | TILT | REVENGE
-    imageUrl: text("image_url"),
+    imageUrl: text("image_url"), // legacy single screenshot (pre-0026)
+    imageUrls: jsonb("image_urls").$type<string[]>(), // any number of screenshots
     ideaId: text("idea_id").references(() => ideas.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

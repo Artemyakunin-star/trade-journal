@@ -401,9 +401,13 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{l.text}</div>
-                  {l.imageUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={l.imageUrl} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 8, border: "1px solid var(--border)", marginTop: 6 }} />
+                  {(l.imageUrls ?? (l.imageUrl ? [l.imageUrl] : [])).length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                      {(l.imageUrls ?? (l.imageUrl ? [l.imageUrl] : [])).map((u) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={u} src={u} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 8, border: "1px solid var(--border)" }} />
+                      ))}
+                    </div>
                   )}
                   <div style={{ display: "flex", gap: 8, fontSize: 11.5, marginTop: 3, alignItems: "baseline" }}>
                     {l.emotion && (

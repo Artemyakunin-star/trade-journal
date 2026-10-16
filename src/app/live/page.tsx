@@ -51,7 +51,7 @@ export default async function LivePage() {
     timeStr: fmtTimeKyiv(r.ts, false, tz),
     text: r.text,
     emotion: r.emotion,
-    imageUrl: r.imageUrl,
+    imageUrls: r.imageUrls ?? (r.imageUrl ? [r.imageUrl] : []),
     ideaId: r.ideaId,
     ideaTitle: r.ideaId ? titleOf.get(r.ideaId) ?? null : null,
   }));

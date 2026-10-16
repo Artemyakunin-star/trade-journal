@@ -14,7 +14,7 @@ export type LiveEntry = {
   timeStr: string;
   text: string;
   emotion: string | null;
-  imageUrl: string | null;
+  imageUrls: string[];
   ideaId: string | null;
   ideaTitle: string | null;
 };
@@ -50,32 +50,68 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
   const [emotion, setEmotion] = useState<string | null>(null);
   const [customTs, setCustomTs] = useState("");
   const [showTs, setShowTs] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editEmotion, setEditEmotion] = useState<string | null>(null);
+  const [editImages, setEditImages] = useState<string[]>([]);
   const [ideaFor, setIdeaFor] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const submit = async () => {
-    if (busy || (!text.trim() && !imageUrl)) return;
+    if (busy || (!text.trim() && imageUrls.length === 0)) return;
     setBusy(true);
     await addLogEntry({
       text,
       emotion,
       ts: showTs && customTs ? new Date(customTs).toISOString() : null,
-      imageUrl,
+      imageUrls,
     });
     setText("");
     setEmotion(null);
-    setImageUrl(null);
+    setImageUrls([]);
     setCustomTs("");
     setShowTs(false);
     setBusy(false);
     router.refresh();
     inputRef.current?.focus();
   };
+
+  // Paste any number of screenshots — each pasted image is appended.
+  const pasteImages = (e: React.ClipboardEvent, add: (url: string) => void) => {
+    const items = [...(e.clipboardData?.items ?? [])].filter((i) => i.type.startsWith("image/"));
+    if (!items.length) return;
+    e.preventDefault();
+    for (const it of items) {
+      const f = it.getAsFile();
+      if (f) void uploadPastedImage(f).then((url) => url && add(url));
+    }
+  };
+
+  const thumbs = (urls: string[], remove: (url: string) => void) =>
+    urls.length === 0 ? null : (
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+        {urls.map((u) => (
+          <span key={u} style={{ position: "relative", display: "inline-block" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={u} alt="pasted" style={{ maxHeight: 90, borderRadius: 8, border: "1px solid var(--border)", display: "block" }} />
+            <button
+              type="button"
+              onClick={() => remove(u)}
+              title="Remove this screenshot"
+              style={{
+                position: "absolute", top: -6, right: -6, width: 18, height: 18, lineHeight: "16px",
+                borderRadius: 99, border: "1px solid var(--border)", background: "var(--bg-2, #222)",
+                color: "var(--muted)", cursor: "pointer", fontSize: 10, padding: 0, textAlign: "center",
+              }}
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+      </div>
+    );
 
   const emoChip = (e: (typeof EMOTIONS)[number], active: boolean, onClick: () => void) => (
     <button
@@ -103,7 +139,7 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
           ref={inputRef}
           className="tj-textarea"
           value={text}
-          placeholder="e.g. 10:15 — two BE in a row, feel the urge to win it back… (paste a screenshot with Ctrl+V)"
+          placeholder="e.g. 10:15 — two BE in a row, feel the urge to win it back… (paste screenshots with Ctrl+V — as many as you need)"
           style={{ minHeight: 54 }}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -112,21 +148,9 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
               void submit();
             }
           }}
-          onPaste={(e) => {
-            const items = [...(e.clipboardData?.items ?? [])].filter((i) => i.type.startsWith("image/"));
-            if (!items.length) return;
-            e.preventDefault();
-            const f = items[0].getAsFile();
-            if (f) void uploadPastedImage(f).then((url) => url && setImageUrl(url));
-          }}
+          onPaste={(e) => pasteImages(e, (url) => setImageUrls((prev) => [...prev, url]))}
         />
-        {imageUrl && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageUrl} alt="pasted" style={{ maxHeight: 90, borderRadius: 8, border: "1px solid var(--border)" }} />
-            <button className="btn ghost btn-sm" type="button" onClick={() => setImageUrl(null)}>remove</button>
-          </div>
-        )}
+        {thumbs(imageUrls, (url) => setImageUrls((prev) => prev.filter((u) => u !== url)))}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {EMOTIONS.map((e) => emoChip(e, emotion === e.key, () => setEmotion(emotion === e.key ? null : e.key)))}
           <button className="btn ghost btn-sm" type="button" onClick={() => setShowTs((v) => !v)} title="Log with a different time (writing it down later)">
@@ -155,9 +179,13 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
               {!editing ? (
                 <>
                   <div style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{en.text}</div>
-                  {en.imageUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={en.imageUrl} alt="" style={{ maxWidth: "100%", maxHeight: 260, borderRadius: 8, border: "1px solid var(--border)", marginTop: 6 }} />
+                  {en.imageUrls.length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                      {en.imageUrls.map((u) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={u} src={u} alt="" style={{ maxWidth: "100%", maxHeight: 260, borderRadius: 8, border: "1px solid var(--border)" }} />
+                      ))}
+                    </div>
                   )}
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 5, fontSize: 11.5 }}>
                     {emo && <span style={{ color: emo.color, fontWeight: 600 }}>{emo.label}</span>}
@@ -197,6 +225,7 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
                           setEditId(en.id);
                           setEditText(en.text);
                           setEditEmotion(en.emotion);
+                          setEditImages(en.imageUrls);
                         }}
                       >
                         edit
@@ -231,7 +260,15 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
                 </>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <textarea className="tj-textarea" value={editText} onChange={(e) => setEditText(e.target.value)} style={{ minHeight: 48 }} />
+                  <textarea
+                    className="tj-textarea"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onPaste={(e) => pasteImages(e, (url) => setEditImages((prev) => [...prev, url]))}
+                    style={{ minHeight: 48 }}
+                    placeholder="…paste more screenshots with Ctrl+V"
+                  />
+                  {thumbs(editImages, (url) => setEditImages((prev) => prev.filter((u) => u !== url)))}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     {EMOTIONS.map((e) => emoChip(e, editEmotion === e.key, () => setEditEmotion(editEmotion === e.key ? null : e.key)))}
                     <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
@@ -239,7 +276,7 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
                         className="btn btn-sm"
                         type="button"
                         onClick={async () => {
-                          await updateLogEntry({ id: en.id, text: editText, emotion: editEmotion, ts: null });
+                          await updateLogEntry({ id: en.id, text: editText, emotion: editEmotion, ts: null, imageUrls: editImages });
                           setEditId(null);
                           router.refresh();
                         }}
