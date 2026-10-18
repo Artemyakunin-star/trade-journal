@@ -739,6 +739,34 @@ export async function importCsvPart(fd: FormData): Promise<ImportResult> {
   return res;
 }
 
+/** Record a finished (or failed) file import in the history the Import page
+ *  shows, keeping the latest 50 per user. */
+export async function logImportResult(input: {
+  filename: string;
+  kind: string;
+  inserted: number;
+  skipped: number;
+  tradesBuilt?: number;
+  error?: string | null;
+}) {
+  const uid = await requireUserId();
+  const { importLog } = await import("@/db/schema");
+  await db.insert(importLog).values({
+    userId: uid,
+    filename: String(input.filename).slice(0, 300),
+    kind: ["EXECUTIONS", "BARS", "TRADES", "UNKNOWN"].includes(input.kind) ? input.kind : "UNKNOWN",
+    inserted: Math.max(0, Math.floor(Number(input.inserted) || 0)),
+    skipped: Math.max(0, Math.floor(Number(input.skipped) || 0)),
+    tradesBuilt: input.tradesBuilt === undefined ? null : Math.max(0, Math.floor(Number(input.tradesBuilt) || 0)),
+    error: input.error ? String(input.error).slice(0, 1000) : null,
+  });
+  await db.execute(sql`
+    DELETE FROM import_log WHERE id IN (
+      SELECT id FROM import_log WHERE user_id = ${uid} ORDER BY created_at DESC OFFSET 50
+    )`);
+  revalidatePath("/import");
+}
+
 /** If the account filter is active and the import brought trades for accounts
  *  outside it, add them — otherwise fresh trades look like they vanished. */
 async function widenAccountFilter(accounts?: string[]) {

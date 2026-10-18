@@ -1,87 +1,19 @@
 "use client";
-// CSV upload with client-side chunking: big files (tick bars) are split into
-// line-aligned pieces under the per-request body limit and sent sequentially,
-// with live progress. Errors are shown inline instead of a dead error page.
-import { useState } from "react";
-import { importCsvPart } from "@/app/actions";
+// CSV upload UI. The actual upload loop lives in lib/importStore (module
+// scope), so it keeps running — and keeps its progress — when you navigate to
+// another page and come back. Errors are shown inline instead of a dead page.
+import { useState, useSyncExternalStore } from "react";
 import ComboInput from "@/components/ComboInput";
-import type { ImportResult } from "@/lib/import";
-
-// Keep each request comfortably under Next's action body limit (4 MB
-// configured) and Vercel's ~4.5 MB hard cap, with headroom for encoding.
-const CHUNK_BYTES = 2_500_000;
-
-type Row = ImportResult & { progress?: string };
-
-function splitCsv(text: string): string[] {
-  if (text.length <= CHUNK_BYTES) return [text];
-  const nl = text.indexOf("\n");
-  const header = nl === -1 ? "" : text.slice(0, nl + 1);
-  const chunks: string[] = [];
-  let start = nl + 1;
-  while (start < text.length) {
-    let end = Math.min(start + CHUNK_BYTES, text.length);
-    if (end < text.length) {
-      const lastNl = text.lastIndexOf("\n", end);
-      if (lastNl > start) end = lastNl + 1;
-    }
-    chunks.push(header + text.slice(start, end));
-    start = end;
-  }
-  return chunks;
-}
+import { importStore, type ImportState } from "@/lib/importStore";
 
 export default function ImportForm({ knownAccounts = [] }: { knownAccounts?: string[] }) {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [pending, setPending] = useState(false);
+  const st = useSyncExternalStore<ImportState>(
+    importStore.subscribe,
+    importStore.getSnapshot,
+    importStore.getSnapshot,
+  );
   const [files, setFiles] = useState<FileList | null>(null);
-
-  const run = async () => {
-    if (!files?.length) return;
-    setPending(true);
-    setRows([]);
-    const out: Row[] = [];
-    const paint = () => setRows([...out]);
-
-    for (const f of Array.from(files)) {
-      const row: Row = { filename: f.name, kind: "BARS", inserted: 0, skipped: 0 };
-      out.push(row);
-      try {
-        const text = await f.text();
-        const chunks = splitCsv(text);
-        for (let i = 0; i < chunks.length; i++) {
-          row.progress = chunks.length > 1 ? `part ${i + 1} of ${chunks.length}…` : "importing…";
-          paint();
-          const name = chunks.length > 1 ? `${f.name} [part ${i + 1}/${chunks.length}]` : f.name;
-          const fd = new FormData();
-          fd.set("name", name);
-          fd.set("last", i === chunks.length - 1 ? "1" : "0");
-          const acc = (document.querySelector('input[name="importAccount"]') as HTMLInputElement | null)?.value ?? "";
-          fd.set("account", acc.trim());
-          fd.set("part", new Blob([chunks[i]], { type: "text/csv" }), name);
-          const r = await importCsvPart(fd);
-          row.kind = r.kind;
-          row.inserted += r.inserted;
-          row.skipped += r.skipped;
-          if (r.tradesBuilt !== undefined) row.tradesBuilt = r.tradesBuilt;
-          if (r.accounts?.length) row.accounts = r.accounts;
-          if (r.maeMfeComputed) row.maeMfeComputed = (row.maeMfeComputed ?? 0) + r.maeMfeComputed;
-          if (r.error) {
-            row.error = r.error;
-            break;
-          }
-        }
-      } catch (e) {
-        row.error =
-          "Upload failed (" +
-          (e instanceof Error ? e.message : String(e)) +
-          "). Check your connection and try this file again — already-imported rows are skipped automatically.";
-      }
-      row.progress = undefined;
-      paint();
-    }
-    setPending(false);
-  };
+  const [account, setAccount] = useState("");
 
   return (
     <>
@@ -111,17 +43,28 @@ export default function ImportForm({ knownAccounts = [] }: { knownAccounts?: str
             placeholder="e.g. ****23384 — optional"
             title="DeepCharts trade lists don't carry the account number — trades from this import will be filed under this account. Leave empty for “DeepCharts”. Ignored for NinjaTrader executions/bars files."
             width={220}
+            onValueChange={setAccount}
           />
         </label>
-        <button className="btn" type="button" disabled={pending || !files?.length} onClick={run}>
-          {pending ? "Importing…" : "Import"}
+        <button
+          className="btn"
+          type="button"
+          disabled={st.running || !files?.length}
+          onClick={() => void importStore.start(Array.from(files ?? []), account)}
+        >
+          {st.running ? "Importing…" : "Import"}
         </button>
+        {st.running && (
+          <span style={{ marginLeft: 10, fontSize: 12.5, color: "var(--muted)" }}>
+            you can browse other pages meanwhile — just don&apos;t close or reload the tab
+          </span>
+        )}
       </div>
 
-      {rows.length > 0 && (
+      {st.rows.length > 0 && (
         <div className="card" style={{ maxWidth: 640, marginTop: 14 }}>
-          <h3>Import results</h3>
-          {rows.map((r) => (
+          <h3>{st.running ? "Import progress" : "Import results"}</h3>
+          {st.rows.map((r) => (
             <div key={r.filename} style={{ fontSize: 12.5, padding: "6px 0", borderBottom: "1px solid var(--grid)" }}>
               <b>{r.filename}</b> · {r.kind.toLowerCase()}
               {r.progress && <span style={{ color: "var(--muted)" }}> · {r.progress}</span>}

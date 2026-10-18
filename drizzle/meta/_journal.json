@@ -190,6 +190,13 @@
       "when": 1791392415548,
       "tag": "0026_session_log_images",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791392415549,
+      "tag": "0027_import_log",
+      "breakpoints": true
     }
   ]
 }

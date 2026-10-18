@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import ImportIndicator from "@/components/ImportIndicator";
 import { getSettings, tzLabel } from "@/lib/settings";
 import { currentUserId, inSandbox } from "@/lib/auth";
 import { exitSandbox } from "@/app/actions";
@@ -60,6 +61,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             {children}
           </div>
         </div>
+        <ImportIndicator />
       </body>
     </html>
   );

@@ -364,6 +364,24 @@ export const sessionLog = pgTable(
   (t) => [index("session_log_user_ts_idx").on(t.userId, t.ts)],
 );
 
+/** A finished (or failed) file import — the history shown on the Import page,
+ *  so navigating away during an import doesn't erase what happened. */
+export const importLog = pgTable(
+  "import_log",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull(),
+    filename: text("filename").notNull(),
+    kind: text("kind").notNull(), // EXECUTIONS | BARS | TRADES | UNKNOWN
+    inserted: integer("inserted").notNull().default(0),
+    skipped: integer("skipped").notNull().default(0),
+    tradesBuilt: integer("trades_built"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("import_log_user_idx").on(t.userId, t.createdAt)],
+);
+
 /** Market notes: observations-hypotheses with an evidence trail. The note's
  *  weight = its confirmations minus refutations, each tied to a trading day. */
 export const notes = pgTable("notes", {

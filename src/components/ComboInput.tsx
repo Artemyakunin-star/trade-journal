@@ -13,6 +13,7 @@ export default function ComboInput({
   title,
   width,
   className = "mini-select",
+  onValueChange,
 }: {
   name: string;
   defaultValue?: string;
@@ -21,6 +22,8 @@ export default function ComboInput({
   title?: string;
   width?: number;
   className?: string;
+  /** Mirror the current value to the parent (the input stays uncontrolled-ish). */
+  onValueChange?: (v: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue);
   const [open, setOpen] = useState(false);
@@ -53,6 +56,7 @@ export default function ComboInput({
         style={{ width: "100%" }}
         onChange={(e) => {
           setValue(e.target.value);
+          onValueChange?.(e.target.value);
           setTyped(true);
           show();
         }}
@@ -78,6 +82,7 @@ export default function ComboInput({
               onMouseDown={(e) => {
                 e.preventDefault(); // keep input focus, fire before blur
                 setValue(o);
+                onValueChange?.(o);
                 setOpen(false);
               }}
             >
