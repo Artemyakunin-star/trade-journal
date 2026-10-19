@@ -1380,6 +1380,33 @@ export async function updateNote(input: { id: string; text: string; categories: 
   revalidatePath("/", "layout");
 }
 
+/** Attach a market note (lesson) to an idea — "respect this one here". */
+export async function attachNoteToIdea(fd: FormData) {
+  const uid = await requireUserId();
+  const ideaId = str(fd, "ideaId");
+  const noteId = str(fd, "noteId");
+  if (!ideaId || !noteId) return;
+  const [idea, note] = await Promise.all([
+    db.query.ideas.findFirst({ where: (i, { and: and_, eq: eq_ }) => and_(eq_(i.id, ideaId), eq_(i.userId, uid)) }),
+    db.query.notes.findFirst({ where: (n, { and: and_, eq: eq_ }) => and_(eq_(n.id, noteId), eq_(n.userId, uid)) }),
+  ]);
+  if (!idea || !note) return;
+  const ids = [...new Set([...(idea.noteIds ?? []), noteId])];
+  await db.update(ideas).set({ noteIds: ids, updatedAt: new Date() }).where(eq(ideas.id, ideaId));
+  revalidatePath("/", "layout");
+}
+
+export async function detachNoteFromIdea(fd: FormData) {
+  const uid = await requireUserId();
+  const ideaId = str(fd, "ideaId");
+  const noteId = str(fd, "noteId");
+  const idea = await db.query.ideas.findFirst({ where: (i, { and: and_, eq: eq_ }) => and_(eq_(i.id, ideaId), eq_(i.userId, uid)) });
+  if (!idea) return;
+  const ids = (idea.noteIds ?? []).filter((x) => x !== noteId);
+  await db.update(ideas).set({ noteIds: ids.length ? ids : null, updatedAt: new Date() }).where(eq(ideas.id, ideaId));
+  revalidatePath("/", "layout");
+}
+
 /** Confirm or refute a note on a given day — the evidence trail. */
 export async function addNoteEvidence(fd: FormData) {
   const uid = await requireUserId();

@@ -50,6 +50,8 @@ export type IdeaRow = {
   confirmTypes: string[] | null;
   redFlags: string[] | null;
   entryPlanned: boolean | null;
+  /** Market notes (Notes page) pinned to this idea. */
+  noteIds: string[] | null;
   createdAt: Date;
   invalidatedAt: Date | null;
   trades: TradeRow[];

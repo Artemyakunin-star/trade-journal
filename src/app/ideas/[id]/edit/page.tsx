@@ -10,7 +10,7 @@ import AttachTradesPicker from "@/components/AttachTradesPicker";
 import DocEditor from "@/components/DocEditor";
 import Tiles from "@/components/Tiles";
 import { db } from "@/db";
-import { attachTradesToIdea, createMissedTrade, deleteIdea, deleteManualTrade, deleteMissedTrade, setIdeaDate, setMissedManual, setTradeIdea } from "@/app/actions";
+import { attachNoteToIdea, attachTradesToIdea, createMissedTrade, deleteIdea, deleteManualTrade, deleteMissedTrade, detachNoteFromIdea, setIdeaDate, setMissedManual, setTradeIdea } from "@/app/actions";
 import { getAllIdeas, getAllTrades, rrStats, type Tile } from "@/lib/metrics";
 import type { IdeaRow } from "@/lib/metrics";
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
@@ -55,6 +55,24 @@ export default async function EditIdeaPage({
     where: (m, { and: and_, eq: eq_ }) => and_(eq_(m.ideaId, id), eq_(m.userId, uid)),
     orderBy: (m, { asc: asc_ }) => [asc_(m.plannedTime)],
   });
+
+  // Market notes: the ones pinned to this idea + the attachable rest (by weight).
+  const allNotes = await db.query.notes.findMany({
+    where: (n, { eq: eq_ }) => eq_(n.userId, uid),
+    with: { evidence: true },
+  });
+  const weightedNotes = allNotes.map((n) => ({
+    n,
+    c: n.evidence.filter((e) => e.verdict === "CONFIRMED").length,
+    r: n.evidence.filter((e) => e.verdict === "REFUTED").length,
+  }));
+  const pinnedIds = idea.noteIds ?? [];
+  const linkedNotes = pinnedIds
+    .map((nid) => weightedNotes.find((w) => w.n.id === nid))
+    .filter((w): w is (typeof weightedNotes)[number] => !!w);
+  const attachableNotes = weightedNotes
+    .filter((w) => !w.n.archived && !pinnedIds.includes(w.n.id))
+    .sort((a, b) => b.c - b.r - (a.c - a.r));
   const specs = Object.fromEntries(
     instruments.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
   );
@@ -355,6 +373,49 @@ export default async function EditIdeaPage({
         initialEntryPlanned={idea.entryPlanned}
         initialRedFlags={idea.redFlags ?? []}
       />
+
+      {/* ---------- market notes attached to this idea ---------- */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3>
+          Notes for this idea <span className="sub">lessons from the Notes page you want in front of you here</span>
+        </h3>
+        {linkedNotes.length === 0 && (
+          <div className="section-note" style={{ margin: "0 0 8px" }}>
+            Nothing attached yet — pick a note below and it will stay pinned to this idea.
+          </div>
+        )}
+        {linkedNotes.map(({ n, c, r }) => (
+          <div key={n.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5, padding: "4px 0", borderTop: "1px solid var(--border)" }}>
+            <span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ color: "var(--pos)", fontWeight: 700 }}>✓{c}</span>{" "}
+              <span style={{ color: "var(--crit)", fontWeight: 700 }}>✗{r}</span>
+            </span>
+            <span style={{ color: "var(--ink-2)", flex: 1 }}>
+              {n.text}
+              {n.archived && <span style={{ color: "var(--muted)" }}> · archived</span>}
+            </span>
+            <Link className="linklike" href="/notes" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>open →</Link>
+            <form action={detachNoteFromIdea} style={{ display: "inline" }}>
+              <input type="hidden" name="ideaId" value={idea.id} />
+              <input type="hidden" name="noteId" value={n.id} />
+              <button type="submit" title="Unpin this note from the idea (the note itself stays)" style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, padding: 0 }}>✕</button>
+            </form>
+          </div>
+        ))}
+        {attachableNotes.length > 0 && (
+          <form action={attachNoteToIdea} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+            <input type="hidden" name="ideaId" value={idea.id} />
+            <select className="tj-select" name="noteId" style={{ fontSize: 12.5, maxWidth: 480 }}>
+              {attachableNotes.map(({ n, c, r }) => (
+                <option key={n.id} value={n.id}>
+                  {`✓${c} ✗${r} · ${n.text.length > 90 ? n.text.slice(0, 90) + "…" : n.text}`}
+                </option>
+              ))}
+            </select>
+            <button className="btn btn-sm" type="submit">Attach</button>
+          </form>
+        )}
+      </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
         <h3 style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
