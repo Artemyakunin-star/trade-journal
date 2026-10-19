@@ -1360,6 +1360,26 @@ export async function createNote(fd: FormData) {
   revalidatePath("/notes");
 }
 
+/** Edit a note's text and categories (the evidence trail stays untouched).
+ *  updatedAt is NOT bumped — editing the wording shouldn't change the note's
+ *  position in weight-sorted lists the way fresh evidence does. */
+export async function updateNote(input: { id: string; text: string; categories: string[]; newCat?: string }) {
+  const uid = await requireUserId();
+  const text = (input.text ?? "").trim();
+  if (!text) return;
+  const cats = [...new Set((input.categories ?? []).map(String).map((s) => s.trim()).filter(Boolean))].slice(0, 12);
+  const newCat = (input.newCat ?? "").trim();
+  if (newCat && !cats.some((c) => c.toLowerCase() === newCat.toLowerCase())) cats.push(newCat);
+  const { notes } = await import("@/db/schema");
+  await db.update(notes).set({ text, categories: cats }).where(and(eq(notes.id, input.id), eq(notes.userId, uid)));
+
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  const missing = cats.filter((c) => !prefs.noteCategoryOptions.some((o) => o.toLowerCase() === c.toLowerCase()));
+  if (missing.length) await setSetting(uid, "noteCategoryOptions", [...prefs.noteCategoryOptions, ...missing]);
+  revalidatePath("/", "layout");
+}
+
 /** Confirm or refute a note on a given day — the evidence trail. */
 export async function addNoteEvidence(fd: FormData) {
   const uid = await requireUserId();

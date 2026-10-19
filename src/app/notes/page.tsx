@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { addNoteEvidence, createNote, deleteNote, deleteNoteEvidence, toggleNoteArchived } from "@/app/actions";
 import { getSettings } from "@/lib/settings";
 import { fmtDate, kyivDateOf } from "@/lib/format";
+import NoteBody from "@/components/NoteBody";
 
 export const dynamic = "force-dynamic";
 
@@ -100,15 +101,13 @@ export default async function NotesPage({ searchParams }: { searchParams: Promis
           <div key={n.id} className="card" style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 280 }}>
-                <div style={{ fontSize: 13.5, color: "var(--ink)", lineHeight: 1.55 }}>{n.text}</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7, alignItems: "center" }}>
-                  {(n.categories ?? []).map((c) => (
-                    <span key={c} className="status-chip">{c}</span>
-                  ))}
-                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
-                    noted {fmtDate(kyivDateOf(n.createdAt, tz), prefs.dateFormat)}
-                  </span>
-                </div>
+                <NoteBody
+                  id={n.id}
+                  text={n.text}
+                  categories={n.categories ?? []}
+                  allCats={cats}
+                  notedLabel={`noted ${fmtDate(kyivDateOf(n.createdAt, tz), prefs.dateFormat)}`}
+                />
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>
