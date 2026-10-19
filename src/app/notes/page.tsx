@@ -4,7 +4,8 @@
 import Link from "next/link";
 import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
-import { addNoteEvidence, createNote, deleteNote, deleteNoteEvidence, toggleNoteArchived } from "@/app/actions";
+import { addNoteEvidence, deleteNote, deleteNoteEvidence, toggleNoteArchived } from "@/app/actions";
+import NewNoteForm from "@/components/NewNoteForm";
 import { getSettings } from "@/lib/settings";
 import { fmtDate, kyivDateOf } from "@/lib/format";
 import NoteBody from "@/components/NoteBody";
@@ -55,26 +56,7 @@ export default async function NotesPage({ searchParams }: { searchParams: Promis
         <h3>
           New note <span className="sub">one observation, one or two sentences — the market will grade it later</span>
         </h3>
-        <form action={createNote}>
-          <textarea
-            className="tj-textarea"
-            name="text"
-            required
-            placeholder="e.g. CPI day, strong expansion down. Expected a retrace — none came: a small range under the level, then continuation lower."
-            style={{ width: "100%", minHeight: 64, marginBottom: 8 }}
-          />
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 12, color: "var(--muted)" }}>Categories:</span>
-            {cats.map((c) => (
-              <label key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--ink)", cursor: "pointer" }}>
-                <input type="checkbox" name="cat" value={c} style={{ accentColor: "var(--s1)" }} />
-                {c}
-              </label>
-            ))}
-            <input className="tj-input" name="newcat" placeholder="+ new category…" style={{ width: 150, fontSize: 12 }} />
-            <button className="btn btn-sm" type="submit">Save note</button>
-          </div>
-        </form>
+        <NewNoteForm cats={cats} />
       </div>
 
       {/* ---------- category filter ---------- */}
@@ -105,6 +87,7 @@ export default async function NotesPage({ searchParams }: { searchParams: Promis
                   id={n.id}
                   text={n.text}
                   categories={n.categories ?? []}
+                  imageUrls={n.imageUrls ?? []}
                   allCats={cats}
                   notedLabel={`noted ${fmtDate(kyivDateOf(n.createdAt, tz), prefs.dateFormat)}`}
                 />

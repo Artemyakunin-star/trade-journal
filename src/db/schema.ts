@@ -391,6 +391,7 @@ export const notes = pgTable("notes", {
   userId: text("user_id").notNull(),
   text: text("text").notNull(),
   categories: jsonb("categories").$type<string[]>(),
+  imageUrls: jsonb("image_urls").$type<string[]>(), // pasted screenshots
   archived: boolean("archived").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

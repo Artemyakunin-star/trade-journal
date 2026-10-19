@@ -1350,8 +1350,9 @@ export async function createNote(fd: FormData) {
   const cats = [...new Set(fd.getAll("cat").map(String).map((s) => s.trim()).filter(Boolean))];
   const newCat = str(fd, "newcat").trim();
   if (newCat && !cats.some((c) => c.toLowerCase() === newCat.toLowerCase())) cats.push(newCat);
+  const imageUrls = cleanImageUrls(fd.getAll("img").map(String));
   const { notes } = await import("@/db/schema");
-  await db.insert(notes).values({ userId: uid, text, categories: cats });
+  await db.insert(notes).values({ userId: uid, text, categories: cats, imageUrls: imageUrls.length ? imageUrls : null });
 
   const { getSettings } = await import("@/lib/settings");
   const prefs = await getSettings(uid);
@@ -1363,7 +1364,7 @@ export async function createNote(fd: FormData) {
 /** Edit a note's text and categories (the evidence trail stays untouched).
  *  updatedAt is NOT bumped — editing the wording shouldn't change the note's
  *  position in weight-sorted lists the way fresh evidence does. */
-export async function updateNote(input: { id: string; text: string; categories: string[]; newCat?: string }) {
+export async function updateNote(input: { id: string; text: string; categories: string[]; newCat?: string; imageUrls?: string[] }) {
   const uid = await requireUserId();
   const text = (input.text ?? "").trim();
   if (!text) return;
@@ -1371,7 +1372,12 @@ export async function updateNote(input: { id: string; text: string; categories: 
   const newCat = (input.newCat ?? "").trim();
   if (newCat && !cats.some((c) => c.toLowerCase() === newCat.toLowerCase())) cats.push(newCat);
   const { notes } = await import("@/db/schema");
-  await db.update(notes).set({ text, categories: cats }).where(and(eq(notes.id, input.id), eq(notes.userId, uid)));
+  const set: Record<string, unknown> = { text, categories: cats };
+  if (input.imageUrls !== undefined) {
+    const imgs = cleanImageUrls(input.imageUrls);
+    set.imageUrls = imgs.length ? imgs : null;
+  }
+  await db.update(notes).set(set).where(and(eq(notes.id, input.id), eq(notes.userId, uid)));
 
   const { getSettings } = await import("@/lib/settings");
   const prefs = await getSettings(uid);
