@@ -7,14 +7,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import { getJournalVersion, listJournalVersions, restoreJournalVersion, saveDoc, saveIdeaJournal, saveMissedJournal, saveTradeJournal } from "@/app/actions";
+import { getJournalVersion, listJournalVersions, restoreJournalVersion, saveDoc, saveIdeaJournal, saveMissedJournal, saveRecapJournal, saveTradeJournal } from "@/app/actions";
 
 type Props = {
   docId: string;
   initialTitle: string;
   initialContent: unknown | null;
   /** "doc" (Plans document, has a title), "trade" (per-trade journal) or "idea" (per-idea write-up). */
-  kind?: "doc" | "trade" | "idea" | "missed";
+  kind?: "doc" | "trade" | "idea" | "missed" | "recap";
 };
 
 /** Downscale + recompress a pasted image so the DB stays small. */
@@ -111,6 +111,7 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
     if (kind === "trade") await saveTradeJournal(docId, json);
     else if (kind === "missed") await saveMissedJournal(docId, json);
     else if (kind === "idea") await saveIdeaJournal(docId, json);
+    else if (kind === "recap") await saveRecapJournal(docId, json);
     else await saveDoc(docId, title, json);
     setStatus("saved");
   }, [editor, docId, title, kind]);

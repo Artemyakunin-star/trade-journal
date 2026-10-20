@@ -185,6 +185,60 @@ export async function saveIdeaJournal(id: string, content: unknown) {
   revalidatePath(`/ideas/${id}/edit`);
 }
 
+/** Autosave for the evening recap's rich write-up (with version history). */
+export async function saveRecapJournal(id: string, content: unknown) {
+  const uid = await requireUserId();
+  if (content && typeof content === "object") content = pruneEmptyImages(content as TipTapNode);
+  const { dayRecaps } = await import("@/db/schema");
+  await snapshotJournal(uid, "recap", id, await journalContentOf(uid, "recap", id));
+  await db.update(dayRecaps).set({ journal: content, updatedAt: new Date() }).where(and(eq(dayRecaps.id, id), eq(dayRecaps.userId, uid)));
+  revalidatePath("/recap");
+}
+
+/** The recap's structured fields: verdict chip + worked / didn't textareas. */
+export async function saveRecapFields(input: { id: string; verdict?: string | null; wentWell?: string; wentWrong?: string }) {
+  const uid = await requireUserId();
+  const { dayRecaps } = await import("@/db/schema");
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (input.verdict !== undefined) {
+    set.verdict = input.verdict && ["PLAYED_OUT", "PARTIAL", "AGAINST", "NO_PLAN"].includes(input.verdict) ? input.verdict : null;
+  }
+  if (input.wentWell !== undefined) set.wentWell = String(input.wentWell).trim() || null;
+  if (input.wentWrong !== undefined) set.wentWrong = String(input.wentWrong).trim() || null;
+  await db.update(dayRecaps).set(set).where(and(eq(dayRecaps.id, input.id), eq(dayRecaps.userId, uid)));
+  revalidatePath("/", "layout");
+}
+
+/** Move a recap to another day (wrote it the next morning, picked the wrong
+ *  date, etc.). One recap per day — a taken date shows a warning instead. */
+export async function moveRecapDate(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const date = str(fd, "date");
+  const { dayRecaps } = await import("@/db/schema");
+  const row = await db.query.dayRecaps.findFirst({ where: (r, { and: and_, eq: eq_ }) => and_(eq_(r.id, id), eq_(r.userId, uid)) });
+  if (!row) redirect("/recap");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date === row.date) redirect(`/recap/${row.date}`);
+  const taken = await db.query.dayRecaps.findFirst({
+    where: (r, { and: and_, eq: eq_, ne: ne_ }) => and_(eq_(r.userId, uid), eq_(r.date, date), ne_(r.id, id)),
+  });
+  if (taken) redirect(`/recap/${row.date}?dateTaken=${date}`);
+  await db.update(dayRecaps).set({ date, updatedAt: new Date() }).where(and(eq(dayRecaps.id, id), eq(dayRecaps.userId, uid)));
+  revalidatePath("/", "layout");
+  redirect(`/recap/${date}`);
+}
+
+/** Delete an (accidental) recap — e.g. opened on a wrong date and left empty. */
+export async function deleteRecap(fd: FormData) {
+  const uid = await requireUserId();
+  const id = str(fd, "id");
+  const { dayRecaps, journalVersions } = await import("@/db/schema");
+  await db.delete(journalVersions).where(and(eq(journalVersions.kind, "recap"), eq(journalVersions.refId, id), eq(journalVersions.userId, uid)));
+  await db.delete(dayRecaps).where(and(eq(dayRecaps.id, id), eq(dayRecaps.userId, uid)));
+  revalidatePath("/", "layout");
+  redirect("/recap");
+}
+
 /** Autosave for the rich per-trade journal (Notion-like editor on trade page). */
 export async function saveTradeJournal(id: string, content: unknown) {
   const uid = await requireUserId();
@@ -1286,6 +1340,11 @@ async function journalContentOf(uid: string, kind: string, refId: string): Promi
     const r = await db.query.missedTrades.findFirst({ where: (m, { and: and_, eq: eq_ }) => and_(eq_(m.id, refId), eq_(m.userId, uid)) });
     return r?.journal ?? null;
   }
+  if (kind === "recap") {
+    const { dayRecaps } = await import("@/db/schema");
+    const r = await db.query.dayRecaps.findFirst({ where: (x, { and: and_, eq: eq_ }) => and_(eq_(x.id, refId), eq_(x.userId, uid)) });
+    return r?.journal ?? null;
+  }
   return null;
 }
 
@@ -1299,6 +1358,9 @@ async function writeJournalContent(uid: string, kind: string, refId: string, con
   } else if (kind === "missed") {
     const { missedTrades } = await import("@/db/schema");
     await db.update(missedTrades).set({ journal: content, updatedAt: new Date() }).where(and(eq(missedTrades.id, refId), eq(missedTrades.userId, uid)));
+  } else if (kind === "recap") {
+    const { dayRecaps } = await import("@/db/schema");
+    await db.update(dayRecaps).set({ journal: content, updatedAt: new Date() }).where(and(eq(dayRecaps.id, refId), eq(dayRecaps.userId, uid)));
   }
 }
 

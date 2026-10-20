@@ -194,6 +194,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
         <h1>Day · {fmtDateLong(date)}</h1>
         <AccountFilter accounts={distinctAccounts(rawTrades)} selected={selectedAccounts} />
         <Link href={`/day/${date}/plan`} className="btn ghost">{plan ? "Edit plan" : "Write plan"}</Link>
+        <Link href={`/recap/${date}`} className="btn ghost" title="The evening recap — did the plan work?">☾ Recap</Link>
         <Link href={`/ideas/new?date=${date}`} className="btn">+ Idea</Link>
         <Link href={`/trades/new?date=${date}`} className="btn">+ Trade</Link>
       </div>

@@ -366,6 +366,27 @@ export const sessionLog = pgTable(
   (t) => [index("session_log_user_ts_idx").on(t.userId, t.ts)],
 );
 
+/** The evening recap of a trading day — written AFTER the session, separate
+ *  from the morning plan so hindsight never leaks into the forecast. One per
+ *  user per date; the date can be moved (wrote it the next morning, etc.). */
+export const dayRecaps = pgTable(
+  "day_recaps",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull(),
+    date: date("date", { mode: "string" }).notNull(),
+    /** Did the plan play out: PLAYED_OUT | PARTIAL | AGAINST | NO_PLAN */
+    verdict: text("verdict"),
+    wentWell: text("went_well"), // strong sides of the plan / execution
+    wentWrong: text("went_wrong"), // what to change
+    /** Free-form write-up with screenshots (TipTap), like plans. */
+    journal: jsonb("journal"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("day_recaps_user_date_uq").on(t.userId, t.date)],
+);
+
 /** A finished (or failed) file import — the history shown on the Import page,
  *  so navigating away during an import doesn't erase what happened. */
 export const importLog = pgTable(

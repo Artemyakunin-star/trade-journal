@@ -42,6 +42,11 @@ export default async function DocPage({
           <Link href="/plans" className="linklike">Plans</Link>{" "}
           <span style={{ color: "var(--muted)" }}>/</span> {doc.title}
         </h1>
+        {docDate && (
+          <Link className="btn ghost btn-sm" href={`/recap/${docDate}`} title="The evening recap of this day — did the plan work?">
+            ☾ Evening recap
+          </Link>
+        )}
         <form action={setDocDate} style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="hidden" name="id" value={doc.id} />
           <span style={{ fontSize: 12, color: "var(--muted)" }}>{docDate ? "plan for" : "no day — Live won't see it:"}</span>
