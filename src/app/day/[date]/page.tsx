@@ -13,6 +13,7 @@ import { bars, docs, executions, plans } from "@/db/schema";
 import { checkIdea, type IdeaCheck } from "@/lib/rules";
 import { addScenario, deleteLogEntry, deleteScenario, setScenarioOutcome } from "@/app/actions";
 import ConfirmButton from "@/components/ConfirmButton";
+import ZoomImg from "@/components/ZoomImg";
 import AccountFilter from "@/components/AccountFilter";
 import {
   dayAggregates,
@@ -406,9 +407,7 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                       {(l.imageUrls ?? (l.imageUrl ? [l.imageUrl] : [])).map((u) => (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <a key={u} href={u} target="_blank" rel="noreferrer" title="Open the screenshot full-size in a new tab">
-                          <img src={u} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 8, border: "1px solid var(--border)", cursor: "zoom-in" }} />
-                        </a>
+                        <ZoomImg key={u} src={u} thumbHeight={220} />
                       ))}
                     </div>
                   )}

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateNote } from "@/app/actions";
 import { handleImagePaste, imageThumbs } from "@/lib/pasteImage";
+import ZoomImg from "@/components/ZoomImg";
 
 export default function NoteBody({
   id,
@@ -38,9 +39,7 @@ export default function NoteBody({
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
             {imageUrls.map((u) => (
               // eslint-disable-next-line @next/next/no-img-element
-              <a key={u} href={u} target="_blank" rel="noreferrer" title="Open the screenshot full-size in a new tab">
-                <img src={u} alt="" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 8, border: "1px solid var(--border)", cursor: "zoom-in" }} />
-              </a>
+              <ZoomImg key={u} src={u} thumbHeight={220} />
             ))}
           </div>
         )}

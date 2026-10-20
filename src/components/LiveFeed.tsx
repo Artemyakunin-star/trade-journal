@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addLogEntry, deleteIdea, deleteLogEntry, ideaFromLogEntry, updateLogEntry } from "@/app/actions";
 import ConfirmButton from "@/components/ConfirmButton";
+import ZoomImg from "@/components/ZoomImg";
 
 export type LiveEntry = {
   id: string;
@@ -192,9 +193,7 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                       {en.imageUrls.map((u) => (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <a key={u} href={u} target="_blank" rel="noreferrer" title="Open the screenshot full-size in a new tab">
-                          <img src={u} alt="" style={{ maxWidth: "100%", maxHeight: 260, borderRadius: 8, border: "1px solid var(--border)", cursor: "zoom-in" }} />
-                        </a>
+                        <ZoomImg key={u} src={u} thumbHeight={260} />
                       ))}
                     </div>
                   )}
