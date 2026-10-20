@@ -118,6 +118,7 @@ export default async function IdeasPage({
         <select name="status" defaultValue={sp.status ?? ""} className="tj-select">
           <option value="">All statuses</option>
           <option value="PLAYED_OUT">Played out</option>
+          <option value="PARTIAL">Partial</option>
           <option value="INVALIDATED">Invalidated</option>
           <option value="ACTIVE">Active</option>
         </select>

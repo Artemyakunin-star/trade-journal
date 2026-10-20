@@ -27,6 +27,7 @@ export const directionEnum = pgEnum("direction", ["LONG", "SHORT"]);
 export const ideaStatusEnum = pgEnum("idea_status", [
   "ACTIVE", // idea is still valid, may add entries
   "PLAYED_OUT", // idea worked
+  "PARTIAL", // worked partially (e.g. first target only, then faded)
   "INVALIDATED", // invalidation condition hit — idea is dead
 ]);
 

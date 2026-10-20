@@ -112,6 +112,7 @@ export default function IdeaForm({
             <select className="tj-select" name="status" defaultValue={idea.status}>
               <option value="ACTIVE">active</option>
               <option value="PLAYED_OUT">played out</option>
+              <option value="PARTIAL">partially played out</option>
               <option value="INVALIDATED">invalidated</option>
             </select>
           </div>

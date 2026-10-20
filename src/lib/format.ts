@@ -258,6 +258,7 @@ export const TRIGGER_LABEL: Record<string, string> = {
 export const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   ACTIVE: { text: "active", cls: "active" },
   PLAYED_OUT: { text: "played out", cls: "done" },
+  PARTIAL: { text: "partial", cls: "part" },
   INVALIDATED: { text: "invalidated", cls: "invalid" },
 };
 

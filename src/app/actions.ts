@@ -17,7 +17,7 @@ import { TIMEZONES } from "@/lib/settings";
 // ---------- ideas ----------
 
 const IDEA_TRIGGERS = ["PLAN", "LEVEL", "NEWS", "FOMO", "TILT", "REVENGE"] as const;
-const IDEA_STATUSES = ["ACTIVE", "PLAYED_OUT", "INVALIDATED"] as const;
+const IDEA_STATUSES = ["ACTIVE", "PLAYED_OUT", "PARTIAL", "INVALIDATED"] as const;
 const GRADES = ["A_PLUS", "A", "A_MINUS", "B_PLUS", "B", "B_MINUS", "C_PLUS", "C", "C_MINUS", "D", "F"] as const;
 
 function str(fd: FormData, name: string): string {
