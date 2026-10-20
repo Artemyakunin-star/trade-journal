@@ -192,7 +192,9 @@ export default function LiveFeed({ entries, instruments }: { entries: LiveEntry[
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                       {en.imageUrls.map((u) => (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img key={u} src={u} alt="" style={{ maxWidth: "100%", maxHeight: 260, borderRadius: 8, border: "1px solid var(--border)" }} />
+                        <a key={u} href={u} target="_blank" rel="noreferrer" title="Open the screenshot full-size in a new tab">
+                          <img src={u} alt="" style={{ maxWidth: "100%", maxHeight: 260, borderRadius: 8, border: "1px solid var(--border)", cursor: "zoom-in" }} />
+                        </a>
                       ))}
                     </div>
                   )}

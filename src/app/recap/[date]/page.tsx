@@ -72,6 +72,12 @@ export default async function RecapPage({
     }),
   ]);
 
+  const logIdeaIds = [...new Set(dayLog.map((l) => l.ideaId).filter((x): x is string => !!x))];
+  const logIdeas = logIdeaIds.length
+    ? await db.query.ideas.findMany({ where: (i, { and: and_, eq: eq_, inArray: in_ }) => and_(eq_(i.userId, uid), in_(i.id, logIdeaIds)) })
+    : [];
+  const logIdeaTitle = new Map(logIdeas.map((i) => [i.id, i.title]));
+
   const closed = dayTrades.filter((t) => t.pnl !== null);
   const pnl = closed.reduce((a, t) => a + Number(t.pnl), 0);
   const rogue = dayTrades.filter((t) => !t.ideaId).length;
@@ -186,17 +192,46 @@ export default async function RecapPage({
           <h3>
             What you wrote during the session <span className="sub">the live feed of {fmtDate(date, prefs.dateFormat)}</span>
           </h3>
-          {dayLog.map((l) => (
-            <div key={l.id} style={{ display: "flex", gap: 10, alignItems: "baseline", borderTop: "1px solid var(--border)", padding: "5px 0", fontSize: 12.5 }}>
-              <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--muted)", width: 44, flex: "0 0 auto" }}>{fmtTimeKyiv(l.ts, false, tz)}</span>
-              <span style={{ color: "var(--ink-2)", flex: 1, whiteSpace: "pre-wrap" }}>{l.text}</span>
-              {l.emotion && (
-                <span style={{ color: l.emotion === "CALM" ? "var(--pos)" : l.emotion === "TENSE" ? "var(--warn)" : "var(--crit)", fontWeight: 600, fontSize: 11.5 }}>
-                  {l.emotion.toLowerCase()}
+          {dayLog.map((l) => {
+            const imgs = l.imageUrls ?? (l.imageUrl ? [l.imageUrl] : []);
+            return (
+              <div key={l.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", borderTop: "1px solid var(--border)", padding: "6px 0", fontSize: 12.5 }}>
+                <Link
+                  href={`/day/${date}`}
+                  className="linklike"
+                  title="Open this day's page (the full feed and the timeline)"
+                  style={{ fontVariantNumeric: "tabular-nums", color: "var(--muted)", width: 44, flex: "0 0 auto" }}
+                >
+                  {fmtTimeKyiv(l.ts, false, tz)}
+                </Link>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ color: "var(--ink-2)", whiteSpace: "pre-wrap" }}>{l.text}</span>
+                  {imgs.length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                      {imgs.map((u) => (
+                        <a key={u} href={u} target="_blank" rel="noreferrer" title="Open the screenshot full-size in a new tab">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={u} alt="" style={{ maxHeight: 120, borderRadius: 6, border: "1px solid var(--border)", cursor: "zoom-in" }} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span style={{ display: "inline-flex", gap: 8, alignItems: "baseline", flex: "0 0 auto" }}>
+                  {l.ideaId && (
+                    <Link className="linklike" href={`/ideas/${l.ideaId}/edit`} style={{ fontSize: 11.5 }}>
+                      → {logIdeaTitle.get(l.ideaId) ?? "idea"}
+                    </Link>
+                  )}
+                  {l.emotion && (
+                    <span style={{ color: l.emotion === "CALM" ? "var(--pos)" : l.emotion === "TENSE" ? "var(--warn)" : "var(--crit)", fontWeight: 600, fontSize: 11.5 }}>
+                      {l.emotion.toLowerCase()}
+                    </span>
+                  )}
                 </span>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
