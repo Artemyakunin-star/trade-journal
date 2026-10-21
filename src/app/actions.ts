@@ -1183,6 +1183,7 @@ export async function saveIdeaChecklist(input: {
   confirmBefore: boolean | null;
   confirmTypes: string[];
   entryPlanned: boolean | null;
+  earlyEntry: boolean | null;
   redFlags: string[];
 }) {
   const uid = await requireUserId();
@@ -1206,6 +1207,7 @@ export async function saveIdeaChecklist(input: {
       confirmType: confirmTypes[0] ?? null,
       redFlags,
       entryPlanned: b(input.entryPlanned),
+      earlyEntry: b(input.earlyEntry),
       updatedAt: new Date(),
     })
     .where(and(eq(ideas.id, idea.id), eq(ideas.userId, uid)));

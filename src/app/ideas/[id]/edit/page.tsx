@@ -371,6 +371,7 @@ export default async function EditIdeaPage({
         initialConfirmBefore={idea.confirmBefore}
         initialConfirmTypes={idea.confirmTypes ?? (idea.confirmType ? [idea.confirmType] : [])}
         initialEntryPlanned={idea.entryPlanned}
+        initialEarlyEntry={idea.earlyEntry}
         initialRedFlags={idea.redFlags ?? []}
       />
 

@@ -240,6 +240,8 @@ export const ideas = pgTable(
     redFlags: jsonb("red_flags").$type<string[]>(),
     /** "Entry per plan — from the zone, not chasing." */
     entryPlanned: boolean("entry_planned"),
+    /** Jumped in before the setup was ready — an admitted mistake, −1 grade. */
+    earlyEntry: boolean("early_entry"),
     /** Market notes (lessons) attached to this idea — "respect these here". */
     noteIds: jsonb("note_ids").$type<string[]>(),
     comment: text("comment"), // psychological state, free text

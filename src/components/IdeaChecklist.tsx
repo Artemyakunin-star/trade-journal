@@ -33,6 +33,7 @@ export default function IdeaChecklist({
   initialConfirmBefore,
   initialConfirmTypes,
   initialEntryPlanned,
+  initialEarlyEntry,
   initialRedFlags,
 }: {
   ideaId: string;
@@ -52,6 +53,7 @@ export default function IdeaChecklist({
   initialConfirmBefore: boolean | null;
   initialConfirmTypes: string[];
   initialEntryPlanned: boolean | null;
+  initialEarlyEntry: boolean | null;
   initialRedFlags: string[];
 }) {
   const [setups, setSetups] = useState<string[]>(initialSetups);
@@ -59,6 +61,7 @@ export default function IdeaChecklist({
   const [confirmBefore, setConfirmBefore] = useState<boolean | null>(initialConfirmBefore);
   const [confirmTypes, setConfirmTypes] = useState<string[]>(initialConfirmTypes);
   const [entryPlanned, setEntryPlanned] = useState<boolean | null>(initialEntryPlanned);
+  const [earlyEntry, setEarlyEntry] = useState<boolean | null>(initialEarlyEntry);
   const [redFlags, setRedFlags] = useState<string[]>(initialRedFlags);
   const [extraFlag, setExtraFlag] = useState<string[]>([]);
   const [addingFlag, setAddingFlag] = useState(false);
@@ -82,10 +85,11 @@ export default function IdeaChecklist({
     confirmBefore: boolean | null;
     confirmTypes: string[];
     entryPlanned: boolean | null;
+    earlyEntry: boolean | null;
     redFlags: string[];
   };
   const persist = (patch: Partial<Vals>) => {
-    const vals: Vals = { setups, rulesFollowed, confirmBefore, confirmTypes, entryPlanned, redFlags, ...patch };
+    const vals: Vals = { setups, rulesFollowed, confirmBefore, confirmTypes, entryPlanned, earlyEntry, redFlags, ...patch };
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       setSaved("saving");
@@ -133,6 +137,10 @@ export default function IdeaChecklist({
     if (limitsBroken) {
       i = Math.min(i + 1, 3);
       reasons.push("trading rules broken −1");
+    }
+    if (earlyEntry === true) {
+      i = Math.min(i + 1, 3);
+      reasons.push("early entry −1");
     }
     if (trigger === "TILT" || trigger === "FOMO") {
       i = Math.min(i + 1, 3);
@@ -330,11 +338,25 @@ export default function IdeaChecklist({
 
       {/* entry */}
       {row(
-        entryPlanned,
+        earlyEntry === true ? false : entryPlanned,
         <>
           <b>Entry.</b> From the planned zone, not chasing, stop where it was planned?
         </>,
-        checkbox(entryPlanned, (v) => { setEntryPlanned(v); persist({ entryPlanned: v }); }, "entry per plan"),
+        <>
+          {checkbox(entryPlanned, (v) => { setEntryPlanned(v); persist({ entryPlanned: v }); }, "entry per plan")}
+          <label
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: earlyEntry === true ? "var(--crit)" : "var(--ink)", cursor: "pointer" }}
+            title="Honest admission: entered before the setup was ready (no confirmation yet / price not in the zone). Counts as a mistake — −1 on the suggested grade."
+          >
+            <input
+              type="checkbox"
+              checked={earlyEntry === true}
+              onChange={(e) => { setEarlyEntry(e.target.checked); persist({ earlyEntry: e.target.checked }); }}
+              style={{ accentColor: "var(--crit)" }}
+            />
+            early entry — a mistake (−1)
+          </label>
+        </>,
       )}
 
       {/* red flags — what was AGAINST the idea */}
