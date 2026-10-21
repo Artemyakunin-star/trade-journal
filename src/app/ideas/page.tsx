@@ -158,7 +158,8 @@ export default async function IdeasPage({
                 <th>Dir</th>
                 <th>Trigger</th>
                 <th>Status</th>
-                <th>Grade</th>
+                <th title="Idea grade (context quality)">Idea</th>
+                <th title="Execution grade (behavior)">Exec</th>
                 <th className="num">P&L</th>
                 <th className="num" data-tip="Mean R-multiple: risk = the trade’s own SL when set, else the average stop of this idea’s trades; break-even trades excluded">Avg RR</th>
                 <th className="num" data-tip="Wins / closed trades — break-even counts as a loss">WR</th>
@@ -195,6 +196,7 @@ export default async function IdeasPage({
                     </td>
                     <td><span className={"status-chip " + st.cls}>{st.text}</span></td>
                     <td>{i.grade ? <span className={"grade " + gradeClass(i.grade)}>{GRADE_LABEL[i.grade]}</span> : "—"}</td>
+                    <td>{i.execGrade ? <span className={"grade " + gradeClass(i.execGrade)}>{GRADE_LABEL[i.execGrade]}</span> : "—"}</td>
                     <td className={"num " + (pnl > 0 ? "pos" : pnl < 0 ? "neg" : "")}>{fmtMoney(pnl)}</td>
                     <td className={"num " + (irr.avgRR !== null && irr.avgRR > 0 ? "pos" : irr.avgRR !== null && irr.avgRR < 0 ? "neg" : "")}>
                       {irr.avgRR === null ? "—" : `${irr.avgRR > 0 ? "+" : ""}${irr.avgRR.toFixed(2)}R`}

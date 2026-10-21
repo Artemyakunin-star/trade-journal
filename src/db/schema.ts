@@ -221,7 +221,8 @@ export const ideas = pgTable(
     title: text("title").notNull(), // short card title: "NQ short after Asia-high sweep"
     thesis: text("thesis").notNull(), // zone, consolidation, volume, confirmation
     invalidation: text("invalidation").notNull(), // REQUIRED: what kills the idea
-    grade: gradeEnum("grade"), // graded at end of day, so nullable until then
+    grade: gradeEnum("grade"), // the IDEA's quality grade (context), nullable until graded
+    execGrade: gradeEnum("exec_grade"), // the EXECUTION grade (behavior) — separate axis
     trigger: ideaTriggerEnum("trigger").notNull(),
     // ---- CLCE self-check (filled after the session, against the day frame) ----
     /** Playbook setup this idea plays (shared vocabulary with the day frame). */

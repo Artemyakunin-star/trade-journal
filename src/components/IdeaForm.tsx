@@ -117,8 +117,17 @@ export default function IdeaForm({
             </select>
           </div>
           <div className="tj-field">
-            <label className="tj-label">Grade (end of day)</label>
+            <label className="tj-label" title="How good the IDEA was: context, confirmation, nothing against it">Idea grade</label>
             <select className="tj-select" name="grade" defaultValue={idea.grade ?? ""}>
+              <option value="">— not graded yet</option>
+              {["A_PLUS", "A", "A_MINUS", "B_PLUS", "B", "B_MINUS", "C_PLUS", "C", "C_MINUS", "D", "F"].map((g) => (
+                <option key={g} value={g}>{g.replace("_PLUS", "+").replace("_MINUS", "−")}</option>
+              ))}
+            </select>
+          </div>
+          <div className="tj-field">
+            <label className="tj-label" title="How well you EXECUTED it: entry discipline, risk rules, psychology">Execution grade</label>
+            <select className="tj-select" name="execGrade" defaultValue={idea.execGrade ?? ""}>
               <option value="">— not graded yet</option>
               {["A_PLUS", "A", "A_MINUS", "B_PLUS", "B", "B_MINUS", "C_PLUS", "C", "C_MINUS", "D", "F"].map((g) => (
                 <option key={g} value={g}>{g.replace("_PLUS", "+").replace("_MINUS", "−")}</option>

@@ -110,21 +110,20 @@ export default function IdeaChecklist({
   const inFrame: boolean | null = setups.length > 0 && scen.length > 0 ? setups.some((s) => scen.includes(s)) : null;
   const hasFrame = !!frame && (!!frame.bias || scen.length > 0 || !!frame.rules);
 
-  // ---- suggested grade (live; the manual grade in the form below stays yours) ----
-  const suggestion = (() => {
+  // ---- two live suggestions: the IDEA (context) and the EXECUTION (behavior).
+  // The manual grades in the form below stay yours.
+  const ideaSuggestion = (() => {
     const reasons: string[] = [];
-    if (trigger === "REVENGE") return { key: "F", reasons: ["revenge trade — always F"] };
-    // context gate
+    // context gate: wrong direction or a setup outside the frame kills the idea
     if (dirOk === false || inFrame === false) {
       reasons.push(dirOk === false ? "against the frame's bias → D" : "setup outside today's frame → D");
-      if (limitsBroken) reasons.push("trading rules broken");
-      if (trigger === "TILT" || trigger === "FOMO") reasons.push(trigger.toLowerCase());
-      return { key: trigger === "TILT" || trigger === "FOMO" || limitsBroken ? "F" : "D", reasons };
+      if (redFlags.length >= 3) {
+        reasons.push(`${redFlags.length} red flags against it`);
+        return { key: "F", reasons };
+      }
+      return { key: "D", reasons };
     }
-    const checks: [string, boolean | null][] = [
-      ["confirmation before entry", confirmBefore],
-      ["entry per plan", entryPlanned],
-    ];
+    const checks: [string, boolean | null][] = [["confirmation before entry", confirmBefore]];
     if (frame?.rules) checks.push(["rules of the day", rulesFollowed]);
     const misses = checks.filter(([, v]) => v !== true);
     for (const [name] of misses) reasons.push(`${name} ✗`);
@@ -134,25 +133,48 @@ export default function IdeaChecklist({
       i = 1;
       reasons.push("no day frame — capped at B");
     }
-    if (limitsBroken) {
+    if (redFlags.length >= 3) {
+      i = Math.min(i + 2, 3);
+      reasons.push(`${redFlags.length} red flags −2`);
+    } else if (redFlags.length >= 1) {
       i = Math.min(i + 1, 3);
-      reasons.push("trading rules broken −1");
+      reasons.push(`${redFlags.length} red flag${redFlags.length === 1 ? "" : "s"} −1`);
     }
+    let key = ladder[i];
+    if (key === "A" && ideaStatus === "PLAYED_OUT") {
+      key = "A_PLUS";
+      reasons.push("clean context, played out");
+    }
+    if (reasons.length === 0) reasons.push("all checks ✓");
+    return { key, reasons };
+  })();
+
+  const execSuggestion = (() => {
+    const reasons: string[] = [];
+    if (trigger === "REVENGE") return { key: "F", reasons: ["revenge trade — execution is always F"] };
+    const misses: string[] = [];
+    if (entryPlanned !== true) misses.push("entry per plan ✗");
+    reasons.push(...misses);
+    const ladder = ["A", "B", "C", "D"];
+    let i = Math.min(misses.length, 3);
     if (earlyEntry === true) {
       i = Math.min(i + 1, 3);
       reasons.push("early entry −1");
+    }
+    if (limitsBroken) {
+      i = Math.min(i + 1, 3);
+      reasons.push("risk rules broken −1");
     }
     if (trigger === "TILT" || trigger === "FOMO") {
       i = Math.min(i + 1, 3);
       reasons.push(`${trigger.toLowerCase()} −1`);
     }
     let key = ladder[i];
-    if (key === "A" && ideaStatus === "PLAYED_OUT" && trigger === "PLAN") {
+    if (key === "A" && trigger === "PLAN") {
       key = "A_PLUS";
-      reasons.push("clean, in frame, played out");
+      reasons.push("planned and disciplined, by the book");
     }
     if (reasons.length === 0) reasons.push("all checks ✓");
-    if (redFlags.length > 0) reasons.push(`${redFlags.length} red flag${redFlags.length === 1 ? "" : "s"} noted (not graded)`);
     return { key, reasons };
   })();
 
@@ -178,6 +200,24 @@ export default function IdeaChecklist({
     </div>
   );
 
+  const sectionHead = (title: string, sub: string) => (
+    <div style={{ marginTop: 12, paddingTop: 8, borderTop: "2px solid var(--border)" }}>
+      <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "var(--accent)" }}>{title}</span>{" "}
+      <span style={{ fontSize: 11.5, color: "var(--muted)" }}>— {sub}</span>
+    </div>
+  );
+
+  const suggestionRow = (label: string, s: { key: string; reasons: string[] }, note: string) => (
+    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "8px 0 2px", borderTop: "1px solid var(--border)" }}>
+      <span style={{ fontSize: 12.5, color: "var(--ink-2)" }}>
+        <b>{label}</b>
+      </span>
+      <span className={"grade " + gradeClass(s.key)}>{GRADE_LABEL[s.key] ?? s.key}</span>
+      <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{s.reasons.join(" · ")}</span>
+      <span style={{ fontSize: 11.5, color: "var(--muted)", marginLeft: "auto" }}>{note}</span>
+    </div>
+  );
+
   const checkbox = (checked: boolean | null, onChange: (v: boolean) => void, text: string) => (
     <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink)", cursor: "pointer" }}>
       <input
@@ -193,7 +233,7 @@ export default function IdeaChecklist({
   return (
     <div className="card" style={{ marginBottom: 14 }}>
       <h3 style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        Self-check <span className="sub">context · location · confirmation · entry — against the day frame</span>
+        Self-check <span className="sub">two axes, two grades: was the IDEA good · did you EXECUTE it well</span>
         <span style={{ marginLeft: "auto", fontSize: 11.5, color: saved === "saved" ? "var(--pos)" : "var(--muted)" }}>
           {saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : ""}
         </span>
@@ -221,6 +261,8 @@ export default function IdeaChecklist({
           <Link href="/plans" className="linklike">daily plan</Link> before the session, and this check gets teeth.
         </div>
       )}
+
+      {sectionHead("Idea — context", "was this the right trade to even consider? → Idea grade")}
 
       {/* C: direction vs bias — automatic */}
       {row(
@@ -336,29 +378,6 @@ export default function IdeaChecklist({
         </>,
       )}
 
-      {/* entry */}
-      {row(
-        earlyEntry === true ? false : entryPlanned,
-        <>
-          <b>Entry.</b> From the planned zone, not chasing, stop where it was planned?
-        </>,
-        <>
-          {checkbox(entryPlanned, (v) => { setEntryPlanned(v); persist({ entryPlanned: v }); }, "entry per plan")}
-          <label
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: earlyEntry === true ? "var(--crit)" : "var(--ink)", cursor: "pointer" }}
-            title="Honest admission: entered before the setup was ready (no confirmation yet / price not in the zone). Counts as a mistake — −1 on the suggested grade."
-          >
-            <input
-              type="checkbox"
-              checked={earlyEntry === true}
-              onChange={(e) => { setEarlyEntry(e.target.checked); persist({ earlyEntry: e.target.checked }); }}
-              style={{ accentColor: "var(--crit)" }}
-            />
-            early entry — a mistake (−1)
-          </label>
-        </>,
-      )}
-
       {/* red flags — what was AGAINST the idea */}
       {row(
         redFlags.length > 0 ? false : null,
@@ -403,21 +422,66 @@ export default function IdeaChecklist({
         </>,
       )}
 
-      {/* suggested grade */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 0 2px", borderTop: "1px solid var(--border)" }}>
-        <span style={{ fontSize: 12.5, color: "var(--ink-2)" }}>
-          <b>Suggested grade:</b>
-        </span>
-        <span className={"grade " + gradeClass(suggestion.key)}>{GRADE_LABEL[suggestion.key] ?? suggestion.key}</span>
-        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{suggestion.reasons.join(" · ")}</span>
-        <span style={{ fontSize: 11.5, color: "var(--muted)", marginLeft: "auto" }}>the Grade field below stays yours</span>
-      </div>
+      {suggestionRow("Suggested idea grade:", ideaSuggestion, "the Idea grade field below stays yours")}
+
+      {sectionHead("Execution", "how you behaved once the idea existed → Execution grade")}
+
+      {/* entry discipline */}
+      {row(
+        earlyEntry === true ? false : entryPlanned,
+        <>
+          <b>Entry.</b> From the planned zone, not chasing, stop where it was planned?
+        </>,
+        <>
+          {checkbox(entryPlanned, (v) => { setEntryPlanned(v); persist({ entryPlanned: v }); }, "entry per plan")}
+          <label
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: earlyEntry === true ? "var(--crit)" : "var(--ink)", cursor: "pointer" }}
+            title="Honest admission: entered before the setup was ready (no confirmation yet / price not in the zone). Counts as a mistake — −1 on the suggested execution grade."
+          >
+            <input
+              type="checkbox"
+              checked={earlyEntry === true}
+              onChange={(e) => { setEarlyEntry(e.target.checked); persist({ earlyEntry: e.target.checked }); }}
+              style={{ accentColor: "var(--crit)" }}
+            />
+            early entry — a mistake (−1)
+          </label>
+        </>,
+      )}
+
+      {/* risk-management rules — automatic, from the Rules page */}
+      {row(
+        limitsBroken ? false : true,
+        <>
+          <b>Risk rules.</b> Size, stop width, attempts / stops / BE per idea — checked automatically against your{" "}
+          <Link href="/rules" className="linklike">Rules</Link>.{" "}
+          {limitsBroken ? (
+            <span style={{ color: "var(--crit)" }}>Violations found — see the limits badge above.</span>
+          ) : (
+            <span style={{ color: "var(--pos)" }}>No violations detected.</span>
+          )}
+        </>,
+      )}
+
+      {/* psychology — the trigger says why the idea was taken */}
+      {row(
+        trigger === "REVENGE" || trigger === "TILT" || trigger === "FOMO" ? false : trigger === "PLAN" ? true : null,
+        <>
+          <b>Psychology.</b> Trigger:{" "}
+          <b style={{ color: trigger === "REVENGE" || trigger === "TILT" || trigger === "FOMO" ? "var(--crit)" : trigger === "PLAN" ? "var(--pos)" : "var(--ink)" }}>
+            {trigger.toLowerCase()}
+          </b>{" "}
+          (set in the form below). Your in-session emotions live in the <Link href="/live" className="linklike">Live feed</Link> and the day&apos;s recap.
+        </>,
+      )}
+
+      {suggestionRow("Suggested execution grade:", execSuggestion, "the Execution grade field below stays yours")}
 
       <div className="section-note">
-        Direction and “inside the frame” are computed from the morning plan — they can&apos;t be edited after the fact.
-        The chips are multi-select; a new setup or confirmation added here joins your vocabulary for good. The suggested
-        grade updates live from context → ticks → rule violations → trigger (revenge = F); you still set the final grade
-        yourself.
+        Two separate axes on purpose: a great idea can be butchered by execution, and a bad idea can be executed cleanly
+        — the pair of grades shows WHERE the leak is. Direction and “inside the frame” come from the morning plan and
+        can&apos;t be edited after the fact; red flags now weigh on the idea grade (1–2 flags −1, 3+ −2); revenge = F for
+        execution. You still set both final grades yourself in the form below.
       </div>
     </div>
   );

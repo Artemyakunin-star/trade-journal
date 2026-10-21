@@ -38,6 +38,7 @@ export type IdeaRow = {
   thesis: string;
   invalidation: string;
   grade: string | null;
+  execGrade: string | null;
   trigger: string;
   comment: string | null;
   status: string;

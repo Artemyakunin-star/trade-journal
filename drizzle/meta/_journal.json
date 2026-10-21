@@ -232,6 +232,13 @@
       "when": 1791392415554,
       "tag": "0032_idea_early_entry",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791392415555,
+      "tag": "0033_idea_exec_grade",
+      "breakpoints": true
     }
   ]
 }

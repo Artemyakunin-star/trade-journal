@@ -45,7 +45,14 @@ export default function IdeaCard({
     <Link href={`/ideas/${idea.id}/edit`} className="card idea-card" style={{ display: "block", color: "inherit", textDecoration: "none", cursor: "pointer" }}>
       <div className="head">
         <div className="title">{idea.title}</div>
-        {idea.grade && <span className={"grade " + gradeClass(idea.grade)}>{GRADE_LABEL[idea.grade]}</span>}
+        {idea.grade && (
+          <span className={"grade " + gradeClass(idea.grade)} title="Idea grade (context quality)">{GRADE_LABEL[idea.grade]}</span>
+        )}
+        {idea.execGrade && (
+          <span className={"grade " + gradeClass(idea.execGrade)} title="Execution grade (behavior)" style={{ opacity: 0.85 }}>
+            E:{GRADE_LABEL[idea.execGrade]}
+          </span>
+        )}
       </div>
       <div className="meta">
         {(idea.date ?? null) && (

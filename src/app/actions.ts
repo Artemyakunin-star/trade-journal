@@ -92,6 +92,13 @@ export async function updateIdea(fd: FormData) {
       comment: str(fd, "comment") || null,
       status: (IDEA_STATUSES as readonly string[]).includes(status) ? (status as (typeof IDEA_STATUSES)[number]) : existing.status,
       grade: grade === "" ? null : (GRADES as readonly string[]).includes(grade) ? (grade as (typeof GRADES)[number]) : existing.grade,
+      execGrade: !fd.has("execGrade")
+        ? existing.execGrade
+        : str(fd, "execGrade") === ""
+          ? null
+          : (GRADES as readonly string[]).includes(str(fd, "execGrade"))
+            ? (str(fd, "execGrade") as (typeof GRADES)[number])
+            : existing.execGrade,
       invalidatedAt: becameInvalidated ? new Date() : existing.invalidatedAt,
       updatedAt: new Date(),
     })
