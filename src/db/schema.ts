@@ -603,7 +603,7 @@ export const dayFrames = pgTable(
     userId: text("user_id").notNull(),
     date: date("date", { mode: "string" }).notNull(),
     bias: text("bias"), // "LONG" | "SHORT" | "NEUTRAL"
-    scenarios: jsonb("scenarios").$type<string[]>(), // 1-2 playbook entries
+    scenarios: jsonb("scenarios").$type<string[]>(), // the day's allowed playbook entries
     rules: text("rules"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

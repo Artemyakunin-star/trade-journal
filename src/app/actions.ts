@@ -1101,7 +1101,7 @@ export async function saveDayFrame(input: { date: string; bias: string | null; s
   const { date, rules } = input;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
   const bias = input.bias && ["LONG", "SHORT", "NEUTRAL"].includes(input.bias) ? input.bias : null;
-  const scenarios = (input.scenarios ?? []).map((s) => String(s).trim()).filter(Boolean).slice(0, 2);
+  const scenarios = [...new Set((input.scenarios ?? []).map((s) => String(s).trim()).filter(Boolean))].slice(0, 20);
 
   const { dayFrames } = await import("@/db/schema");
   await db

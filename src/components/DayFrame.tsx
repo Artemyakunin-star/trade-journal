@@ -1,5 +1,5 @@
 "use client";
-// The day's trading frame: bias + 1-2 playbook scenarios + rules of the day.
+// The day's trading frame: bias + the day's allowed playbook scenarios (any number) + rules of the day.
 // Lives above the daily plan editor; autosaves on every change.
 import { useRef, useState } from "react";
 import { saveDayFrame } from "@/app/actions";
@@ -54,14 +54,12 @@ export default function DayFrame({
     persist(next, scenarios, rules);
   };
 
+  // As many scenarios as the day needs — only the "no trading" kind stays exclusive.
   const toggleScenario = (name: string) => {
     let next: string[];
     if (scenarios.includes(name)) next = scenarios.filter((s) => s !== name);
     else if (EXCLUSIVE.test(name)) next = [name];
-    else {
-      const base = scenarios.filter((s) => !EXCLUSIVE.test(s));
-      next = base.length >= 2 ? [...base.slice(1), name] : [...base, name];
-    }
+    else next = [...scenarios.filter((s) => !EXCLUSIVE.test(s)), name];
     setScenarios(next);
     persist(bias, next, rules);
   };
@@ -71,8 +69,7 @@ export default function DayFrame({
     if (!name) return;
     setAdding("");
     if (!allOptions.some((o) => o.toLowerCase() === name.toLowerCase())) setExtra((x) => [...x, name]);
-    const base = scenarios.filter((s) => !EXCLUSIVE.test(s));
-    const next = base.length >= 2 ? [...base.slice(1), name] : [...base, name];
+    const next = [...scenarios.filter((s) => !EXCLUSIVE.test(s)), name];
     setScenarios(next);
     persist(bias, next, rules);
   };
