@@ -144,6 +144,25 @@ export default async function SettingsPage() {
           </div>
         </div>
       )}
+
+      <div className="card" style={{ maxWidth: 420, marginTop: 14 }}>
+        <h3>
+          Your data <span className="sub">take everything with you, anytime</span>
+        </h3>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <a className="btn btn-sm" href="/api/export" download>
+            Export journal (JSON)
+          </a>
+          <a className="btn ghost btn-sm" href="/api/export?images=1" download title="The same export with every screenshot inlined — a much larger file">
+            …with screenshots
+          </a>
+        </div>
+        <div className="section-note">
+          One file with everything your account owns: plans, day frames, ideas with self-checks, trades, executions,
+          missed trades, the live feed, recaps, notes with evidence, settings and import history. Rich texts are TipTap
+          JSON. Shared market bars aren&apos;t included — they are public data, re-importable from your platform.
+        </div>
+      </div>
     </>
   );
 }
