@@ -135,7 +135,7 @@ export default function GuidePage() {
       </S>
 
       <S id="tips" title="Small things worth knowing">
-        <P>· Screenshots zoom in place — click to enlarge, click to shrink. · Delete buttons ask twice (the label changes to the question). · Every rich editor keeps version history — a deleted screenshot is never lost. · Dates are movable almost everywhere: plans, recaps, ideas. · The sandbox (on the login screen) is a scratch journal with sample data — safe to show people. · Something missing or broken? The <Link className="linklike" href="/feedback">Feedback</Link> page goes straight to the author.</P>
+        <P>· Screenshots zoom in place — click to enlarge, click to shrink. · Delete buttons ask twice (the label changes to the question). · Every rich editor keeps version history — a deleted screenshot is never lost. · Dates are movable almost everywhere: plans, recaps, ideas. · Something missing or broken? The <Link className="linklike" href="/feedback">Feedback</Link> page goes straight to the author.</P>
       </S>
     </>
   );
