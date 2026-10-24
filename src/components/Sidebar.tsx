@@ -17,6 +17,7 @@ const ITEMS = [
   { href: "/rules", ico: "⚖", label: "Rules" },
   { href: "/notes", ico: "✎", label: "Notes" },
   { href: "/import", ico: "⇪", label: "Import" },
+  { href: "/guide", ico: "⚐", label: "Guide" },
   { href: "/faq", ico: "?", label: "Help / FAQ" },
   { href: "/feedback", ico: "✉", label: "Feedback" },
   { href: "/settings", ico: "⚙", label: "Settings" },

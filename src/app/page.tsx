@@ -99,6 +99,31 @@ export default async function Dashboard({
         </div>
       </div>
 
+      {/* First-run checklist: a fresh journal gets a map instead of empty tiles. */}
+      {rawTrades.length === 0 && (
+        <div className="card" style={{ marginBottom: 14, borderColor: "var(--accent)" }}>
+          <h3>
+            Start here <span className="sub">the journal&apos;s loop in five steps — full details in the Guide</span>
+          </h3>
+          <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.7 }}>
+            <b>1.</b> Write today&apos;s plan with a day frame (bias + allowed scenarios) in{" "}
+            <Link className="linklike" href="/plans">Plans</Link>. <b>2.</b> Set your risk frame per instrument in{" "}
+            <Link className="linklike" href="/rules">Rules</Link>. <b>3.</b> Keep{" "}
+            <Link className="linklike" href="/live">Live</Link> open during the session — notes, emotions, screenshots.{" "}
+            <b>4.</b> After the session, <Link className="linklike" href="/import">Import</Link> your executions and
+            bars, then attach every trade to an idea on <Link className="linklike" href="/trades">Trades</Link>.{" "}
+            <b>5.</b> Fill the self-check in each idea and write the evening{" "}
+            <Link className="linklike" href="/recap">Recap</Link>.
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <Link className="btn btn-sm" href="/guide">Open the Guide</Link>{" "}
+            <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>
+              This card disappears once your first trades are in.
+            </span>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
         <div className="seg">
           <Link href={qs({ mode: "trades" })} className={mode === "trades" ? "on" : ""}>Trades</Link>

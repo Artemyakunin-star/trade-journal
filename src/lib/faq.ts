@@ -134,11 +134,15 @@ export const FAQ: FaqSection[] = [
     items: [
       {
         q: "What is a \"rogue\" trade?",
-        a: "A trade not attached to any idea. The journal's core rule is \"no idea, no entry\": every trade should come from a written idea, which comes from the day's plan. Rogue trades are flagged in red everywhere — the count on the dashboard is your discipline score.",
+        a: "A trade not attached to any idea. The journal's core rule is \"no idea, no entry\": every trade should come from a written idea, which comes from the day's plan. Rogue trades are flagged in red everywhere — the count on the dashboard is your discipline score. You can tick several rogue trades (the Select rogues button grabs them all) and group them into one honest explanatory idea like \"revenge, tried to catch the bottom\".",
       },
       {
         q: "Plans vs Ideas — what's the difference?",
-        a: "A plan is your written prep for the day (rich text with screenshots). An idea is a specific setup — instrument, direction, key level, order-flow confirmation — that trades get attached to. An idea can link to the plan it came from, and its page works like a mini-Analytics for just its trades, including the simulator.",
+        a: "A plan is your written prep for the day (rich text with screenshots) with the day frame on top: bias, the playbook scenarios you allow today (as many as you need), rules of the day. An idea is a specific setup — instrument, direction, trigger, thesis, invalidation — that trades get attached to. Ideas are checked against the frame in the self-check, and an idea's page works like a mini-Analytics for just its trades, including the simulator.",
+      },
+      {
+        q: "I wrote the plan under the wrong day (or as a plain document).",
+        a: "Open it in Plans: the Move control at the top re-dates a daily plan (its day frame moves along), and \"Make it a daily plan\" attaches a date-less document to a day. One plan per day — a conflict shows a warning instead of overwriting. Recaps and ideas can change their date the same way.",
       },
       {
         q: "Can I add a trade manually?",
@@ -147,6 +151,48 @@ export const FAQ: FaqSection[] = [
       {
         q: "Can I use US date and 12-hour time format?",
         a: "Yes — Settings → Display has an EU / US format switch that applies to every date and time in the journal.",
+      },
+      {
+        q: "I deleted a screenshot from a write-up by accident.",
+        a: "Every rich editor (plans, idea/trade write-ups, recap) keeps version history — the History button lists snapshots, lets you preview any of them in place and restore one. Restoring saves the current state first, so nothing is lost either way.",
+      },
+    ],
+  },
+  {
+    title: "Live & Recap",
+    items: [
+      {
+        q: "What is the Live page for?",
+        a: "It's the page you keep open during the session. Today's frame and your strongest notes are pinned up top, and below is the timestamped feed: Enter adds an entry, Ctrl+V pastes any number of screenshots, chips record your emotional state (calm / tense / tilt / revenge), 🕐 back-dates an entry written later. Entries are editable (including their time) and can grow into an idea with one click — the entry text becomes the thesis.",
+      },
+      {
+        q: "What is the Recap and why is it separate from the plan?",
+        a: "The recap is the evening review, written AFTER the session — kept separate so hindsight never leaks into the morning forecast. It quotes the plan and the day frame read-only, shows the day's facts (P&L, trades, rogue count, idea grades) and the session feed, and asks for a one-click verdict: played out / partially / against / no plan — plus \"what worked\" and \"what to change\" and a free write-up. One recap per day; its date can be moved if you write it the next morning.",
+      },
+      {
+        q: "Where do past days' feeds live?",
+        a: "On the Day page of that date (a \"Session feed\" card next to the execution timeline) and inside that day's Recap. Screenshots unfold with the ▸ arrow and zoom in place on click.",
+      },
+    ],
+  },
+  {
+    title: "Notes, Rules & grades",
+    items: [
+      {
+        q: "What are Notes?",
+        a: "Market lessons with an evidence trail. A note is one observation-hypothesis (\"CPI day, strong expansion down — no retrace, continuation\"). Each time it repeats you confirm it (✓) or refute it (✗) with a date — the earned weight (✓ minus ✗) sorts the notes, and the strongest rise onto the Live page. Notes take screenshots and categories, can be edited, archived, and pinned to an idea so the lesson sits right where you decide.",
+      },
+      {
+        q: "What does the Rules page do?",
+        a: "You write your risk frame per instrument: max contracts, stop size in ticks, targets, break-even trigger and window, and per-idea limits (max entries / stops / break-evens). The journal then checks every idea automatically — counters turn red when over, oversized positions and too-wide stops get flagged on trades, the Day screen gets a Rules tile, and violations lower the suggested execution grade.",
+      },
+      {
+        q: "Why does an idea have TWO grades?",
+        a: "Because \"was the idea good\" and \"did I execute it well\" are different skills. The Idea grade covers context: direction vs the frame, setup within today's scenarios, confirmation before entry, rules of the day, and the red flags you saw and ignored (1–2 flags −1 step, 3+ −2). The Execution grade covers behavior: entry per plan, the honest \"early entry\" admission (−1), automatic risk-rule violations (−1), psychology (revenge = F, tilt/fomo −1). Both get live suggestions with reasons; both final grades are yours. The pair shows where the leak is.",
+      },
+      {
+        q: "Does the suggested grade overwrite my grade?",
+        a: "Never. Suggestions are recommendations with visible reasoning; the Idea grade and Execution grade fields in the form are always set by you.",
       },
     ],
   },
