@@ -157,7 +157,9 @@ export default async function AdminPage() {
                   <td style={{ whiteSpace: "normal" }}>
                     <a className="linklike" href={`/api/samples/${s.id}`}>{s.filename}</a>
                   </td>
-                  <td style={{ whiteSpace: "normal", wordBreak: "break-all" }}>{s.userId ? emailById.get(s.userId) ?? "?" : "?"}</td>
+                  <td style={{ whiteSpace: "normal", wordBreak: "break-all" }}>
+                    {s.userId ? emailById.get(s.userId) ?? "?" : s.contact ? `${s.contact} (public)` : "public form"}
+                  </td>
                   <td style={{ whiteSpace: "normal" }}>{s.note ?? "—"}</td>
                   <td>{d(s.createdAt)}</td>
                 </tr>

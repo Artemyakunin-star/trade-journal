@@ -98,6 +98,8 @@ export const platformSamples = pgTable("platform_samples", {
   filename: text("filename").notNull(),
   content: text("content").notNull(), // first ~200KB of the file, enough to build a parser
   note: text("note"),
+  /** How to reach the sender (public submissions from /platforms). */
+  contact: text("contact"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

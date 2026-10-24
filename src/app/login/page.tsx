@@ -25,7 +25,8 @@ export default async function LoginPage({
         <div className="section-note" style={{ marginTop: 10 }}>
           No account yet? <Link href="/register" className="linklike">Create one</Link> — it&apos;s free.
           <br />
-          <Link href="/forgot" className="linklike">Forgot your password?</Link>
+          <Link href="/forgot" className="linklike">Forgot your password?</Link> ·{" "}
+          <Link href="/platforms" className="linklike">Supported platforms</Link>
         </div>
       </div>
     </div>

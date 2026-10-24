@@ -864,6 +864,27 @@ export async function uploadPlatformSample(fd: FormData) {
   revalidatePath("/import");
 }
 
+/** PUBLIC platform-sample form (/platforms) — no account needed, so a Reddit
+ *  visitor can send their export in one minute. Honeypot + size caps. */
+export async function publicPlatformSample(fd: FormData) {
+  if (str(fd, "website")) redirect("/platforms?sent=1"); // honeypot: bots fill it, humans never see it
+  const platform = str(fd, "platform").slice(0, 120);
+  const contact = str(fd, "contact").slice(0, 200) || null;
+  const note = str(fd, "note").slice(0, 1000) || null;
+  const file = fd.get("file");
+  if (!platform || !(file instanceof File) || file.size === 0 || file.size > 5_000_000) redirect("/platforms?sent=1");
+  const f = file as File;
+  const text = (await f.text()).slice(0, 200_000);
+  const { platformSamples } = await import("@/db/schema");
+  await db.insert(platformSamples).values({ userId: null, platform, filename: f.name.slice(0, 200), content: text, note, contact });
+  const { notifyOwner } = await import("@/lib/email");
+  await notifyOwner(
+    "New platform sample (public form)",
+    `<p><b>${platform.replace(/</g, "&lt;")}</b> — ${f.name.replace(/</g, "&lt;")}${contact ? `, contact: <b>${contact.replace(/</g, "&lt;")}</b>` : ", no contact left"}${note ? `<br/>“${note.replace(/</g, "&lt;")}”` : ""}</p><p>It's waiting on the Admin screen.</p>`,
+  );
+  redirect("/platforms?sent=1");
+}
+
 // ---------- sandbox mode (owner only) ----------
 
 /** Switch the owner into the sandbox journal: a scratch account for testing
