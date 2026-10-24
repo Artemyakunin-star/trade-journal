@@ -44,6 +44,12 @@ export async function register(fd: FormData) {
     }
   }
 
+  const { notifyOwner } = await import("@/lib/email");
+  await notifyOwner(
+    "New TradeJournal user",
+    `<p><b>${email}</b> just registered${isFirst ? " (first account — that's you)" : ""}.</p>`,
+    user.id,
+  );
   await createSession(user.id);
   redirect("/");
 }
@@ -65,6 +71,7 @@ export async function login(fd: FormData) {
  *  The response never reveals whether the email exists. */
 export async function requestPasswordReset(fd: FormData) {
   const email = str(fd, "email").toLowerCase();
+  let emailed = false;
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     const user = await db.query.users.findFirst({ where: eq(users.email, email) });
     if (user) {
@@ -73,17 +80,31 @@ export async function requestPasswordReset(fd: FormData) {
         where: (r, { and: and_, eq: eq_, isNull: isNull_, gt: gt_ }) =>
           and_(eq_(r.userId, user.id), isNull_(r.usedAt), gt_(r.expiresAt, new Date())),
       });
-      if (!recent) {
-        const token = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, "0")).join("");
+      let token = recent?.token;
+      if (!token) {
+        token = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, "0")).join("");
         await db.insert(passwordResets).values({
           userId: user.id,
           token,
           expiresAt: new Date(Date.now() + 24 * 3600_000),
         });
       }
+      // With email wired up the link goes out automatically; otherwise the
+      // request just waits on the Admin screen for a hand-sent link.
+      const { sendEmail, resetEmail, emailEnabled, notifyOwner } = await import("@/lib/email");
+      if (emailEnabled()) {
+        const { headers } = await import("next/headers");
+        const h = await headers();
+        const base = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host") ?? "intradiary.com"}`;
+        const msg = resetEmail(`${base}/reset/${token}`);
+        emailed = await sendEmail(user.email, msg.subject, msg.html);
+      }
+      if (!emailed) {
+        await notifyOwner("Password reset requested", `<p><b>${user.email}</b> asked for a password reset — the link is waiting on the Admin screen.</p>`, user.id);
+      }
     }
   }
-  redirect("/forgot?sent=1");
+  redirect(`/forgot?sent=1${emailed ? "&mailed=1" : ""}`);
 }
 
 /** Set a new password using a one-time link. */

@@ -5,7 +5,7 @@ import { requestPasswordReset } from "@/app/auth-actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function ForgotPage({ searchParams }: { searchParams: Promise<{ sent?: string }> }) {
+export default async function ForgotPage({ searchParams }: { searchParams: Promise<{ sent?: string; mailed?: string }> }) {
   const sp = await searchParams;
   return (
     <div className="auth-wrap">
@@ -16,8 +16,9 @@ export default async function ForgotPage({ searchParams }: { searchParams: Promi
         <h3>Reset your password</h3>
         {sp.sent ? (
           <div className="section-note" style={{ marginTop: 8 }}>
-            Done. If an account with that email exists, a reset request has been registered — during the beta the
-            author issues reset links by hand, so you&apos;ll receive yours by email reply, usually within a day.
+            {sp.mailed
+              ? "Done. If an account with that email exists, a reset link is on its way — check your inbox (and the spam folder). The link works once and expires in 24 hours."
+              : "Done. If an account with that email exists, a reset request has been registered — you'll receive the link by email shortly."}
             <div style={{ marginTop: 10 }}>
               <Link href="/login" className="linklike">← back to sign in</Link>
             </div>

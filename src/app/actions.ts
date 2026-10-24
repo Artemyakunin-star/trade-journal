@@ -852,8 +852,15 @@ export async function uploadPlatformSample(fd: FormData) {
   const file = fd.get("file");
   if (!platform || !(file instanceof File) || file.size === 0) return;
   const text = (await file.text()).slice(0, 200_000);
-  const { platformSamples } = await import("@/db/schema");
+  const { platformSamples, users: usersT } = await import("@/db/schema");
   await db.insert(platformSamples).values({ userId: uid, platform, filename: file.name, content: text, note });
+  const { notifyOwner } = await import("@/lib/email");
+  const sender = await db.query.users.findFirst({ where: eq(usersT.id, uid) });
+  await notifyOwner(
+    "New platform sample in TradeJournal",
+    `<p><b>${sender?.email ?? uid}</b> uploaded a sample for <b>${platform.replace(/</g, "&lt;")}</b> (${file.name.replace(/</g, "&lt;")})${note ? ` — “${note.replace(/</g, "&lt;")}”` : ""}. It's on the Admin screen.</p>`,
+    uid,
+  );
   revalidatePath("/import");
 }
 
@@ -892,8 +899,15 @@ export async function sendFeedback(fd: FormData) {
   const uid = await requireUserId();
   const message = str(fd, "message");
   if (!message) return;
-  const { feedback } = await import("@/db/schema");
+  const { feedback, users: usersT } = await import("@/db/schema");
   await db.insert(feedback).values({ userId: uid, message: message.slice(0, 5000), page: str(fd, "page") || null });
+  const { notifyOwner } = await import("@/lib/email");
+  const sender = await db.query.users.findFirst({ where: eq(usersT.id, uid) });
+  await notifyOwner(
+    "New feedback in TradeJournal",
+    `<p>From <b>${sender?.email ?? uid}</b>${str(fd, "page") ? ` (page ${str(fd, "page")})` : ""}:</p><p style="white-space:pre-wrap;border-left:3px solid #26292f;padding-left:12px;">${message.slice(0, 1200).replace(/</g, "&lt;")}</p>`,
+    uid,
+  );
   redirect("/feedback?sent=1");
 }
 
