@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { realUserId, SANDBOX_EMAIL } from "@/lib/auth";
 import { enterSandbox } from "@/app/actions";
-import { feedback, imports, platformSamples, trades, users } from "@/db/schema";
+import { adminIssueReset } from "@/app/auth-actions";
+import { feedback, imports, passwordResets, platformSamples, trades, users } from "@/db/schema";
 import { asc, desc, sql } from "drizzle-orm";
+import { headers } from "next/headers";
 import { getSettings } from "@/lib/settings";
 import { fmtDate } from "@/lib/format";
 
@@ -17,7 +19,10 @@ export default async function AdminPage() {
   if (!uid || !firstUser || firstUser.id !== uid) redirect("/");
   const prefs = await getSettings(uid);
 
-  const [allUsers, tradeCounts, importStats, samples, feedbackRows] = await Promise.all([
+  const hdrs = await headers();
+  const baseUrl = `${hdrs.get("x-forwarded-proto") ?? "https"}://${hdrs.get("host") ?? "localhost:3000"}`;
+
+  const [allUsers, tradeCounts, importStats, samples, feedbackRows, resets] = await Promise.all([
     db.select().from(users).orderBy(asc(users.createdAt)),
     db
       .select({ userId: trades.userId, n: sql<number>`count(*)` })
@@ -29,6 +34,7 @@ export default async function AdminPage() {
       .groupBy(imports.userId),
     db.select().from(platformSamples).orderBy(desc(platformSamples.createdAt)).limit(100),
     db.select().from(feedback).orderBy(desc(feedback.createdAt)).limit(200),
+    db.select().from(passwordResets).orderBy(desc(passwordResets.createdAt)).limit(30),
   ]);
   const visibleUsers = allUsers.filter((u) => u.email !== SANDBOX_EMAIL);
   const nTrades = new Map(tradeCounts.map((r) => [r.userId, Number(r.n)]));
@@ -76,6 +82,52 @@ export default async function AdminPage() {
         <div className="section-note">
           Only registrations and activity counters — nobody&apos;s journal content is visible from here.
         </div>
+      </div>
+
+      {/* ---------- password resets: requests from /forgot + hand-issued links ---------- */}
+      <div className="card" style={{ maxWidth: 760, marginTop: 14 }}>
+        <h3>
+          Password resets{" "}
+          <span className="sub">no email service in the beta — copy the link and send it to the user yourself</span>
+        </h3>
+        <form action={adminIssueReset} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+          <select className="tj-select" name="userId" style={{ maxWidth: 320 }}>
+            {visibleUsers.map((u) => (
+              <option key={u.id} value={u.id}>{u.email}</option>
+            ))}
+          </select>
+          <button className="btn btn-sm" type="submit">Issue a reset link</button>
+        </form>
+        {resets.length === 0 ? (
+          <div className="section-note" style={{ margin: 0 }}>
+            No reset requests. When someone uses “Forgot your password?” on the sign-in screen, the request appears here
+            with a ready link (valid 24h, one-time).
+          </div>
+        ) : (
+          resets.map((r) => {
+            const url = `${baseUrl}/reset/${r.token}`;
+            const state = r.usedAt ? "used ✓" : r.expiresAt < new Date() ? "expired" : "active";
+            return (
+              <div key={r.id} style={{ borderTop: "1px solid var(--border)", padding: "7px 0", fontSize: 12.5 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
+                  <b style={{ wordBreak: "break-all" }}>{emailById.get(r.userId) ?? r.userId}</b>
+                  <span style={{ color: "var(--muted)" }}>requested {d(r.createdAt)}</span>
+                  <span style={{ color: r.usedAt ? "var(--pos)" : r.expiresAt < new Date() ? "var(--muted)" : "var(--warn)", fontWeight: 600 }}>
+                    {state}
+                  </span>
+                </div>
+                {state === "active" && (
+                  <input
+                    className="tj-input"
+                    readOnly
+                    defaultValue={url}
+                    style={{ width: "100%", marginTop: 4, fontSize: 12 }}
+                  />
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
       <div className="card" style={{ maxWidth: 760, marginTop: 14 }}>

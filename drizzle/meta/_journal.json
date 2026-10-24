@@ -239,6 +239,13 @@
       "when": 1791392415555,
       "tag": "0033_idea_exec_grade",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791392415556,
+      "tag": "0034_password_resets",
+      "breakpoints": true
     }
   ]
 }

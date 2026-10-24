@@ -370,6 +370,22 @@ export const sessionLog = pgTable(
   (t) => [index("session_log_user_ts_idx").on(t.userId, t.ts)],
 );
 
+/** One-time password-reset links. During the beta the owner issues them from
+ *  the Admin screen and sends them by hand (no email service wired up), so
+ *  the raw token is stored — acceptable for 24h one-time links. */
+export const passwordResets = pgTable(
+  "password_resets",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    userId: text("user_id").notNull(),
+    token: text("token").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("password_resets_token_uq").on(t.token), index("password_resets_user_idx").on(t.userId, t.createdAt)],
+);
+
 /** The evening recap of a trading day — written AFTER the session, separate
  *  from the morning plan so hindsight never leaks into the forecast. One per
  *  user per date; the date can be moved (wrote it the next morning, etc.). */

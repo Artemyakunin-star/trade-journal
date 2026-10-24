@@ -60,6 +60,65 @@ export async function login(fd: FormData) {
   redirect("/");
 }
 
+/** A user asks for a password reset. No email service in the beta: the
+ *  request lands on the Admin screen, the owner sends the link by hand.
+ *  The response never reveals whether the email exists. */
+export async function requestPasswordReset(fd: FormData) {
+  const email = str(fd, "email").toLowerCase();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+    if (user) {
+      const { passwordResets } = await import("@/db/schema");
+      const recent = await db.query.passwordResets.findFirst({
+        where: (r, { and: and_, eq: eq_, isNull: isNull_, gt: gt_ }) =>
+          and_(eq_(r.userId, user.id), isNull_(r.usedAt), gt_(r.expiresAt, new Date())),
+      });
+      if (!recent) {
+        const token = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, "0")).join("");
+        await db.insert(passwordResets).values({
+          userId: user.id,
+          token,
+          expiresAt: new Date(Date.now() + 24 * 3600_000),
+        });
+      }
+    }
+  }
+  redirect("/forgot?sent=1");
+}
+
+/** Set a new password using a one-time link. */
+export async function resetPassword(fd: FormData) {
+  const token = str(fd, "token");
+  const password = String(fd.get("password") ?? "");
+  const fail = (msg: string): never => redirect(`/reset/${encodeURIComponent(token)}?error=${encodeURIComponent(msg)}`);
+  if (password.length < 8) fail("Password must be at least 8 characters");
+  if (password !== String(fd.get("password2") ?? "")) fail("Passwords don't match");
+  const { passwordResets } = await import("@/db/schema");
+  const row = await db.query.passwordResets.findFirst({ where: (r, { eq: eq_ }) => eq_(r.token, token) });
+  if (!row || row.usedAt || row.expiresAt < new Date()) fail("This link has expired or was already used — request a new one");
+  const passwordHash = await bcrypt.hash(password, 10);
+  await db.update(users).set({ passwordHash }).where(eq(users.id, row!.userId));
+  await db.update(passwordResets).set({ usedAt: new Date() }).where(eq(passwordResets.id, row!.id));
+  await createSession(row!.userId);
+  redirect("/");
+}
+
+/** Admin: issue a reset link for a user by hand (shown on the Admin screen). */
+export async function adminIssueReset(fd: FormData) {
+  const { realUserId } = await import("@/lib/auth");
+  const uid = await realUserId();
+  const firstUser = await db.query.users.findFirst({ orderBy: (u, { asc }) => [asc(u.createdAt)] });
+  if (!uid || !firstUser || firstUser.id !== uid) redirect("/");
+  const targetId = str(fd, "userId");
+  const target = await db.query.users.findFirst({ where: eq(users.id, targetId) });
+  if (target) {
+    const { passwordResets } = await import("@/db/schema");
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, "0")).join("");
+    await db.insert(passwordResets).values({ userId: target.id, token, expiresAt: new Date(Date.now() + 24 * 3600_000) });
+  }
+  redirect("/admin");
+}
+
 export async function logout() {
   await destroySession();
   redirect("/login");
