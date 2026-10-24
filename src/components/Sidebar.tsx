@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const ITEMS = [
   { href: "/", ico: "▦", label: "Dashboard" },
@@ -33,12 +34,24 @@ export default function Sidebar({
   showAdmin?: boolean;
 }) {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  // Navigating closes the mobile drawer.
+  useEffect(() => setOpen(false), [pathname]);
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
   const items = showAdmin ? [...ITEMS, { href: "/admin", ico: "◎", label: "Admin" }] : ITEMS;
 
   return (
-    <aside className="sidebar">
+    <>
+    {/* Phone-width header: fixed bar with a burger; the sidebar becomes a drawer. */}
+    <div className="mobile-bar">
+      <button className="burger" type="button" aria-label="Menu" onClick={() => setOpen((v) => !v)}>☰</button>
+      <span style={{ fontWeight: 700, fontSize: 14.5 }}>
+        Trade<span className="accent" style={{ color: "var(--s1)" }}>Journal</span>
+      </span>
+    </div>
+    {open && <div className="sidebar-backdrop" onClick={() => setOpen(false)} />}
+    <aside className={"sidebar" + (open ? " open" : "")}>
       <div className="logo">
         Trade<span className="accent">Journal</span>
         <span className="tag">futures edition</span>
@@ -66,5 +79,6 @@ export default function Sidebar({
         {footer ?? "NinjaTrader CSVs imported as Chicago time."}
       </div>
     </aside>
+    </>
   );
 }

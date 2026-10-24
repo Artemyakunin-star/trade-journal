@@ -401,3 +401,34 @@ form.mcal-cell { padding: 6px 7px; }
   justify-content: center;
   padding: 24px;
 }
+
+/* ---------- phone width ---------- */
+.mobile-bar { display: none; }
+.sidebar-backdrop { display: none; }
+@media (max-width: 860px) {
+  .mobile-bar {
+    display: flex; align-items: center; gap: 10px;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 400;
+    background: var(--surface); border-bottom: 1px solid var(--grid);
+    padding: 9px 12px;
+  }
+  .mobile-bar .burger {
+    background: none; border: 1px solid var(--grid); border-radius: 8px;
+    color: var(--ink); font-size: 15px; line-height: 1; padding: 6px 11px; cursor: pointer;
+  }
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 500; height: 100dvh;
+    transform: translateX(-105%); transition: transform 0.18s ease;
+    box-shadow: 0 0 44px rgba(0, 0, 0, 0.55); overflow-y: auto;
+  }
+  .sidebar.open { transform: none; }
+  .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 450; background: rgba(0, 0, 0, 0.45); }
+  .main { padding: 56px 10px 70px; }
+  .topbar { gap: 8px; margin-bottom: 12px; }
+  .topbar h1 { font-size: 17px; }
+  .tiles { gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  .tile .val { font-size: 19px; }
+  /* Wide tables scroll inside their card instead of stretching the page. */
+  .card { overflow-x: auto; }
+  body { overflow-x: hidden; }
+}
