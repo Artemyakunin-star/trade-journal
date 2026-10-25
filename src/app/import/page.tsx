@@ -5,14 +5,19 @@ import { db } from "@/db";
 import { distinctAccounts, getAllTrades } from "@/lib/metrics";
 import { uploadPlatformSample } from "@/app/actions";
 import { getSettings } from "@/lib/settings";
-import { fmtDate, fmtTimeKyiv, kyivDateOf } from "@/lib/format";
+import { fmtDate, fmtMoney, fmtTimeKyiv, kyivDateOf, parseInTimeZone } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 // Big bar files take a while to insert — allow up to 60s per request.
 export const maxDuration = 60;
 
-export default async function ImportPage() {
+export default async function ImportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
   const uid = await requireUserId();
+  const sp = await searchParams;
   const [log, history, allTrades, prefs] = await Promise.all([
     db.query.importLog.findMany({
       where: (l, { eq: eq_ }) => eq_(l.userId, uid),
@@ -28,6 +33,42 @@ export default async function ImportPage() {
     getSettings(uid),
   ]);
   const tz = prefs.timezone;
+
+  // ---- statement reconciliation: period totals per account, to compare
+  // against the broker/prop statement at a glance ----
+  const today = kyivDateOf(new Date(), tz);
+  const defFrom = `${today.slice(0, 7)}-01`;
+  const from = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : defFrom;
+  const to = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) ? sp.to : today;
+  const winStart = parseInTimeZone(`${from} 00:00:00`, tz);
+  const winEnd = new Date(parseInTimeZone(`${to} 00:00:00`, tz).getTime() + 24 * 3600_000);
+  const winTrades = allTrades.filter((t) => t.entryTime >= winStart && t.entryTime < winEnd && t.pnl !== null);
+  const fillRows = await db.query.executions.findMany({
+    where: (e, { and: and_, eq: eq_, gte: gte_, lt: lt_ }) => and_(eq_(e.userId, uid), gte_(e.time, winStart), lt_(e.time, winEnd)),
+    columns: { account: true },
+  });
+  const recon = new Map<string, { trades: number; contracts: number; fills: number; commission: number; net: number }>();
+  const rowOf = (acc: string) => {
+    let r = recon.get(acc);
+    if (!r) {
+      r = { trades: 0, contracts: 0, fills: 0, commission: 0, net: 0 };
+      recon.set(acc, r);
+    }
+    return r;
+  };
+  for (const t of winTrades) {
+    const r = rowOf(t.account);
+    r.trades += 1;
+    r.contracts += t.quantity;
+    r.commission += Number(t.commission ?? 0);
+    r.net += Number(t.pnl);
+  }
+  for (const f of fillRows) rowOf(f.account).fills += 1;
+  const reconRows = [...recon.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const reconTotal = [...recon.values()].reduce(
+    (a, r) => ({ trades: a.trades + r.trades, contracts: a.contracts + r.contracts, fills: a.fills + r.fills, commission: a.commission + r.commission, net: a.net + r.net }),
+    { trades: 0, contracts: 0, fills: 0, commission: 0, net: 0 },
+  );
 
   return (
     <>
@@ -108,6 +149,66 @@ export default async function ImportPage() {
           </div>
         )
       )}
+
+      {/* ---------- statement reconciliation ---------- */}
+      <div className="card" style={{ maxWidth: 640, marginTop: 14 }}>
+        <h3>
+          Statement check <span className="sub">period totals per account — compare with your broker / prop statement</span>
+        </h3>
+        <form action="/import" method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+          <input className="tj-input" type="date" name="from" defaultValue={from} style={{ fontSize: 12.5 }} />
+          <span style={{ color: "var(--muted)", fontSize: 12.5 }}>→</span>
+          <input className="tj-input" type="date" name="to" defaultValue={to} style={{ fontSize: 12.5 }} />
+          <button className="btn ghost btn-sm" type="submit">Show</button>
+        </form>
+        {reconRows.length === 0 ? (
+          <div className="section-note" style={{ margin: 0 }}>No closed trades in this period.</div>
+        ) : (
+          <table className="tj">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th className="num">Trades</th>
+                <th className="num">Contracts</th>
+                <th className="num">Fills</th>
+                <th className="num">Commission</th>
+                <th className="num">Gross P&L</th>
+                <th className="num">Net P&L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reconRows.map(([acc, r]) => (
+                <tr key={acc}>
+                  <td style={{ whiteSpace: "normal", wordBreak: "break-all" }}>{acc}</td>
+                  <td className="num">{r.trades}</td>
+                  <td className="num">{r.contracts}</td>
+                  <td className="num">{r.fills || "—"}</td>
+                  <td className="num">{fmtMoney(r.commission)}</td>
+                  <td className={"num " + (r.net + r.commission > 0 ? "pos" : r.net + r.commission < 0 ? "neg" : "")}>{fmtMoney(r.net + r.commission)}</td>
+                  <td className={"num " + (r.net > 0 ? "pos" : r.net < 0 ? "neg" : "")}>{fmtMoney(r.net)}</td>
+                </tr>
+              ))}
+              {reconRows.length > 1 && (
+                <tr style={{ fontWeight: 700 }}>
+                  <td>Total</td>
+                  <td className="num">{reconTotal.trades}</td>
+                  <td className="num">{reconTotal.contracts}</td>
+                  <td className="num">{reconTotal.fills || "—"}</td>
+                  <td className="num">{fmtMoney(reconTotal.commission)}</td>
+                  <td className={"num " + (reconTotal.net + reconTotal.commission > 0 ? "pos" : reconTotal.net + reconTotal.commission < 0 ? "neg" : "")}>{fmtMoney(reconTotal.net + reconTotal.commission)}</td>
+                  <td className={"num " + (reconTotal.net > 0 ? "pos" : reconTotal.net < 0 ? "neg" : "")}>{fmtMoney(reconTotal.net)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
+        <div className="section-note">
+          Closed trades only, bucketed by entry time in your chart timezone; partial entries/exits are already grouped
+          into round-trips, so the trade count can&apos;t be inflated by fill splitting. Net = after commissions. Fills come
+          from imported executions (trade-list imports have none — shown as —). If a number disagrees with the
+          statement, the usual suspects are a missing day&apos;s import or a different statement timezone.
+        </div>
+      </div>
 
       <div className="card" style={{ maxWidth: 640, marginTop: 14 }}>
         <h3>
