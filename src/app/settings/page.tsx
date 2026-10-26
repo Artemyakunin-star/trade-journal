@@ -71,6 +71,17 @@ export default async function SettingsPage() {
               </label>
             </div>
           </div>
+          <div className="tj-field">
+            <label className="tj-label">Economic calendar — currencies to show (US index futures → USD)</label>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "NZD", "CHF", "CNY"].map((c) => (
+                <label key={c} style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 12.5, color: "var(--ink-2)" }}>
+                  <input type="checkbox" name="calcur" value={c} defaultChecked={prefs.calendarCurrencies.includes(c)} style={{ accentColor: "var(--s1)" }} />
+                  {c}
+                </label>
+              ))}
+            </div>
+          </div>
           <button className="btn" type="submit">Save display settings</button>
           <div className="section-note">
             Chart timezone only changes how times are shown. Import timezone applies to files you import AFTER changing

@@ -372,6 +372,46 @@ export const sessionLog = pgTable(
   (t) => [index("session_log_user_ts_idx").on(t.userId, t.ts)],
 );
 
+/** Economic-calendar events — shared across users (public market data), cached
+ *  from TradingView (primary) / Forex Factory (fallback) per UTC ISO week. */
+export const calendarEvents = pgTable(
+  "calendar_events",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    source: text("source").notNull(), // "TV" | "FF"
+    externalId: text("external_id").notNull(),
+    isoWeek: text("iso_week").notNull(), // UTC ISO week of the event
+    eventAt: timestamp("event_at", { withTimezone: true }).notNull(),
+    currency: text("currency").notNull(),
+    title: text("title").notNull(),
+    period: text("period").notNull().default(""),
+    importance: text("importance").notNull(), // HIGH / MEDIUM / LOW / HOLIDAY
+    actual: text("actual").notNull().default(""),
+    forecast: text("forecast").notNull().default(""),
+    previous: text("previous").notNull().default(""),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("calendar_events_source_ext_uq").on(t.source, t.externalId),
+    index("calendar_events_at_idx").on(t.eventAt),
+    index("calendar_events_week_idx").on(t.isoWeek),
+  ],
+);
+
+/** Bookkeeping of calendar fetches: throttling + "week is final" detection. */
+export const calendarFetches = pgTable(
+  "calendar_fetches",
+  {
+    id: text("id").primaryKey().$defaultFn(createId),
+    isoWeek: text("iso_week").notNull(),
+    source: text("source").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+    ok: boolean("ok").notNull(),
+    error: text("error").notNull().default(""),
+  },
+  (t) => [uniqueIndex("calendar_fetches_week_source_uq").on(t.isoWeek, t.source)],
+);
+
 /** One-time password-reset links. During the beta the owner issues them from
  *  the Admin screen and sends them by hand (no email service wired up), so
  *  the raw token is stored — acceptable for 24h one-time links. */

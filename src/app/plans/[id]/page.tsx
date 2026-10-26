@@ -7,6 +7,7 @@ import { docs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import DocEditor from "@/components/DocEditor";
 import DayFrame from "@/components/DayFrame";
+import DayNews from "@/components/DayNews";
 import { deleteDoc, setDocDate } from "@/app/actions";
 import { getSettings } from "@/lib/settings";
 import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL } from "@/lib/format";
@@ -87,6 +88,16 @@ export default async function DocPage({
           initialBias={frame?.bias ?? null}
           initialScenarios={frame?.scenarios ?? []}
           initialRules={frame?.rules ?? ""}
+        />
+      )}
+
+      {docDate && (
+        <DayNews
+          date={docDate}
+          tz={prefs.timezone}
+          currencies={prefs.calendarCurrencies}
+          title="News of the day"
+          sub="know the schedule before writing the frame"
         />
       )}
 

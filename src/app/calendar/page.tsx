@@ -5,7 +5,8 @@ import { requireUserId } from "@/lib/auth";
 import AccountFilter from "@/components/AccountFilter";
 import { db } from "@/db";
 import { dayAggregates, distinctAccounts, filterByAccounts, getAllTrades } from "@/lib/metrics";
-import { fmtMoney, kyivDateOf } from "@/lib/format";
+import { fmtMoney, fmtTimeKyiv, kyivDateOf, parseInTimeZone } from "@/lib/format";
+import { ensureCalendar, getCalendarEvents } from "@/lib/calendar";
 import { getSelectedAccounts } from "@/lib/prefs";
 import { getSettings } from "@/lib/settings";
 
@@ -64,6 +65,20 @@ export default async function CalendarPage({
 
   const monthDays = days.filter((d) => d.date.slice(0, 7) === month);
   const monthPnl = monthDays.reduce((a, d) => a + d.pnl, 0);
+
+  // High-impact news markers: red events of the visible grid, grouped by the
+  // user's local day, so the week ahead is visible without leaving the journal.
+  const gridStart = parseInTimeZone(`${cells[0].date} 00:00:00`, tz);
+  const gridEnd = new Date(parseInTimeZone(`${cells[cells.length - 1].date} 00:00:00`, tz).getTime() + 24 * 3600_000);
+  await ensureCalendar(gridStart, gridEnd);
+  const highEvents = await getCalendarEvents(gridStart, gridEnd, { currencies: prefs.calendarCurrencies, minImportance: "HIGH" });
+  const newsByDay = new Map<string, { time: string; title: string }[]>();
+  for (const e of highEvents) {
+    const d = kyivDateOf(e.eventAt, tz);
+    const list = newsByDay.get(d) ?? [];
+    list.push({ time: fmtTimeKyiv(e.eventAt, false, tz), title: e.title });
+    newsByDay.set(d, list);
+  }
 
   const dayNum = (iso: string) => Number(iso.slice(8));
 
@@ -128,13 +143,23 @@ export default async function CalendarPage({
                     </span>
                   )}
                   {hasPlan && <span className="mcal-chip plan">▤ plan</span>}
+                  {newsByDay.has(c.date) && (
+                    <span
+                      className="mcal-chip"
+                      style={{ color: "var(--crit)", borderColor: "rgba(208,59,59,0.45)" }}
+                      title={newsByDay.get(c.date)!.map((e) => `${e.time} ${e.title}`).join("\n")}
+                    >
+                      ⚡ {newsByDay.get(c.date)!.length} news
+                    </span>
+                  )}
                 </span>
               </Link>
             );
           })}
         </div>
         <div className="section-note" style={{ padding: "6px 8px 2px" }}>
-          Click a day to open its Day screen (plan, scenarios, chart, timeline). ⚠ — rogue trades that day.
+          Click a day to open its Day screen (plan, scenarios, chart, timeline). ⚠ — rogue trades that day. ⚡ —
+          high-impact news (hover for the list; currencies in Settings).
         </div>
       </div>
     </>

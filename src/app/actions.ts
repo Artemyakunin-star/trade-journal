@@ -699,6 +699,11 @@ export async function saveDisplaySettings(fd: FormData) {
   await setSetting(uid, "theme", theme);
   const df = str(fd, "dateFormat");
   if (df === "eu" || df === "us") await setSetting(uid, "dateFormat", df);
+  if (fd.has("calcur")) {
+    const KNOWN = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "NZD", "CHF", "CNY"];
+    const cur = [...new Set(fd.getAll("calcur").map(String))].filter((c) => KNOWN.includes(c));
+    if (cur.length) await setSetting(uid, "calendarCurrencies", cur);
+  }
   revalidatePath("/", "layout");
 }
 

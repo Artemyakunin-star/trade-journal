@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { getSettings } from "@/lib/settings";
 import { fmtTimeKyiv, kyivDateOf } from "@/lib/format";
 import { openDailyDoc } from "@/app/actions";
+import DayNews from "@/components/DayNews";
 import LiveFeed, { type LiveEntry } from "@/components/LiveFeed";
 
 export const dynamic = "force-dynamic";
@@ -122,6 +123,8 @@ export default async function LivePage() {
           </div>
         )}
       </div>
+
+      <DayNews date={today} tz={tz} currencies={prefs.calendarCurrencies} title="Today's news" markNext />
 
       <LiveFeed entries={entries} instruments={instrumentRows.map((i) => i.symbol)} />
     </>

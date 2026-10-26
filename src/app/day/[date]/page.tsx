@@ -14,6 +14,7 @@ import { checkIdea, type IdeaCheck } from "@/lib/rules";
 import { addScenario, deleteLogEntry, deleteScenario, setScenarioOutcome } from "@/app/actions";
 import ConfirmButton from "@/components/ConfirmButton";
 import ZoomImg from "@/components/ZoomImg";
+import DayNews from "@/components/DayNews";
 import AccountFilter from "@/components/AccountFilter";
 import {
   dayAggregates,
@@ -391,6 +392,13 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
             <div className="section-note">Nothing logged for this day. Missed setups are added inside an idea (&quot;+ Missed&quot;).</div>
           )}
         </div>
+        <DayNews
+          date={date}
+          tz={tz}
+          currencies={prefs.calendarCurrencies}
+          title="News of the day"
+          sub="what the macro calendar had scheduled, with actuals"
+        />
         {dayLog.length > 0 && (
           <div className="card">
             <h3>

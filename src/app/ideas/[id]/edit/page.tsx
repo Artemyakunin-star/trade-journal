@@ -18,6 +18,7 @@ import { checkIdea } from "@/lib/rules";
 import IdeaChecklist from "@/components/IdeaChecklist";
 import ReplayResolutionNote from "@/components/ReplayResolutionNote";
 import ConfirmButton from "@/components/ConfirmButton";
+import DayNews from "@/components/DayNews";
 import { docs, executions } from "@/db/schema";
 import { convUnitVal, fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
@@ -382,6 +383,16 @@ export default async function EditIdeaPage({
         initialEarlyEntry={idea.earlyEntry}
         initialRedFlags={idea.redFlags ?? []}
       />
+
+      {idea.date && (
+        <DayNews
+          date={idea.date}
+          tz={tz}
+          currencies={prefs.calendarCurrencies}
+          title="News that day"
+          sub="the macro schedule behind this idea's session"
+        />
+      )}
 
       {/* ---------- market notes attached to this idea ---------- */}
       <div className="card" style={{ marginBottom: 14 }}>

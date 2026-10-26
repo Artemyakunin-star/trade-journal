@@ -24,6 +24,8 @@ export type AppSettings = {
   tradingRules: TradingRules;
   /** Saved exit scenarios for the Lab (batch what-if comparison). */
   simScenarios: SimScenario[];
+  /** Economic-calendar currencies to show (US index futures -> USD default). */
+  calendarCurrencies: string[];
 };
 
 /** A saved exit scenario: fixed ticks + contracts, like the simulator row. */
@@ -67,6 +69,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
   tradingRules: {},
   simScenarios: [],
+  calendarCurrencies: ["USD"],
 };
 
 export const TIMEZONES = [
@@ -162,6 +165,7 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     noteCategoryOptions: strArr("noteCategoryOptions", DEFAULT_SETTINGS.noteCategoryOptions),
     tradingRules,
     simScenarios,
+    calendarCurrencies: strArr("calendarCurrencies", DEFAULT_SETTINGS.calendarCurrencies),
   };
 }
 

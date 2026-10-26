@@ -253,6 +253,13 @@
       "when": 1791392415557,
       "tag": "0035_sample_contact",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791392415558,
+      "tag": "0036_calendar_events",
+      "breakpoints": true
     }
   ]
 }
