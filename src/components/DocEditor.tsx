@@ -68,6 +68,8 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
   const [preview, setPreview] = useState<{ id: string; createdAt: string } | null>(null);
   const suppressSave = useRef(false);
   const beforePreview = useRef<unknown>(null);
+  // Click a screenshot -> full-screen lightbox; click again (or Esc) -> back.
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -78,6 +80,15 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
     content: (initialContent as object) ?? { type: "doc", content: [{ type: "paragraph" }] },
     editorProps: {
       attributes: { class: "doc-editor-content" },
+      // A click on an image opens it enlarged (the image stays selectable
+      // underneath, so Delete etc. keep working as before).
+      handleClickOn: (_view, _pos, node, _nodePos, event) => {
+        if (node.type.name === "image" && (node.attrs as { src?: string }).src) {
+          event.preventDefault();
+          setLightbox((node.attrs as { src: string }).src);
+        }
+        return false;
+      },
       handlePaste: (_view, event) => {
         const items = event.clipboardData?.items;
         if (!items) return false;
@@ -211,6 +222,19 @@ export default function DocEditor({ docId, initialTitle, initialContent, kind = 
 
   return (
     <div className={"doc-editor card" + (kind !== "doc" ? " full" : "")}>
+      {lightbox && (
+        <div
+          className="img-lightbox"
+          onClick={() => setLightbox(null)}
+          onKeyDown={(e) => e.key === "Escape" && setLightbox(null)}
+          role="button"
+          tabIndex={0}
+          title="Click to go back"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="" />
+        </div>
+      )}
       {kind === "doc" && (
         <input
           className="doc-title"

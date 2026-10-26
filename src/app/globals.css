@@ -432,3 +432,17 @@ form.mcal-cell { padding: 6px 7px; }
   .card { overflow-x: auto; }
   body { overflow-x: hidden; }
 }
+
+/* ---------- editor image lightbox ---------- */
+.img-lightbox {
+  position: fixed; inset: 0; z-index: 600;
+  background: rgba(8, 9, 11, 0.86);
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 18px;
+}
+.img-lightbox img {
+  max-width: 96vw; max-height: 94vh;
+  border-radius: 10px; border: 1px solid var(--grid);
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.6);
+}
+.doc-editor-content img { cursor: zoom-in; }
