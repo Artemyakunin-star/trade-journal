@@ -153,7 +153,7 @@ export default function DayFrame({
       </div>
 
       <div className="section-note">
-        Max 2 scenarios — the morning&apos;s uncertainty, not a menu. New names typed here are saved to your playbook and
+        Pick every scenario the morning genuinely allows — the self-check later marks ideas outside this list. New names typed here are saved to your playbook and
         reappear as chips tomorrow. Everything autosaves.
       </div>
     </div>

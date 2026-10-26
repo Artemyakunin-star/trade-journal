@@ -324,6 +324,14 @@ export default async function EditIdeaPage({
           {idea.title}{" "}
           {idea.date && <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {fmtDate(idea.date, prefs.dateFormat)}</span>}
         </h1>
+        {(() => {
+          // Back to the morning plan: the explicitly linked doc wins, else the day's plan.
+          const planDoc = planDocs.find((p) => p.id === idea.docId) ?? (idea.date ? planDocs.find((p) => p.date === idea.date) : undefined);
+          return planDoc ? (
+            <Link href={`/plans/${planDoc.id}`} className="btn ghost" title="The morning plan this idea came from">☀ Plan</Link>
+          ) : null;
+        })()}
+        {idea.date && <Link href={`/day/${idea.date}`} className="btn ghost" title="The day page of this idea's date">Day</Link>}
         <Link href={`/trades/new?ideaId=${idea.id}${idea.date ? `&date=${idea.date}` : ""}`} className="btn">+ Trade</Link>
         <form action={deleteIdea}>
           <input type="hidden" name="id" value={idea.id} />
