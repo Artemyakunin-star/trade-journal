@@ -5,6 +5,7 @@
 // Sandbox note: neither source is reachable from the dev container — set
 // CALENDAR_FIXTURE_TV=/path/tv.json locally and the TV fetch reads that file.
 import { and, eq, gte, inArray, lt, notInArray, sql } from "drizzle-orm";
+import { after } from "next/server";
 import { db } from "@/db";
 import { calendarEvents, calendarFetches } from "@/db/schema";
 
@@ -63,7 +64,7 @@ async function fetchTV(fromIso: string, toIso: string): Promise<TvEvent[]> {
   const url = `https://economic-calendar.tradingview.com/events?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&countries=${TV_COUNTRIES}`;
   const resp = await fetch(url, {
     cache: "no-store",
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(4500),
     headers: {
       Origin: "https://www.tradingview.com",
       Referer: "https://www.tradingview.com/",
@@ -85,7 +86,7 @@ type FfEvent = { title: string; country: string; date: string; impact: string; f
 async function fetchFF(): Promise<FfEvent[]> {
   const resp = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json", {
     cache: "no-store",
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(4500),
   });
   if (!resp.ok) throw new Error(`FF ${resp.status}`);
   const data = await resp.json();
@@ -133,25 +134,32 @@ async function upsertEvents(
   }
 }
 
-/** Make sure one UTC ISO week's events are present and fresh enough. Never throws. */
-async function ensureWeekEvents(weekAnchor: Date): Promise<void> {
+/** DB-only freshness check: does this UTC ISO week need a refresh right now? */
+async function weekNeedsRefresh(weekAnchor: Date): Promise<boolean> {
   const { start, end } = weekBoundsUtc(weekAnchor);
   const isoWeek = isoWeekOf(start);
   const now = Date.now();
+  const last = await db.query.calendarFetches.findFirst({
+    where: (f, { and: and_, eq: eq_ }) => and_(eq_(f.isoWeek, isoWeek), eq_(f.source, "TV")),
+  });
+  if (!last) return true;
+  const age = now - last.fetchedAt.getTime();
+  if (!last.ok) return age >= 10 * 60_000; // failed recently — back off
+  const weekOver = now > end.getTime();
+  const fetchedAfterEnd = last.fetchedAt.getTime() > end.getTime() + 24 * HOUR;
+  if (weekOver && fetchedAfterEnd) return false; // week is final
+  return age >= HOUR;
+}
+
+/** Fetch + store one UTC ISO week (runs in the background, never throws). */
+async function refreshWeekEvents(weekAnchor: Date): Promise<void> {
+  const { start, end } = weekBoundsUtc(weekAnchor);
+  const isoWeek = isoWeekOf(start);
   try {
-    const last = await db.query.calendarFetches.findFirst({
-      where: (f, { and: and_, eq: eq_ }) => and_(eq_(f.isoWeek, isoWeek), eq_(f.source, "TV")),
-    });
-    if (last) {
-      const age = now - last.fetchedAt.getTime();
-      if (!last.ok && age < 10 * 60_000) return; // failed recently — back off
-      if (last.ok) {
-        const weekOver = now > end.getTime();
-        const fetchedAfterEnd = last.fetchedAt.getTime() > end.getTime() + 24 * HOUR;
-        if (weekOver && fetchedAfterEnd) return; // week is final
-        if (age < HOUR) return; // fresh enough
-      }
-    }
+    if (!(await weekNeedsRefresh(weekAnchor))) return; // another request got here first
+    // Claim the slot BEFORE the slow fetch, so parallel requests back off
+    // (10 min); the real result overwrites this marker right after.
+    await recordFetch(isoWeek, "TV", false, "refreshing");
     // Fetch the week padded by ±14h so any user timezone is fully covered.
     const fromIso = new Date(start.getTime() - 14 * HOUR).toISOString();
     const toIso = new Date(end.getTime() + 14 * HOUR).toISOString();
@@ -206,19 +214,36 @@ async function ensureWeekEvents(weekAnchor: Date): Promise<void> {
       await recordFetch(isoWeek, "FF", false, e instanceof Error ? e.message : String(e));
     }
   } catch (e) {
-    console.error("calendar ensureWeekEvents:", e);
+    console.error("calendar refreshWeekEvents:", e);
   }
 }
 
-/** Ensure every UTC ISO week overlapping [start, end) is cached. Never throws. */
+/** Keep every UTC ISO week overlapping [start, end) cached — WITHOUT blocking
+ *  the page. The render only does cheap DB freshness checks; actual network
+ *  fetches run after the response is sent (stale-while-revalidate), so a slow
+ *  or dead source can never slow navigation down. Never throws. */
 export async function ensureCalendar(start: Date, end: Date): Promise<void> {
-  const anchors: Date[] = [];
-  let cur = weekBoundsUtc(start).start;
-  while (cur < end && anchors.length < 8) {
-    anchors.push(cur);
-    cur = new Date(cur.getTime() + 7 * 24 * HOUR);
+  try {
+    const anchors: Date[] = [];
+    let cur = weekBoundsUtc(start).start;
+    while (cur < end && anchors.length < 8) {
+      anchors.push(cur);
+      cur = new Date(cur.getTime() + 7 * 24 * HOUR);
+    }
+    const stale: Date[] = [];
+    for (const a of anchors) if (await weekNeedsRefresh(a)) stale.push(a);
+    if (!stale.length) return;
+    const run = async () => {
+      for (const a of stale) await refreshWeekEvents(a);
+    };
+    try {
+      after(run); // runs once the response has been sent (Vercel keeps the fn alive)
+    } catch {
+      void run(); // outside a request scope (scripts/tests) — plain fire-and-forget
+    }
+  } catch (e) {
+    console.error("calendar ensureCalendar:", e);
   }
-  for (const a of anchors) await ensureWeekEvents(a);
 }
 
 /** Events in [start, end): TV rows win over FF when both exist for the range. */
