@@ -260,6 +260,13 @@
       "when": 1791392415558,
       "tag": "0036_calendar_events",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791392415559,
+      "tag": "0037_trade_tags",
+      "breakpoints": true
     }
   ]
 }

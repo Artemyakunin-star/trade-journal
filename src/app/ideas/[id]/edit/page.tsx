@@ -526,6 +526,7 @@ export default async function EditIdeaPage({
             tz={tz}
             visibleCols={visibleCols}
             keyLevelOptions={prefs.keyLevelOptions}
+            tagOptions={prefs.tradeTagOptions}
             ofConfOptions={prefs.ofConfOptions}
             editableAccountIds={new Set(idea.trades.filter((t) => !linkedIds.has(t.id)).map((t) => t.id))}
             dateFormat={prefs.dateFormat}

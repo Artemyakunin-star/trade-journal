@@ -301,6 +301,8 @@ export const trades = pgTable(
     /** Trader's manual assertion: the entry-candle dip happened BEFORE the
      *  entry, so replays must not count a stop on that one candle. */
     entryDipBefore: boolean("entry_dip_before"),
+    /** Execution tags ("tight stop", "fast BE", …) — filterable, user vocabulary. */
+    tags: jsonb("tags").$type<string[]>(),
     /** Rich per-trade write-up (TipTap JSON, incl. pasted screenshots). */
     journal: jsonb("journal"),
 

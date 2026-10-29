@@ -26,6 +26,8 @@ export type AppSettings = {
   simScenarios: SimScenario[];
   /** Economic-calendar currencies to show (US index futures -> USD default). */
   calendarCurrencies: string[];
+  /** Execution-tag vocabulary for trades ("tight stop", "fast BE", …). */
+  tradeTagOptions: string[];
 };
 
 /** A saved exit scenario: fixed ticks + contracts, like the simulator row. */
@@ -70,6 +72,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tradingRules: {},
   simScenarios: [],
   calendarCurrencies: ["USD"],
+  tradeTagOptions: [
+    "tight stop",
+    "wide stop",
+    "fast BE",
+    "chased entry",
+    "slipped entry",
+    "exited early",
+    "held through news",
+    "oversized",
+  ],
 };
 
 export const TIMEZONES = [
@@ -166,6 +178,7 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     tradingRules,
     simScenarios,
     calendarCurrencies: strArr("calendarCurrencies", DEFAULT_SETTINGS.calendarCurrencies),
+    tradeTagOptions: strArr("tradeTagOptions", DEFAULT_SETTINGS.tradeTagOptions),
   };
 }
 

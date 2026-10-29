@@ -470,6 +470,61 @@ export default async function AnalyticsPage({
           <Tiles tiles={disciplineTiles} />
         </div>
       </div>
+
+      {/* ---------- execution tags: what each habit actually costs ---------- */}
+      {(() => {
+        const byTag = new Map<string, typeof trades>();
+        for (const t of trades) {
+          for (const tag of t.tags ?? []) {
+            if (!byTag.has(tag)) byTag.set(tag, []);
+            byTag.get(tag)!.push(t);
+          }
+        }
+        if (byTag.size === 0) return null;
+        const rows = [...byTag.entries()]
+          .map(([tag, ts]) => {
+            const closed = ts.filter((t) => t.pnl !== null);
+            const net = closed.reduce((a, t) => a + tradePnl(t), 0);
+            const s = rrStats(ts);
+            return { tag, n: ts.length, closed: closed.length, net, winRate: s.winRate, avgRR: s.avgRR };
+          })
+          .sort((a, b) => a.net - b.net);
+        return (
+          <div className="card" style={{ marginTop: 14, maxWidth: 720 }}>
+            <h3>
+              By execution tag <span className="sub">what each habit costs — worst first · a trade can carry several tags</span>
+            </h3>
+            <table className="tj">
+              <thead>
+                <tr>
+                  <th>Tag</th>
+                  <th className="num">Trades</th>
+                  <th className="num">Win rate</th>
+                  <th className="num">Avg RR</th>
+                  <th className="num">Net P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.tag}>
+                    <td>
+                      <Link className="linklike" href={`/trades?tag=${encodeURIComponent(r.tag)}`}>{r.tag}</Link>
+                    </td>
+                    <td className="num">{r.n}</td>
+                    <td className="num">{r.winRate === null ? "—" : `${Math.round(r.winRate * 100)}%`}</td>
+                    <td className="num">{r.avgRR === null ? "—" : `${r.avgRR > 0 ? "+" : ""}${r.avgRR.toFixed(2)}R`}</td>
+                    <td className={"num " + (r.net > 0 ? "pos" : r.net < 0 ? "neg" : "")}>{fmtMoney(r.net)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="section-note">
+              Tags are set in the Trades table (the Tags column). Click a tag to see its trades — tick them there and
+              run the Lab to test the opposite habit.
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }

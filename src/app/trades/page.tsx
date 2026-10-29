@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 export default async function TradesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; q?: string; date?: string; from?: string; to?: string; unit?: string; mergeError?: string }>;
+  searchParams: Promise<{ instrument?: string; dir?: string; kind?: string; tag?: string; q?: string; date?: string; from?: string; to?: string; unit?: string; mergeError?: string }>;
 }) {
   const uid = await requireUserId();
   const sp = await searchParams;
@@ -52,6 +52,7 @@ export default async function TradesPage({
   if (sp.dir) trades = trades.filter((t) => t.direction === sp.dir);
   if (sp.kind === "rogue") trades = trades.filter((t) => !t.ideaId);
   if (sp.kind === "idea") trades = trades.filter((t) => !!t.ideaId);
+  if (sp.tag) trades = trades.filter((t) => (t.tags ?? []).includes(sp.tag!));
   if (sp.q) {
     const q = sp.q.toLowerCase();
     trades = trades.filter((t) => (t.note ?? "").toLowerCase().includes(q));
@@ -102,6 +103,12 @@ export default async function TradesPage({
           <option value="">All trades</option>
           <option value="rogue">Rogue only</option>
           <option value="idea">With idea only</option>
+        </select>
+        <select name="tag" defaultValue={sp.tag ?? ""} className="tj-select" title="Execution tag (the Tags column)">
+          <option value="">Any tag</option>
+          {prefs.tradeTagOptions.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
         </select>
         <input type="text" name="q" placeholder="Search notes…" defaultValue={sp.q ?? ""} />
         <span className="seg">
@@ -196,6 +203,7 @@ export default async function TradesPage({
             tz={tz}
             visibleCols={visibleCols}
             keyLevelOptions={prefs.keyLevelOptions}
+            tagOptions={prefs.tradeTagOptions}
             ofConfOptions={prefs.ofConfOptions}
             editableAccountIds={editableAccountIds}
             dateFormat={prefs.dateFormat}

@@ -937,6 +937,24 @@ export async function sendFeedback(fd: FormData) {
   redirect("/feedback?sent=1");
 }
 
+/** Execution tags on a trade ("tight stop", "fast BE", …). A new tag joins
+ *  the shared vocabulary for good. */
+export async function setTradeTags(input: { tradeId: string; tags: string[]; newTag?: string }) {
+  const uid = await requireUserId();
+  const tags = [...new Set((input.tags ?? []).map((s) => String(s).trim()).filter(Boolean))].slice(0, 12);
+  const newTag = (input.newTag ?? "").trim();
+  if (newTag && !tags.some((t) => t.toLowerCase() === newTag.toLowerCase())) tags.push(newTag.slice(0, 60));
+  await db
+    .update(trades)
+    .set({ tags: tags.length ? tags : null, updatedAt: new Date() })
+    .where(and(eq(trades.id, input.tradeId), eq(trades.userId, uid)));
+  const { getSettings } = await import("@/lib/settings");
+  const prefs = await getSettings(uid);
+  const missing = tags.filter((t) => !prefs.tradeTagOptions.some((o) => o.toLowerCase() === t.toLowerCase()));
+  if (missing.length) await setSetting(uid, "tradeTagOptions", [...prefs.tradeTagOptions, ...missing]);
+  revalidatePath("/", "layout");
+}
+
 /** Grade for ONE trade (execution quality) — ideas keep their own grade. */
 export async function setTradeGrade(fd: FormData) {
   const uid = await requireUserId();

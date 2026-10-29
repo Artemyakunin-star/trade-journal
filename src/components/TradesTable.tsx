@@ -21,6 +21,7 @@ import type { IdeaRow, TradeRow } from "@/lib/metrics";
 import { tradePnl, ideaPnl } from "@/lib/metrics";
 import { hasBarsFor } from "@/lib/coverage";
 import GroupSelectBox from "@/components/GroupSelectBox";
+import TradeTags from "@/components/TradeTags";
 
 type Spec = { tickSize: number; tickValue: number };
 
@@ -67,6 +68,7 @@ export default function TradesTable({
   tz,
   visibleCols = null,
   keyLevelOptions = [],
+  tagOptions = [],
   ofConfOptions = [],
   editableAccountIds = null,
   dateFormat = "eu",
@@ -87,6 +89,7 @@ export default function TradesTable({
   /** Which optional columns to render; null = all. */
   visibleCols?: Set<string> | null;
   keyLevelOptions?: string[];
+  tagOptions?: string[];
   ofConfOptions?: string[];
   /** Trades whose account label can be edited inline (no CSV executions behind them). */
   editableAccountIds?: Set<string> | null;
@@ -119,7 +122,7 @@ export default function TradesTable({
 
   const colCount =
     1 +
-    ["date", "account", "instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "grade", "note"].filter(show).length +
+    ["date", "account", "instrument", "dir", "qty", "entryPrice", "exitPrice", "netPnl", "perContract", "mae", "mfe", "keyLevel", "ofConf", "stop", "rr", "grade", "note", "tags"].filter(show).length +
     (showIdeaCol ? 1 : 0) +
     (sim ? 3 : 0) +
     (actionsFor ? 1 : 0);
@@ -313,6 +316,11 @@ export default function TradesTable({
           </td>
         )}
         {show("note") && <td style={{ whiteSpace: "normal", maxWidth: 220 }}>{t.note ?? ""}</td>}
+        {show("tags") && (
+          <td style={{ whiteSpace: "normal", maxWidth: 200 }}>
+            <TradeTags tradeId={t.id} initial={t.tags ?? []} options={tagOptions} />
+          </td>
+        )}
         {showIdeaCol && (
           <td>
             <form action={setTradeIdea}>
@@ -358,6 +366,7 @@ export default function TradesTable({
           {show("rr") && <th className="num tip-r" data-tip="Realized R-multiple: result divided by the initial risk (needs SL). +2R means you made twice your risk; −1R is a full stop">RR</th>}
           {show("grade") && <th className="tip-r" data-tip="Execution quality grade for this trade (A+ … F) — separate from the idea's grade. How well you executed, not how much you made">Grade</th>}
           {show("note") && <th className="tip-r" data-tip="Free-text note for the trade">Note</th>}
+          {show("tags") && <th className="tip-r" data-tip="Execution tags (tight stop, fast BE, …) — click a cell to edit; filter above, stats in Analytics">Tags</th>}
           {showIdeaCol && <th className="tip-r" data-tip="Idea this trade belongs to. Trades without an idea are counted as rogue">Idea</th>}
           {actionsFor && <th className="tip-r" data-tip="Detach removes the trade from this idea (it becomes rogue). ✕ deletes a manually added / trade-list trade entirely">Actions</th>}
         </tr>

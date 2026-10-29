@@ -24,6 +24,7 @@ export type TradeRow = {
   account: string;
   grade: string | null;
   entryDipBefore?: boolean | null;
+  tags?: string[] | null;
 };
 
 export type IdeaRow = {

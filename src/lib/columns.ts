@@ -17,5 +17,6 @@ export const TRADE_COLUMNS: { key: string; label: string }[] = [
   { key: "rr", label: "RR" },
   { key: "grade", label: "Grade" },
   { key: "note", label: "Note" },
+  { key: "tags", label: "Tags" },
   { key: "idea", label: "Idea" },
 ];
