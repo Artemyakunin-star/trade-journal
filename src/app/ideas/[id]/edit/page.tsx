@@ -690,7 +690,16 @@ export default async function EditIdeaPage({
       </div>
 
       <div className="grid2" style={{ gridTemplateColumns: "minmax(0,640px) 1fr", alignItems: "start", marginBottom: 14 }}>
-        <IdeaForm idea={idea as IdeaRow} instruments={instruments.map((i) => i.symbol)} returnTo={`/ideas/${id}/edit`} planDocs={planDocs} />
+        {/* key: remount the form when the date changes server-side (the one-click
+            mismatch fix), otherwise the uncontrolled date input keeps the old
+            value and a later "Save idea" would silently write it back. */}
+        <IdeaForm
+          key={`${idea.id}-${idea.date ?? ""}-${idea.status}`}
+          idea={idea as IdeaRow}
+          instruments={instruments.map((i) => i.symbol)}
+          returnTo={`/ideas/${id}/edit`}
+          planDocs={planDocs}
+        />
         <div className="card" style={{ minWidth: 0 }}>
           <h3>
             Attach trades <span className="sub">rogue trades not linked to any idea yet</span>
