@@ -28,6 +28,9 @@ export type AppSettings = {
   calendarCurrencies: string[];
   /** Execution-tag vocabulary for trades ("tight stop", "fast BE", …). */
   tradeTagOptions: string[];
+  /** Sidebar personalization: item order (hrefs) and hidden items. */
+  sidebarOrder: string[];
+  sidebarHidden: string[];
 };
 
 /** A saved exit scenario: fixed ticks + contracts, like the simulator row. */
@@ -82,6 +85,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     "held through news",
     "oversized",
   ],
+  sidebarOrder: [],
+  sidebarHidden: [],
 };
 
 export const TIMEZONES = [
@@ -179,6 +184,8 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     simScenarios,
     calendarCurrencies: strArr("calendarCurrencies", DEFAULT_SETTINGS.calendarCurrencies),
     tradeTagOptions: strArr("tradeTagOptions", DEFAULT_SETTINGS.tradeTagOptions),
+    sidebarOrder: strArr("sidebarOrder", []),
+    sidebarHidden: strArr("sidebarHidden", []),
   };
 }
 

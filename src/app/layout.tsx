@@ -42,6 +42,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             footer={`Times shown in ${tzLabel(prefs.timezone)}. CSVs imported as ${tzLabel(prefs.importTimezone)}.`}
             userEmail={sandbox ? "Sandbox mode" : user?.email ?? ""}
             showAdmin={sandbox || firstUser?.id === uid}
+            initialOrder={prefs.sidebarOrder}
+            initialHidden={prefs.sidebarHidden}
           />
           <div className="main">
             {sandbox && (

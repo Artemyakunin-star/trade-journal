@@ -937,6 +937,15 @@ export async function sendFeedback(fd: FormData) {
   redirect("/feedback?sent=1");
 }
 
+/** Sidebar personalization: the user's item order and hidden items. */
+export async function saveSidebarLayout(input: { order: string[]; hidden: string[] }) {
+  const uid = await requireUserId();
+  const clean = (xs: string[]) => [...new Set((xs ?? []).map(String).filter((s) => s.startsWith("/")))].slice(0, 40);
+  await setSetting(uid, "sidebarOrder", clean(input.order));
+  await setSetting(uid, "sidebarHidden", clean(input.hidden));
+  revalidatePath("/", "layout");
+}
+
 /** Execution tags on a trade ("tight stop", "fast BE", …). A new tag joins
  *  the shared vocabulary for good. */
 export async function setTradeTags(input: { tradeId: string; tags: string[]; newTag?: string }) {
