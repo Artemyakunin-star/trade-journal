@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { setTradeTags } from "@/app/actions";
+import VocabEditor from "@/components/VocabEditor";
 
 export default function TradeTags({
   tradeId,
@@ -77,6 +78,7 @@ export default function TradeTags({
                 </button>
               );
             })}
+            <VocabEditor settingKey="tradeTagOptions" options={options} title="Execution tags" />
             <input
               className="tj-input"
               placeholder="+ new tag…"

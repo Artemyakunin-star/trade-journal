@@ -7,6 +7,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { saveIdeaChecklist } from "@/app/actions";
 import { GRADE_LABEL, gradeClass } from "@/lib/format";
+import VocabEditor from "@/components/VocabEditor";
 
 type Frame = { bias: string | null; scenarios: string[]; locations?: string[]; rules: string | null } | null;
 
@@ -311,6 +312,7 @@ export default function IdeaChecklist({
               persist({ setups: next });
             }),
           )}
+          <VocabEditor settingKey="playbookOptions" options={playbookOptions} title="Playbook setups" />
           {!addingSetup ? (
             <button className="btn ghost btn-sm" type="button" onClick={() => setAddingSetup(true)}>+</button>
           ) : (
@@ -360,6 +362,7 @@ export default function IdeaChecklist({
               persist({ locations: next });
             }),
           )}
+          <VocabEditor settingKey="keyLevelOptions" options={keyLevelOptions} title="Key levels" />
           {!addingLoc ? (
             <button className="btn ghost btn-sm" type="button" onClick={() => setAddingLoc(true)}>+</button>
           ) : (
@@ -415,6 +418,7 @@ export default function IdeaChecklist({
               persist({ confirmTypes: next });
             }),
           )}
+          <VocabEditor settingKey="ofConfOptions" options={ofConfOptions} title="Confirmations" />
           {!addingConf ? (
             <button className="btn ghost btn-sm" type="button" onClick={() => setAddingConf(true)}>+</button>
           ) : (
@@ -459,6 +463,7 @@ export default function IdeaChecklist({
               persist({ redFlags: next });
             }),
           )}
+          <VocabEditor settingKey="redFlagOptions" options={redFlagOptions} title="Red flags" />
           {!addingFlag ? (
             <button className="btn ghost btn-sm" type="button" onClick={() => setAddingFlag(true)}>+</button>
           ) : (

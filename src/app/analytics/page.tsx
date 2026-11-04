@@ -101,9 +101,10 @@ export default async function AnalyticsPage({
 
   // All-time inputs for the "Plan & psychology" section (frames are day-level,
   // so the trade range filter doesn't apply to them).
-  const [allFrames, allIdeasFull] = await Promise.all([
+  const [allFrames, allIdeasFull, allRecaps] = await Promise.all([
     db.query.dayFrames.findMany({ where: (f, { eq: eq_ }) => eq_(f.userId, uid) }),
     db.query.ideas.findMany({ where: (i, { eq: eq_ }) => eq_(i.userId, uid), with: { trades: true } }),
+    db.query.dayRecaps.findMany({ where: (r, { eq: eq_ }) => eq_(r.userId, uid) }),
   ]);
 
   let trades = filterByAccounts(rawTrades, selectedAccounts).filter((t) => t.pnl !== null);
@@ -535,7 +536,51 @@ export default async function AnalyticsPage({
           }
         }
 
-        if (!marked.length && !byState.size && !byLoc.size) return null;
+        // By recap cause: the "what pushed me" / "what I did" chips → day stats.
+        const byDriver = new Map<string, string[]>();
+        const byBehavior = new Map<string, string[]>();
+        for (const r of allRecaps) {
+          for (const d of r.drivers ?? []) {
+            const a = byDriver.get(d) ?? [];
+            a.push(r.date);
+            byDriver.set(d, a);
+          }
+          for (const b of r.behaviors ?? []) {
+            const a = byBehavior.get(b) ?? [];
+            a.push(r.date);
+            byBehavior.set(b, a);
+          }
+        }
+
+        if (!marked.length && !byState.size && !byLoc.size && !byDriver.size && !byBehavior.size) return null;
+        const causeTable = (title: string, m: Map<string, string[]>, col: string) => (
+          <div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>{title}</div>
+            <table className="tj">
+              <thead>
+                <tr>
+                  <th>{col}</th>
+                  <th className="num">Days</th>
+                  <th className="num">Net P&L</th>
+                  <th className="num">Avg exec</th>
+                  <th className="num">Rogue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...m.entries()]
+                  .map(([k, dates]) => ({ k, dates, s: dayStats(dates) }))
+                  .sort((a, b) => a.s.pnl - b.s.pnl)
+                  .map(({ k, dates, s }) => (
+                    <tr key={k}>
+                      <td>{k}</td>
+                      <td className="num">{dates.length}</td>
+                      {statCells(s)}
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        );
         return (
           <div className="card" style={{ marginTop: 14 }}>
             <h3>
@@ -637,6 +682,8 @@ export default async function AnalyticsPage({
                   </table>
                 </div>
               )}
+              {byDriver.size > 0 && causeTable("What pushed you — the recap's driver chips (worst first)", byDriver, "Driver")}
+              {byBehavior.size > 0 && causeTable("What you did — the recap's behavior chips (worst first)", byBehavior, "Behavior")}
             </div>
             <div className="section-note">
               “Avg exec” averages the Execution grades of that day&apos;s ideas (A+=4.3 … F=0). If execution collapses on

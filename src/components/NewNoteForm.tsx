@@ -5,8 +5,9 @@
 import { useRef, useState } from "react";
 import { createNote } from "@/app/actions";
 import { handleImagePaste, imageThumbs } from "@/lib/pasteImage";
+import VocabEditor from "@/components/VocabEditor";
 
-export default function NewNoteForm({ cats }: { cats: string[] }) {
+export default function NewNoteForm({ cats, vocab }: { cats: string[]; vocab?: string[] }) {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -34,7 +35,10 @@ export default function NewNoteForm({ cats }: { cats: string[] }) {
         {imageThumbs(imageUrls, (url) => setImageUrls((prev) => prev.filter((u) => u !== url)))}
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 12, color: "var(--muted)" }}>Categories:</span>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          Categories:
+          {vocab && <VocabEditor settingKey="noteCategoryOptions" options={vocab} title="Note categories" />}
+        </span>
         {cats.map((c) => (
           <label key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--ink)", cursor: "pointer" }}>
             <input type="checkbox" name="cat" value={c} style={{ accentColor: "var(--s1)" }} />

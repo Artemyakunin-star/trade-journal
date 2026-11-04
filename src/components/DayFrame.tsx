@@ -4,6 +4,7 @@
 // Lives above the daily plan editor; autosaves on every change.
 import { useRef, useState } from "react";
 import { saveDayFrame } from "@/app/actions";
+import VocabEditor from "@/components/VocabEditor";
 
 const BIASES = [
   { key: "LONG", label: "Long", color: "var(--pos)" },
@@ -48,8 +49,14 @@ export default function DayFrame({
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Selected values always display, even after their option was edited out of the vocabulary.
   const allOptions = [...options, ...extra.filter((e) => !options.includes(e))];
-  const allLocOptions = [...locationOptions, ...extraLoc.filter((e) => !locationOptions.includes(e))];
+  const allLocOptions = [
+    ...locationOptions,
+    ...extraLoc.filter((e) => !locationOptions.includes(e)),
+    ...locations.filter((l) => !locationOptions.includes(l) && !extraLoc.includes(l)),
+  ];
+  const allStateOptions = state && !stateOptions.includes(state) ? [...stateOptions, state] : stateOptions;
 
   type Vals = { bias: string | null; scenarios: string[]; locations: string[]; psychState: string | null; psychNote: string; rules: string };
   const persist = (patch: Partial<Vals>, debounce = 0) => {
@@ -156,7 +163,10 @@ export default function DayFrame({
 
       {/* scenarios: the chosen ones as an ORDERED list, the rest as chips to add */}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 10 }}>
-        <span style={rowLabel("Scenarios", true)}>Scenarios</span>
+        <span style={rowLabel("Scenarios", true)}>
+          Scenarios
+          <VocabEditor settingKey="playbookOptions" options={options} title="Playbook scenarios" />
+        </span>
         <div style={{ flex: 1, minWidth: 260 }}>
           {scenarios.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
@@ -204,7 +214,10 @@ export default function DayFrame({
 
       {/* locations: key levels today's trading is allowed around */}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 10 }}>
-        <span style={rowLabel("Locations", true)}>Locations</span>
+        <span style={rowLabel("Locations", true)}>
+          Locations
+          <VocabEditor settingKey="keyLevelOptions" options={locationOptions} title="Key levels" />
+        </span>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 260 }}>
           {allLocOptions.map((o) => {
             const on = locations.includes(o);
@@ -235,9 +248,12 @@ export default function DayFrame({
 
       {/* pre-session psychological state */}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 10 }}>
-        <span style={rowLabel("State", true)}>State</span>
+        <span style={rowLabel("State", true)}>
+          State
+          <VocabEditor settingKey="psychStateOptions" options={stateOptions} title="Pre-session states" />
+        </span>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1, minWidth: 260, alignItems: "center" }}>
-          {stateOptions.map((o) => {
+          {allStateOptions.map((o) => {
             const on = state === o;
             return (
               <button

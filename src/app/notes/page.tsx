@@ -56,7 +56,7 @@ export default async function NotesPage({ searchParams }: { searchParams: Promis
         <h3>
           New note <span className="sub">one observation, one or two sentences — the market will grade it later</span>
         </h3>
-        <NewNoteForm cats={cats} />
+        <NewNoteForm cats={cats} vocab={prefs.noteCategoryOptions} />
       </div>
 
       {/* ---------- category filter ---------- */}

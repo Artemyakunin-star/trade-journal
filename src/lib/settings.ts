@@ -30,6 +30,12 @@ export type AppSettings = {
   tradeTagOptions: string[];
   /** Pre-session psychological states for the day frame. */
   psychStateOptions: string[];
+  /** Recap causes: what happened (the trigger event of the day). */
+  recapTriggerOptions: string[];
+  /** Recap causes: what pushed you (FOMO ≠ tilt ≠ revenge). */
+  recapDriverOptions: string[];
+  /** Recap causes: what you actually did about it. */
+  recapBehaviorOptions: string[];
   /** Sidebar personalization: item order (hrefs) and hidden items. */
   sidebarOrder: string[];
   sidebarHidden: string[];
@@ -88,6 +94,34 @@ export const DEFAULT_SETTINGS: AppSettings = {
     "oversized",
   ],
   psychStateOptions: ["calm", "rested", "focused", "tired", "irritated", "anxious", "rushed"],
+  recapTriggerOptions: [
+    "missed a planned entry",
+    "stopped out",
+    "losing streak",
+    "flat, boring tape",
+    "big win early",
+    "news broke the plan",
+    "nothing — smooth day",
+  ],
+  recapDriverOptions: [
+    "FOMO",
+    "tilt",
+    "revenge",
+    "boredom",
+    "overconfidence after being right",
+    "fear — couldn't pull the trigger",
+    "nothing pushed me",
+  ],
+  recapBehaviorOptions: [
+    "chased the move that left without me",
+    "clicked junk knowing it was junk",
+    "sized up",
+    "held through the stop",
+    "skipped the planned entry",
+    "stopped myself in time",
+    "traded the plan cleanly",
+    "first trade after the miss was fine — spiral came later",
+  ],
   sidebarOrder: [],
   sidebarHidden: [],
 };
@@ -188,6 +222,9 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     calendarCurrencies: strArr("calendarCurrencies", DEFAULT_SETTINGS.calendarCurrencies),
     tradeTagOptions: strArr("tradeTagOptions", DEFAULT_SETTINGS.tradeTagOptions),
     psychStateOptions: strArr("psychStateOptions", DEFAULT_SETTINGS.psychStateOptions),
+    recapTriggerOptions: strArr("recapTriggerOptions", DEFAULT_SETTINGS.recapTriggerOptions),
+    recapDriverOptions: strArr("recapDriverOptions", DEFAULT_SETTINGS.recapDriverOptions),
+    recapBehaviorOptions: strArr("recapBehaviorOptions", DEFAULT_SETTINGS.recapBehaviorOptions),
     sidebarOrder: strArr("sidebarOrder", []),
     sidebarHidden: strArr("sidebarHidden", []),
   };

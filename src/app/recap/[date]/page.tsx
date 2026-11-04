@@ -203,8 +203,15 @@ export default async function RecapPage({
         </div>
       </div>
 
-      {/* ---------- the verdict + the two honest fields ---------- */}
-      <RecapFields id={recap.id} initialVerdict={recap.verdict} initialWell={recap.wentWell ?? ""} initialWrong={recap.wentWrong ?? ""} />
+      {/* ---------- the verdict + one-click causes + optional words ---------- */}
+      <RecapFields
+        id={recap.id}
+        initialVerdict={recap.verdict}
+        initialWell={recap.wentWell ?? ""}
+        initialWrong={recap.wentWrong ?? ""}
+        initialCauses={{ triggers: recap.triggers ?? [], drivers: recap.drivers ?? [], behaviors: recap.behaviors ?? [] }}
+        causeOptions={{ triggers: prefs.recapTriggerOptions, drivers: prefs.recapDriverOptions, behaviors: prefs.recapBehaviorOptions }}
+      />
 
       {/* ---------- what you wrote during the session ---------- */}
       {dayLog.length > 0 && (

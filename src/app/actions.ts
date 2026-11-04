@@ -202,8 +202,16 @@ export async function saveRecapJournal(id: string, content: unknown) {
   revalidatePath("/recap");
 }
 
-/** The recap's structured fields: verdict chip + worked / didn't textareas. */
-export async function saveRecapFields(input: { id: string; verdict?: string | null; wentWell?: string; wentWrong?: string }) {
+/** The recap's structured fields: verdict chip, one-click causes, textareas. */
+export async function saveRecapFields(input: {
+  id: string;
+  verdict?: string | null;
+  wentWell?: string;
+  wentWrong?: string;
+  triggers?: unknown;
+  drivers?: unknown;
+  behaviors?: unknown;
+}) {
   const uid = await requireUserId();
   const { dayRecaps } = await import("@/db/schema");
   const set: Record<string, unknown> = { updatedAt: new Date() };
@@ -212,6 +220,13 @@ export async function saveRecapFields(input: { id: string; verdict?: string | nu
   }
   if (input.wentWell !== undefined) set.wentWell = String(input.wentWell).trim() || null;
   if (input.wentWrong !== undefined) set.wentWrong = String(input.wentWrong).trim() || null;
+  const causeList = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? [...new Set(v.filter((x): x is string => typeof x === "string").map((x) => x.trim().slice(0, 120)).filter(Boolean))].slice(0, 30)
+      : [];
+  if (input.triggers !== undefined) set.triggers = causeList(input.triggers);
+  if (input.drivers !== undefined) set.drivers = causeList(input.drivers);
+  if (input.behaviors !== undefined) set.behaviors = causeList(input.behaviors);
   await db.update(dayRecaps).set(set).where(and(eq(dayRecaps.id, input.id), eq(dayRecaps.userId, uid)));
   revalidatePath("/", "layout");
 }
@@ -708,6 +723,42 @@ async function setSetting(userId: string, key: string, value: unknown) {
     .insert(settings)
     .values({ userId, key, value })
     .onConflictDoUpdate({ target: [settings.userId, settings.key], set: { value } });
+}
+
+/** Vocabularies the inline pencil editor may rewrite (and nothing else). */
+const EDITABLE_VOCABS = new Set([
+  "keyLevelOptions",
+  "ofConfOptions",
+  "playbookOptions",
+  "redFlagOptions",
+  "noteCategoryOptions",
+  "tradeTagOptions",
+  "psychStateOptions",
+  "recapTriggerOptions",
+  "recapDriverOptions",
+  "recapBehaviorOptions",
+]);
+
+/** Replace one chip vocabulary with an edited list (rename / remove / add).
+ *  Removing an option only shrinks the pick list — data already marked with
+ *  it is untouched and still displays. */
+export async function saveVocabList(input: { key: string; options: unknown }) {
+  const uid = await requireUserId();
+  if (!EDITABLE_VOCABS.has(input.key)) return;
+  const seen = new Set<string>();
+  const clean: string[] = [];
+  for (const v of Array.isArray(input.options) ? input.options : []) {
+    if (typeof v !== "string") continue;
+    const s = v.trim().slice(0, 120);
+    if (!s) continue;
+    const k = s.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    clean.push(s);
+    if (clean.length >= 100) break;
+  }
+  await setSetting(uid, input.key, clean);
+  revalidatePath("/", "layout");
 }
 
 export async function saveDisplaySettings(fd: FormData) {

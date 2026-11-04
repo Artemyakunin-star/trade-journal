@@ -447,6 +447,10 @@ export const dayRecaps = pgTable(
     verdict: text("verdict"),
     wentWell: text("went_well"), // strong sides of the plan / execution
     wentWrong: text("went_wrong"), // what to change
+    /** One-click causes: what happened / what pushed / what you did. */
+    triggers: jsonb("triggers").$type<string[]>(),
+    drivers: jsonb("drivers").$type<string[]>(),
+    behaviors: jsonb("behaviors").$type<string[]>(),
     /** Free-form write-up with screenshots (TipTap), like plans. */
     journal: jsonb("journal"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
