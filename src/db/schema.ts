@@ -670,6 +670,8 @@ export const dayFrames = pgTable(
     scenarios: jsonb("scenarios").$type<string[]>(), // ORDERED: first = most probable
     /** Key levels the day's trading is allowed around (keyLevel vocabulary). */
     locations: jsonb("locations").$type<string[]>(),
+    /** Evening verdict per scenario: name -> PLAYED | FAILED | NOT_TRIGGERED. */
+    scenarioOutcomes: jsonb("scenario_outcomes").$type<Record<string, string>>(),
     /** Pre-session psychological state ("calm", "irritated", …) + why. */
     psychState: text("psych_state"),
     psychNote: text("psych_note"),

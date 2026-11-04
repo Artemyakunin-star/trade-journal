@@ -274,6 +274,13 @@
       "when": 1791392415560,
       "tag": "0038_clce_frame",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791392415561,
+      "tag": "0039_scenario_outcomes",
+      "breakpoints": true
     }
   ]
 }

@@ -576,6 +576,27 @@ export async function createDoc() {
   redirect(`/plans/${doc.id}`);
 }
 
+/** Evening verdicts on the morning's scenarios (set from the Recap). */
+export async function saveScenarioOutcomes(input: { date: string; outcomes: Record<string, string | null> }) {
+  const uid = await requireUserId();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return;
+  const { dayFrames } = await import("@/db/schema");
+  const frame = await db.query.dayFrames.findFirst({
+    where: (f, { and: and_, eq: eq_ }) => and_(eq_(f.userId, uid), eq_(f.date, input.date)),
+  });
+  if (!frame) return;
+  const allowed = new Set(frame.scenarios ?? []);
+  const outcomes: Record<string, string> = {};
+  for (const [name, v] of Object.entries(input.outcomes ?? {})) {
+    if (allowed.has(name) && v && ["PLAYED", "FAILED", "NOT_TRIGGERED"].includes(v)) outcomes[name] = v;
+  }
+  await db
+    .update(dayFrames)
+    .set({ scenarioOutcomes: Object.keys(outcomes).length ? outcomes : null, updatedAt: new Date() })
+    .where(and(eq(dayFrames.id, frame.id), eq(dayFrames.userId, uid)));
+  revalidatePath("/", "layout");
+}
+
 /** Move a plan document to another day (or attach a date-less document to a
  *  day, making it that day's plan). One plan per day: if the target day
  *  already has one, nothing changes and the page shows a warning. */

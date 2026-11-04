@@ -99,6 +99,13 @@ export default async function AnalyticsPage({
     instrumentRows.map((i) => [i.symbol, { tickSize: Number(i.tickSize), tickValue: Number(i.tickValue) }]),
   );
 
+  // All-time inputs for the "Plan & psychology" section (frames are day-level,
+  // so the trade range filter doesn't apply to them).
+  const [allFrames, allIdeasFull] = await Promise.all([
+    db.query.dayFrames.findMany({ where: (f, { eq: eq_ }) => eq_(f.userId, uid) }),
+    db.query.ideas.findMany({ where: (i, { eq: eq_ }) => eq_(i.userId, uid), with: { trades: true } }),
+  ]);
+
   let trades = filterByAccounts(rawTrades, selectedAccounts).filter((t) => t.pnl !== null);
   const todayKyiv = kyivDateOf(new Date(), tz);
   if (customFrom || customTo) {
@@ -470,6 +477,175 @@ export default async function AnalyticsPage({
           <Tiles tiles={disciplineTiles} />
         </div>
       </div>
+
+      {/* ---------- plan accuracy & psychology (all time, day-level) ---------- */}
+      {(() => {
+        const gradeNum: Record<string, number> = { A_PLUS: 4.3, A: 4, A_MINUS: 3.7, B_PLUS: 3.3, B: 3, B_MINUS: 2.7, C_PLUS: 2.3, C: 2, C_MINUS: 1.7, D: 1, F: 0 };
+        const gradeLabelOf = (v: number) =>
+          v >= 4.15 ? "A+" : v >= 3.85 ? "A" : v >= 3.5 ? "A−" : v >= 3.15 ? "B+" : v >= 2.85 ? "B" : v >= 2.5 ? "B−" : v >= 2.15 ? "C+" : v >= 1.85 ? "C" : v >= 1.35 ? "C−" : v >= 0.5 ? "D" : "F";
+        const dayAggAll = dayAggregates(filterByAccounts(rawTrades, selectedAccounts), tz);
+        const dayMap = new Map(dayAggAll.map((d) => [d.date, d]));
+        const execByDay = new Map<string, number[]>();
+        for (const i of allIdeasFull) {
+          if (!i.date || !i.execGrade) continue;
+          const arr = execByDay.get(i.date) ?? [];
+          arr.push(gradeNum[i.execGrade] ?? 0);
+          execByDay.set(i.date, arr);
+        }
+        const dayStats = (dates: string[]) => {
+          const pnl = dates.reduce((a, d) => a + (dayMap.get(d)?.pnl ?? 0), 0);
+          const rogue = dates.reduce((a, d) => a + (dayMap.get(d)?.rogue ?? 0), 0);
+          const execVals = dates.flatMap((d) => execByDay.get(d) ?? []);
+          const exec = execVals.length ? execVals.reduce((a, b) => a + b, 0) / execVals.length : null;
+          return { pnl, rogue, exec };
+        };
+        const statCells = (s: { pnl: number; rogue: number; exec: number | null }) => (
+          <>
+            <td className={"num " + (s.pnl > 0 ? "pos" : s.pnl < 0 ? "neg" : "")}>{fmtMoney(s.pnl)}</td>
+            <td className="num">{s.exec === null ? "—" : `${s.exec.toFixed(1)} (${gradeLabelOf(s.exec)})`}</td>
+            <td className={"num" + (s.rogue ? " neg" : "")}>{s.rogue || "—"}</td>
+          </>
+        );
+
+        // Morning read accuracy: frames with a top scenario that got a verdict.
+        const marked = allFrames.filter((f) => (f.scenarios ?? []).length > 0 && f.scenarioOutcomes && f.scenarioOutcomes[(f.scenarios ?? [])[0]]);
+        const rightDays = marked.filter((f) => f.scenarioOutcomes![(f.scenarios ?? [])[0]] === "PLAYED").map((f) => f.date);
+        const wrongDays = marked.filter((f) => f.scenarioOutcomes![(f.scenarios ?? [])[0]] !== "PLAYED").map((f) => f.date);
+        const anyMarked = allFrames.filter((f) => f.scenarioOutcomes && Object.keys(f.scenarioOutcomes).length);
+        const anyPlayed = anyMarked.filter((f) => Object.values(f.scenarioOutcomes!).includes("PLAYED")).length;
+
+        // By pre-session state.
+        const byState = new Map<string, string[]>();
+        for (const f of allFrames) {
+          if (!f.psychState) continue;
+          const arr = byState.get(f.psychState) ?? [];
+          arr.push(f.date);
+          byState.set(f.psychState, arr);
+        }
+
+        // By location (from ideas).
+        const byLoc = new Map<string, { n: number; pnl: number; grades: number[] }>();
+        for (const i of allIdeasFull) {
+          for (const loc of i.locations ?? []) {
+            const r = byLoc.get(loc) ?? { n: 0, pnl: 0, grades: [] };
+            r.n += 1;
+            r.pnl += i.trades.reduce((a, t) => a + Number(t.pnl ?? 0), 0);
+            if (i.grade) r.grades.push(gradeNum[i.grade] ?? 0);
+            byLoc.set(loc, r);
+          }
+        }
+
+        if (!marked.length && !byState.size && !byLoc.size) return null;
+        return (
+          <div className="card" style={{ marginTop: 14 }}>
+            <h3>
+              Plan & psychology <span className="sub">all time · verdicts come from the Recap, state from the day frame</span>
+            </h3>
+            <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+              <div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Morning read — was your ★ #1 scenario right?</div>
+                {marked.length === 0 ? (
+                  <div className="section-note" style={{ margin: 0 }}>Mark scenario verdicts in the evening Recap and this fills in.</div>
+                ) : (
+                  <table className="tj">
+                    <thead>
+                      <tr>
+                        <th>Days</th>
+                        <th className="num">n</th>
+                        <th className="num">Net P&L</th>
+                        <th className="num">Avg exec</th>
+                        <th className="num">Rogue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>★ #1 played out</td>
+                        <td className="num">{rightDays.length}</td>
+                        {statCells(dayStats(rightDays))}
+                      </tr>
+                      <tr>
+                        <td>★ #1 was wrong</td>
+                        <td className="num">{wrongDays.length}</td>
+                        {statCells(dayStats(wrongDays))}
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+                {marked.length > 0 && (
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
+                    #1 hit rate: <b style={{ color: "var(--ink)" }}>{Math.round((rightDays.length / marked.length) * 100)}%</b> of {marked.length} marked days
+                    {anyMarked.length > 0 && <> · any chosen scenario played: {Math.round((anyPlayed / anyMarked.length) * 100)}%</>}
+                  </div>
+                )}
+              </div>
+
+              {byState.size > 0 && (
+                <div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>By pre-session state (the frame&apos;s State row)</div>
+                  <table className="tj">
+                    <thead>
+                      <tr>
+                        <th>State</th>
+                        <th className="num">Days</th>
+                        <th className="num">Net P&L</th>
+                        <th className="num">Avg exec</th>
+                        <th className="num">Rogue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...byState.entries()]
+                        .sort((a, b) => b[1].length - a[1].length)
+                        .map(([state, dates]) => (
+                          <tr key={state}>
+                            <td>{state}</td>
+                            <td className="num">{dates.length}</td>
+                            {statCells(dayStats(dates))}
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {byLoc.size > 0 && (
+                <div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>By location (ideas&apos; key levels)</div>
+                  <table className="tj">
+                    <thead>
+                      <tr>
+                        <th>Location</th>
+                        <th className="num">Ideas</th>
+                        <th className="num">Net P&L</th>
+                        <th className="num">Avg idea grade</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...byLoc.entries()]
+                        .sort((a, b) => b[1].pnl - a[1].pnl)
+                        .map(([loc, r]) => {
+                          const g = r.grades.length ? r.grades.reduce((a, b) => a + b, 0) / r.grades.length : null;
+                          return (
+                            <tr key={loc}>
+                              <td>{loc}</td>
+                              <td className="num">{r.n}</td>
+                              <td className={"num " + (r.pnl > 0 ? "pos" : r.pnl < 0 ? "neg" : "")}>{fmtMoney(r.pnl)}</td>
+                              <td className="num">{g === null ? "—" : `${g.toFixed(1)} (${gradeLabelOf(g)})`}</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="section-note">
+              “Avg exec” averages the Execution grades of that day&apos;s ideas (A+=4.3 … F=0). If execution collapses on
+              the days your #1 read is wrong — that&apos;s the number telling you to trade smaller when the day stops
+              making sense.
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ---------- execution tags: what each habit actually costs ---------- */}
       {(() => {

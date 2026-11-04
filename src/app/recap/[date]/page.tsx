@@ -11,6 +11,7 @@ import { recapRowFor } from "@/lib/recap";
 import { deleteRecap, moveRecapDate, openDailyDoc } from "@/app/actions";
 import RecapFields from "@/components/RecapFields";
 import RecapFeed from "@/components/RecapFeed";
+import ScenarioMarks from "@/components/ScenarioMarks";
 import DocEditor from "@/components/DocEditor";
 import ConfirmButton from "@/components/ConfirmButton";
 
@@ -165,6 +166,10 @@ export default async function RecapPage({
           </div>
         ) : (
           <div className="section-note" style={{ margin: "0 0 8px" }}>No day frame was set for this day.</div>
+        )}
+
+        {frame && (frame.scenarios ?? []).length > 0 && (
+          <ScenarioMarks date={date} scenarios={frame.scenarios ?? []} initial={frame.scenarioOutcomes ?? {}} />
         )}
 
         {paragraphs.length > 0 && (
