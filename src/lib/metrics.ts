@@ -70,15 +70,22 @@ export type RrStats = {
   /** wins / closed — break-even counts as a LOSS (in the denominator, not in wins). */
   winRate: number | null;
   /** Mean R-multiple. Risk per trade = its own SL distance when set; otherwise the
-   *  period's average SL distance for that instrument. BE trades are excluded. */
+   *  instrument's default stop from Rules (when given); otherwise the period's
+   *  average SL distance for that instrument. BE trades are excluded. */
   avgRR: number | null;
   rrCounted: number; // trades included in the RR average
   withOwnSl: number; // of those, how many used their own SL
-  noRiskRef: number; // skipped: no own SL and no average stop for the instrument
+  withDefault: number; // of those, how many fell back to the Rules default stop
+  noRiskRef: number; // skipped: no own SL, no default stop, no average stop
 };
 
 /** RR & win-rate stats over a set of trades (see field docs for the rules). */
-export function rrStats(trades: TradeRow[]): RrStats {
+export function rrStats(
+  trades: TradeRow[],
+  /** Default stop per instrument in PRICE POINTS (Rules stopTicks × tickSize),
+   *  used for trades without their own SL before falling back to the period avg. */
+  defaultStops?: Record<string, number>,
+): RrStats {
   const closedTrades = trades.filter((t) => t.pnl !== null && t.avgExitPrice !== null);
   const riskOf = (t: TradeRow): number | null => {
     if (!t.stopPrice) return null;
@@ -96,7 +103,7 @@ export function rrStats(trades: TradeRow[]): RrStats {
   const avgStop: Record<string, number> = {};
   for (const [k, v] of Object.entries(byInst)) avgStop[k] = v.reduce((a, b) => a + b, 0) / v.length;
 
-  let wins = 0, be = 0, losses = 0, withOwnSl = 0, noRiskRef = 0;
+  let wins = 0, be = 0, losses = 0, withOwnSl = 0, withDefault = 0, noRiskRef = 0;
   const rs: number[] = [];
   for (const t of closedTrades) {
     const pnl = Number(t.pnl);
@@ -105,12 +112,14 @@ export function rrStats(trades: TradeRow[]): RrStats {
     else losses++;
     if (pnl === 0) continue; // break-even trades are excluded from RR
     const own = riskOf(t);
-    const risk = own ?? avgStop[t.instrument] ?? null;
+    const dflt = defaultStops?.[t.instrument];
+    const risk = own ?? (dflt && dflt > 0 ? dflt : null) ?? avgStop[t.instrument] ?? null;
     if (risk === null) {
       noRiskRef++;
       continue;
     }
     if (own) withOwnSl++;
+    else if (dflt && dflt > 0) withDefault++;
     const dir = t.direction === "LONG" ? 1 : -1;
     const pts = (Number(t.avgExitPrice) - Number(t.avgEntryPrice)) * dir;
     rs.push(pts / risk);
@@ -124,6 +133,7 @@ export function rrStats(trades: TradeRow[]): RrStats {
     avgRR: rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null,
     rrCounted: rs.length,
     withOwnSl,
+    withDefault,
     noRiskRef,
   };
 }
