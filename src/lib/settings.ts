@@ -28,6 +28,8 @@ export type AppSettings = {
   calendarCurrencies: string[];
   /** Execution-tag vocabulary for trades ("tight stop", "fast BE", …). */
   tradeTagOptions: string[];
+  /** Pre-session psychological states for the day frame. */
+  psychStateOptions: string[];
   /** Sidebar personalization: item order (hrefs) and hidden items. */
   sidebarOrder: string[];
   sidebarHidden: string[];
@@ -85,6 +87,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     "held through news",
     "oversized",
   ],
+  psychStateOptions: ["calm", "rested", "focused", "tired", "irritated", "anxious", "rushed"],
   sidebarOrder: [],
   sidebarHidden: [],
 };
@@ -184,6 +187,7 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     simScenarios,
     calendarCurrencies: strArr("calendarCurrencies", DEFAULT_SETTINGS.calendarCurrencies),
     tradeTagOptions: strArr("tradeTagOptions", DEFAULT_SETTINGS.tradeTagOptions),
+    psychStateOptions: strArr("psychStateOptions", DEFAULT_SETTINGS.psychStateOptions),
     sidebarOrder: strArr("sidebarOrder", []),
     sidebarHidden: strArr("sidebarHidden", []),
   };

@@ -85,8 +85,13 @@ export default async function DocPage({
         <DayFrame
           date={docDate}
           options={prefs.playbookOptions}
+          locationOptions={prefs.keyLevelOptions}
+          stateOptions={prefs.psychStateOptions}
           initialBias={frame?.bias ?? null}
           initialScenarios={frame?.scenarios ?? []}
+          initialLocations={frame?.locations ?? []}
+          initialState={frame?.psychState ?? null}
+          initialStateNote={frame?.psychNote ?? ""}
           initialRules={frame?.rules ?? ""}
         />
       )}

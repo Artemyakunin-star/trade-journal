@@ -150,11 +150,17 @@ export default async function RecapPage({
                 {frame.bias === "LONG" ? "Long" : frame.bias === "SHORT" ? "Short" : "Neutral"}
               </b>
             )}
-            {(frame.scenarios ?? []).map((s) => (
-              <span key={s} style={{ fontSize: 11.5, borderRadius: 99, padding: "2px 9px", border: "1px solid var(--border)", color: "var(--ink-2)" }}>
-                {s}
+            {(frame.scenarios ?? []).map((s, i) => (
+              <span key={s} style={{ fontSize: 11.5, borderRadius: 99, padding: "2px 9px", border: "1px solid " + (i === 0 ? "var(--s1)" : "var(--border)"), color: i === 0 ? "var(--s1)" : "var(--ink-2)" }} title={i === 0 ? "Was called most probable in the morning" : `Scenario #${i + 1}`}>
+                {i === 0 ? "★ " : ""}{s}
               </span>
             ))}
+            {(frame.locations ?? []).map((l) => (
+              <span key={l} style={{ fontSize: 11.5, borderRadius: 99, padding: "2px 9px", border: "1px dashed var(--border)", color: "var(--muted)" }}>
+                ⌖ {l}
+              </span>
+            ))}
+            {frame.psychState && <span style={{ fontSize: 12, color: "var(--warn)" }} title={frame.psychNote ?? undefined}>· came in {frame.psychState}</span>}
             {frame.rules && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>· {frame.rules}</span>}
           </div>
         ) : (

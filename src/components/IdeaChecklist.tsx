@@ -8,7 +8,7 @@ import Link from "next/link";
 import { saveIdeaChecklist } from "@/app/actions";
 import { GRADE_LABEL, gradeClass } from "@/lib/format";
 
-type Frame = { bias: string | null; scenarios: string[]; rules: string | null } | null;
+type Frame = { bias: string | null; scenarios: string[]; locations?: string[]; rules: string | null } | null;
 
 function Mark({ ok }: { ok: boolean | null }) {
   // ✓ green, ✗ red, — muted (unknown / not applicable)
@@ -32,8 +32,9 @@ export default function IdeaChecklist({
   initialRulesFollowed,
   initialConfirmBefore,
   initialConfirmTypes,
-  initialEntryPlanned,
-  initialEarlyEntry,
+  initialEntryKind,
+  initialLocations,
+  keyLevelOptions,
   initialRedFlags,
 }: {
   ideaId: string;
@@ -52,16 +53,17 @@ export default function IdeaChecklist({
   initialRulesFollowed: boolean | null;
   initialConfirmBefore: boolean | null;
   initialConfirmTypes: string[];
-  initialEntryPlanned: boolean | null;
-  initialEarlyEntry: boolean | null;
+  initialEntryKind: string | null;
+  initialLocations: string[];
+  keyLevelOptions: string[];
   initialRedFlags: string[];
 }) {
   const [setups, setSetups] = useState<string[]>(initialSetups);
   const [rulesFollowed, setRulesFollowed] = useState<boolean | null>(initialRulesFollowed);
   const [confirmBefore, setConfirmBefore] = useState<boolean | null>(initialConfirmBefore);
   const [confirmTypes, setConfirmTypes] = useState<string[]>(initialConfirmTypes);
-  const [entryPlanned, setEntryPlanned] = useState<boolean | null>(initialEntryPlanned);
-  const [earlyEntry, setEarlyEntry] = useState<boolean | null>(initialEarlyEntry);
+  const [entryKind, setEntryKind] = useState<string | null>(initialEntryKind);
+  const [locations, setLocations] = useState<string[]>(initialLocations);
   const [redFlags, setRedFlags] = useState<string[]>(initialRedFlags);
   const [extraFlag, setExtraFlag] = useState<string[]>([]);
   const [addingFlag, setAddingFlag] = useState(false);
@@ -71,6 +73,9 @@ export default function IdeaChecklist({
   const [newSetup, setNewSetup] = useState("");
   const [extraConf, setExtraConf] = useState<string[]>([]);
   const [addingConf, setAddingConf] = useState(false);
+  const [extraLoc, setExtraLoc] = useState<string[]>([]);
+  const [addingLoc, setAddingLoc] = useState(false);
+  const [newLoc, setNewLoc] = useState("");
   const [newConf, setNewConf] = useState("");
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,12 +89,12 @@ export default function IdeaChecklist({
     rulesFollowed: boolean | null;
     confirmBefore: boolean | null;
     confirmTypes: string[];
-    entryPlanned: boolean | null;
-    earlyEntry: boolean | null;
+    entryKind: string | null;
+    locations: string[];
     redFlags: string[];
   };
   const persist = (patch: Partial<Vals>) => {
-    const vals: Vals = { setups, rulesFollowed, confirmBefore, confirmTypes, entryPlanned, earlyEntry, redFlags, ...patch };
+    const vals: Vals = { setups, rulesFollowed, confirmBefore, confirmTypes, entryKind, locations, redFlags, ...patch };
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       setSaved("saving");
@@ -108,7 +113,9 @@ export default function IdeaChecklist({
   const dirOk: boolean | null = bias === "LONG" || bias === "SHORT" ? bias === direction : null;
   const scen = frame?.scenarios ?? [];
   const inFrame: boolean | null = setups.length > 0 && scen.length > 0 ? setups.some((s) => scen.includes(s)) : null;
-  const hasFrame = !!frame && (!!frame.bias || scen.length > 0 || !!frame.rules);
+  const frameLocs = frame?.locations ?? [];
+  const locOk: boolean | null = locations.length > 0 && frameLocs.length > 0 ? locations.some((l) => frameLocs.includes(l)) : null;
+  const hasFrame = !!frame && (!!frame.bias || scen.length > 0 || frameLocs.length > 0 || !!frame.rules);
 
   // ---- two live suggestions: the IDEA (context) and the EXECUTION (behavior).
   // The manual grades in the form below stay yours.
@@ -125,6 +132,7 @@ export default function IdeaChecklist({
     }
     const checks: [string, boolean | null][] = [["confirmation before entry", confirmBefore]];
     if (frame?.rules) checks.push(["rules of the day", rulesFollowed]);
+    if (locOk !== null) checks.push(["location inside the frame", locOk]);
     const misses = checks.filter(([, v]) => v !== true);
     for (const [name] of misses) reasons.push(`${name} ✗`);
     const ladder = ["A", "B", "C", "D"];
@@ -153,13 +161,17 @@ export default function IdeaChecklist({
     const reasons: string[] = [];
     if (trigger === "REVENGE") return { key: "F", reasons: ["revenge trade — execution is always F"] };
     const misses: string[] = [];
-    if (entryPlanned !== true) misses.push("entry per plan ✗");
+    if (entryKind === null) misses.push("entry quality not set ✗");
     reasons.push(...misses);
     const ladder = ["A", "B", "C", "D"];
     let i = Math.min(misses.length, 3);
-    if (earlyEntry === true) {
+    if (entryKind === "EARLY") {
       i = Math.min(i + 1, 3);
       reasons.push("early entry −1");
+    }
+    if (entryKind === "CHASING") {
+      i = Math.min(i + 1, 3);
+      reasons.push("chased entry −1");
     }
     if (limitsBroken) {
       i = Math.min(i + 1, 3);
@@ -248,9 +260,14 @@ export default function IdeaChecklist({
               {frame!.bias === "LONG" ? "Long" : frame!.bias === "SHORT" ? "Short" : "Neutral"}
             </b>
           )}
-          {scen.map((s) => (
-            <span key={s} style={{ fontSize: 11.5, borderRadius: 99, padding: "2px 9px", border: "1px solid var(--border)", color: "var(--ink-2)" }}>
-              {s}
+          {scen.map((s, i) => (
+            <span key={s} style={{ fontSize: 11.5, borderRadius: 99, padding: "2px 9px", border: "1px solid " + (i === 0 ? "var(--s1)" : "var(--border)"), color: i === 0 ? "var(--s1)" : "var(--ink-2)" }} title={i === 0 ? "The morning's most probable scenario" : `Scenario #${i + 1}`}>
+              {i === 0 ? "★ " : ""}{s}
+            </span>
+          ))}
+          {frameLocs.map((l) => (
+            <span key={l} style={{ fontSize: 11.5, borderRadius: 99, padding: "2px 9px", border: "1px dashed var(--border)", color: "var(--muted)" }} title="Location allowed by the morning frame">
+              ⌖ {l}
             </span>
           ))}
           {frame!.rules && <span style={{ fontSize: 12, color: "var(--muted)" }}>· {frame!.rules}</span>}
@@ -318,6 +335,55 @@ export default function IdeaChecklist({
                 if (e.key === "Escape") setAddingSetup(false);
               }}
               style={{ width: 200, fontSize: 12 }}
+            />
+          )}
+        </>,
+      )}
+
+      {/* L: location — which key level the idea traded around, vs the frame */}
+      {row(
+        locOk,
+        <>
+          <b>Location.</b> Which level was this idea at?{" "}
+          {locations.length > 0 && frameLocs.length > 0 && (locOk ? (
+            <span style={{ color: "var(--pos)" }}>Inside today&apos;s locations.</span>
+          ) : (
+            <span style={{ color: "var(--crit)" }}>Not among today&apos;s planned locations.</span>
+          ))}
+          {frameLocs.length === 0 && <span style={{ color: "var(--muted)" }}> (no locations in the frame — nothing to check against)</span>}
+        </>,
+        <>
+          {[...new Set([...frameLocs, ...keyLevelOptions, ...extraLoc, ...locations])].map((o) =>
+            chip(frameLocs.includes(o) ? `⌖ ${o}` : o, locations.includes(o), () => {
+              const next = locations.includes(o) ? locations.filter((x) => x !== o) : [...locations, o];
+              setLocations(next);
+              persist({ locations: next });
+            }),
+          )}
+          {!addingLoc ? (
+            <button className="btn ghost btn-sm" type="button" onClick={() => setAddingLoc(true)}>+</button>
+          ) : (
+            <input
+              className="tj-input"
+              placeholder="new level…"
+              value={newLoc}
+              autoFocus
+              onChange={(e) => setNewLoc(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const name = newLoc.trim();
+                  if (!name) return;
+                  if (![...frameLocs, ...keyLevelOptions].some((o) => o.toLowerCase() === name.toLowerCase())) setExtraLoc((x) => [...x, name]);
+                  const next = [...locations, name];
+                  setLocations(next);
+                  setNewLoc("");
+                  setAddingLoc(false);
+                  persist({ locations: next });
+                }
+                if (e.key === "Escape") setAddingLoc(false);
+              }}
+              style={{ width: 150, fontSize: 12 }}
             />
           )}
         </>,
@@ -426,27 +492,34 @@ export default function IdeaChecklist({
 
       {sectionHead("Execution", "how you behaved once the idea existed → Execution grade")}
 
-      {/* entry discipline */}
+      {/* entry discipline: normal / early / chasing */}
       {row(
-        earlyEntry === true ? false : entryPlanned,
+        entryKind === null ? null : entryKind === "NORMAL",
         <>
-          <b>Entry.</b> From the planned zone, not chasing, stop where it was planned?
+          <b>Entry.</b> How did you get in?
         </>,
-        <>
-          {checkbox(entryPlanned, (v) => { setEntryPlanned(v); persist({ entryPlanned: v }); }, "entry per plan")}
-          <label
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: earlyEntry === true ? "var(--crit)" : "var(--ink)", cursor: "pointer" }}
-            title="Honest admission: entered before the setup was ready (no confirmation yet / price not in the zone). Counts as a mistake — −1 on the suggested execution grade."
-          >
-            <input
-              type="checkbox"
-              checked={earlyEntry === true}
-              onChange={(e) => { setEarlyEntry(e.target.checked); persist({ earlyEntry: e.target.checked }); }}
-              style={{ accentColor: "var(--crit)" }}
-            />
-            early entry — a mistake (−1)
-          </label>
-        </>,
+        <span className="seg">
+          {[
+            { key: "NORMAL", label: "normal — per plan", color: "var(--pos)", hint: "From the planned zone, after the setup was ready. No penalty." },
+            { key: "EARLY", label: "early (−1)", color: "var(--crit)", hint: "Jumped in before the setup was ready — −1 on the suggested execution grade." },
+            { key: "CHASING", label: "chasing (−1)", color: "var(--crit)", hint: "Chased a move that already left — −1 on the suggested execution grade." },
+          ].map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              className={entryKind === o.key ? "on" : ""}
+              style={entryKind === o.key ? { color: "#fff" } : { color: o.color }}
+              title={o.hint}
+              onClick={() => {
+                const next = entryKind === o.key ? null : o.key;
+                setEntryKind(next);
+                persist({ entryKind: next });
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </span>,
       )}
 
       {/* risk-management rules — automatic, from the Rules page */}

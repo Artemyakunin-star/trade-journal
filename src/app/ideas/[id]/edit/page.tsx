@@ -368,10 +368,11 @@ export default async function EditIdeaPage({
         ideaId={idea.id}
         direction={idea.direction}
         date={idea.date}
-        frame={frame ? { bias: frame.bias, scenarios: frame.scenarios ?? [], rules: frame.rules } : null}
+        frame={frame ? { bias: frame.bias, scenarios: frame.scenarios ?? [], locations: frame.locations ?? [], rules: frame.rules } : null}
         playbookOptions={prefs.playbookOptions}
         ofConfOptions={prefs.ofConfOptions}
         redFlagOptions={prefs.redFlagOptions}
+        keyLevelOptions={prefs.keyLevelOptions}
         trigger={idea.trigger}
         ideaStatus={idea.status}
         limitsBroken={ruleCheck.broken}
@@ -379,8 +380,8 @@ export default async function EditIdeaPage({
         initialRulesFollowed={idea.rulesFollowed}
         initialConfirmBefore={idea.confirmBefore}
         initialConfirmTypes={idea.confirmTypes ?? (idea.confirmType ? [idea.confirmType] : [])}
-        initialEntryPlanned={idea.entryPlanned}
-        initialEarlyEntry={idea.earlyEntry}
+        initialEntryKind={idea.entryKind ?? (idea.earlyEntry ? "EARLY" : idea.entryPlanned ? "NORMAL" : null)}
+        initialLocations={idea.locations ?? []}
         initialRedFlags={idea.redFlags ?? []}
       />
 

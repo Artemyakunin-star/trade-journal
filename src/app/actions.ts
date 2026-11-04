@@ -1163,27 +1163,46 @@ export async function setMissedIdea(fd: FormData) {
 
 /** Autosave for the day-frame panel above the daily plan editor. New scenario
  *  names are merged into the user's playbook vocabulary. */
-export async function saveDayFrame(input: { date: string; bias: string | null; scenarios: string[]; rules: string }) {
+export async function saveDayFrame(input: {
+  date: string;
+  bias: string | null;
+  scenarios: string[]; // ORDERED — first = most probable
+  locations?: string[];
+  psychState?: string | null;
+  psychNote?: string;
+  rules: string;
+}) {
   const uid = await requireUserId();
   const { date, rules } = input;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
   const bias = input.bias && ["LONG", "SHORT", "NEUTRAL"].includes(input.bias) ? input.bias : null;
-  const scenarios = [...new Set((input.scenarios ?? []).map((s) => String(s).trim()).filter(Boolean))].slice(0, 20);
+  const clean = (xs: string[] | undefined, cap: number) =>
+    [...new Set((xs ?? []).map((s) => String(s).trim()).filter(Boolean))].slice(0, cap);
+  const scenarios = clean(input.scenarios, 20);
+  const locations = clean(input.locations, 20);
+  const psychState = (input.psychState ?? "").trim().slice(0, 60) || null;
+  const psychNote = (input.psychNote ?? "").trim().slice(0, 300) || null;
 
   const { dayFrames } = await import("@/db/schema");
+  const set = { bias, scenarios, locations, psychState, psychNote, rules: rules.trim() || null };
   await db
     .insert(dayFrames)
-    .values({ userId: uid, date, bias, scenarios, rules: rules.trim() || null })
+    .values({ userId: uid, date, ...set })
     .onConflictDoUpdate({
       target: [dayFrames.userId, dayFrames.date],
-      set: { bias, scenarios, rules: rules.trim() || null, updatedAt: new Date() },
+      set: { ...set, updatedAt: new Date() },
     });
 
-  // Grow the playbook vocabulary with anything new.
+  // Grow the vocabularies with anything new.
   const { getSettings } = await import("@/lib/settings");
   const prefs = await getSettings(uid);
-  const missing = scenarios.filter((s) => !prefs.playbookOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
-  if (missing.length) await setSetting(uid, "playbookOptions", [...prefs.playbookOptions, ...missing]);
+  const missScen = scenarios.filter((s) => !prefs.playbookOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
+  if (missScen.length) await setSetting(uid, "playbookOptions", [...prefs.playbookOptions, ...missScen]);
+  const missLoc = locations.filter((s) => !prefs.keyLevelOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
+  if (missLoc.length) await setSetting(uid, "keyLevelOptions", [...prefs.keyLevelOptions, ...missLoc]);
+  if (psychState && !prefs.psychStateOptions.some((o) => o.toLowerCase() === psychState.toLowerCase())) {
+    await setSetting(uid, "psychStateOptions", [...prefs.psychStateOptions, psychState]);
+  }
 
   revalidatePath("/", "layout");
 }
@@ -1256,8 +1275,8 @@ export async function saveIdeaChecklist(input: {
   rulesFollowed: boolean | null;
   confirmBefore: boolean | null;
   confirmTypes: string[];
-  entryPlanned: boolean | null;
-  earlyEntry: boolean | null;
+  entryKind: string | null; // NORMAL | EARLY | CHASING
+  locations: string[];
   redFlags: string[];
 }) {
   const uid = await requireUserId();
@@ -1269,7 +1288,9 @@ export async function saveIdeaChecklist(input: {
   const setups = clean(input.setups);
   const confirmTypes = clean(input.confirmTypes);
   const redFlags = clean(input.redFlags);
+  const locations = clean(input.locations);
   const b = (v: boolean | null) => (typeof v === "boolean" ? v : null);
+  const entryKind = input.entryKind && ["NORMAL", "EARLY", "CHASING"].includes(input.entryKind) ? input.entryKind : null;
   await db
     .update(ideas)
     .set({
@@ -1280,8 +1301,11 @@ export async function saveIdeaChecklist(input: {
       confirmTypes,
       confirmType: confirmTypes[0] ?? null,
       redFlags,
-      entryPlanned: b(input.entryPlanned),
-      earlyEntry: b(input.earlyEntry),
+      locations,
+      entryKind,
+      // legacy mirrors so old views keep working
+      entryPlanned: entryKind === null ? null : entryKind === "NORMAL",
+      earlyEntry: entryKind === null ? null : entryKind === "EARLY",
       updatedAt: new Date(),
     })
     .where(and(eq(ideas.id, idea.id), eq(ideas.userId, uid)));
@@ -1295,6 +1319,8 @@ export async function saveIdeaChecklist(input: {
   if (newConf.length) await setSetting(uid, "ofConfOptions", [...prefs.ofConfOptions, ...newConf]);
   const newFlags = redFlags.filter((s) => !prefs.redFlagOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
   if (newFlags.length) await setSetting(uid, "redFlagOptions", [...prefs.redFlagOptions, ...newFlags]);
+  const newLocs = locations.filter((s) => !prefs.keyLevelOptions.some((o) => o.toLowerCase() === s.toLowerCase()));
+  if (newLocs.length) await setSetting(uid, "keyLevelOptions", [...prefs.keyLevelOptions, ...newLocs]);
   revalidatePath("/", "layout");
 }
 

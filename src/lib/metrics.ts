@@ -53,6 +53,8 @@ export type IdeaRow = {
   redFlags: string[] | null;
   entryPlanned: boolean | null;
   earlyEntry: boolean | null;
+  entryKind: string | null;
+  locations: string[] | null;
   /** Market notes (Notes page) pinned to this idea. */
   noteIds: string[] | null;
   createdAt: Date;

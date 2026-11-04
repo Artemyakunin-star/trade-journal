@@ -245,6 +245,10 @@ export const ideas = pgTable(
     entryPlanned: boolean("entry_planned"),
     /** Jumped in before the setup was ready — an admitted mistake, −1 grade. */
     earlyEntry: boolean("early_entry"),
+    /** Entry quality: NORMAL (per plan) | EARLY (−1) | CHASING (−1). */
+    entryKind: text("entry_kind"),
+    /** Key level(s) this idea traded around — checked against the frame. */
+    locations: jsonb("locations").$type<string[]>(),
     /** Market notes (lessons) attached to this idea — "respect these here". */
     noteIds: jsonb("note_ids").$type<string[]>(),
     comment: text("comment"), // psychological state, free text
@@ -663,7 +667,12 @@ export const dayFrames = pgTable(
     userId: text("user_id").notNull(),
     date: date("date", { mode: "string" }).notNull(),
     bias: text("bias"), // "LONG" | "SHORT" | "NEUTRAL"
-    scenarios: jsonb("scenarios").$type<string[]>(), // the day's allowed playbook entries
+    scenarios: jsonb("scenarios").$type<string[]>(), // ORDERED: first = most probable
+    /** Key levels the day's trading is allowed around (keyLevel vocabulary). */
+    locations: jsonb("locations").$type<string[]>(),
+    /** Pre-session psychological state ("calm", "irritated", …) + why. */
+    psychState: text("psych_state"),
+    psychNote: text("psych_note"),
     rules: text("rules"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
