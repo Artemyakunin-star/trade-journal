@@ -12,33 +12,47 @@ import { deleteRecap, moveRecapDate, openDailyDoc } from "@/app/actions";
 import RecapFields from "@/components/RecapFields";
 import RecapFeed from "@/components/RecapFeed";
 import ScenarioMarks from "@/components/ScenarioMarks";
+import PlanQuote, { type PlanBlock } from "@/components/PlanQuote";
 import DocEditor from "@/components/DocEditor";
 import ConfirmButton from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
-type TipTapNode = { type?: string; text?: string; content?: TipTapNode[] };
+type TipTapNode = { type?: string; text?: string; attrs?: { src?: string | null }; content?: TipTapNode[] };
 
-/** Plain-text paragraphs of the plan, so it's readable without opening it. */
-function planParagraphs(content: unknown, maxChars = 1600): string[] {
+/** The plan as readable blocks: text paragraphs plus, where the plan carried
+ *  screenshots, image groups in the same spot (consecutive images merge). */
+function planBlocks(content: unknown, maxChars = 1600): PlanBlock[] {
   if (!content) return [];
-  const out: string[] = [];
+  const out: PlanBlock[] = [];
   let used = 0;
+  let truncated = false;
+  const pushImg = (src: string) => {
+    const last = out[out.length - 1];
+    if (last?.kind === "imgs") last.srcs.push(src);
+    else out.push({ kind: "imgs", srcs: [src] });
+  };
   for (const block of ((content as TipTapNode).content ?? [])) {
+    // Collect the block's text and any images inside it (incl. top-level image nodes).
     const parts: string[] = [];
+    const imgs: string[] = [];
     const walk = (n: TipTapNode) => {
+      if (n.type === "image" && n.attrs?.src) imgs.push(n.attrs.src);
       if (n.text) parts.push(n.text);
       n.content?.forEach(walk);
     };
     walk(block);
     const s = parts.join(" ").trim();
-    if (!s) continue;
-    if (used + s.length > maxChars) {
-      out.push(s.slice(0, Math.max(0, maxChars - used)) + "…");
-      break;
+    if (s && !truncated) {
+      if (used + s.length > maxChars) {
+        out.push({ kind: "p", text: s.slice(0, Math.max(0, maxChars - used)) + "…" });
+        truncated = true;
+      } else {
+        out.push({ kind: "p", text: s });
+        used += s.length;
+      }
     }
-    out.push(s);
-    used += s.length;
+    for (const src of imgs) pushImg(src); // images always shown, even past the text cap
   }
   return out;
 }
@@ -84,7 +98,7 @@ export default async function RecapPage({
   const pnl = closed.reduce((a, t) => a + Number(t.pnl), 0);
   const rogue = dayTrades.filter((t) => !t.ideaId).length;
   const grades = dayIdeas.map((i) => i.grade).filter(Boolean) as string[];
-  const paragraphs = planParagraphs(planDoc?.content);
+  const blocks = planBlocks(planDoc?.content);
 
   return (
     <>
@@ -145,7 +159,7 @@ export default async function RecapPage({
         </h3>
 
         {frame && (frame.bias || (frame.scenarios ?? []).length > 0 || frame.rules) ? (
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: paragraphs.length ? 8 : 0 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: blocks.length ? 8 : 0 }}>
             {frame.bias && (
               <b style={{ fontSize: 13, color: frame.bias === "LONG" ? "var(--pos)" : frame.bias === "SHORT" ? "var(--neg)" : "var(--ink-2)" }}>
                 {frame.bias === "LONG" ? "Long" : frame.bias === "SHORT" ? "Short" : "Neutral"}
@@ -172,13 +186,7 @@ export default async function RecapPage({
           <ScenarioMarks date={date} scenarios={frame.scenarios ?? []} initial={frame.scenarioOutcomes ?? {}} />
         )}
 
-        {paragraphs.length > 0 && (
-          <div style={{ borderLeft: "3px solid var(--border)", padding: "2px 12px", margin: "4px 0 8px" }}>
-            {paragraphs.map((p, i) => (
-              <p key={i} style={{ fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.55, margin: "4px 0" }}>{p}</p>
-            ))}
-          </div>
-        )}
+        {blocks.length > 0 && <PlanQuote blocks={blocks} />}
 
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12.5, color: "var(--ink-2)", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
           <span>
