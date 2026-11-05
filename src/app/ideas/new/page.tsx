@@ -62,6 +62,7 @@ export default async function NewIdeaPage({
         returnTo={sp.returnTo ?? (date ? `/day/${date}` : "/ideas")}
         planDocs={planDocs}
         defaultDate={date ?? todayIso}
+        atrUnit={prefs.atrUnit}
       />
       <div className="section-note" style={{ maxWidth: 640 }}>
         After creating, the idea page opens with a Notion-like write-up editor — description and chart screenshots,

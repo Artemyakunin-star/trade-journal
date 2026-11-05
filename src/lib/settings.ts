@@ -39,6 +39,8 @@ export type AppSettings = {
   /** Sidebar personalization: item order (hrefs) and hidden items. */
   sidebarOrder: string[];
   sidebarHidden: string[];
+  /** Unit the trader types ATR in on the idea form (stored canonically in points). */
+  atrUnit: "points" | "ticks";
 };
 
 /** A saved exit scenario: fixed ticks + contracts, like the simulator row. */
@@ -124,6 +126,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
   sidebarOrder: [],
   sidebarHidden: [],
+  atrUnit: "points",
 };
 
 export const TIMEZONES = [
@@ -227,6 +230,7 @@ export async function getSettings(userId: string): Promise<AppSettings> {
     recapBehaviorOptions: strArr("recapBehaviorOptions", DEFAULT_SETTINGS.recapBehaviorOptions),
     sidebarOrder: strArr("sidebarOrder", []),
     sidebarHidden: strArr("sidebarHidden", []),
+    atrUnit: map.get("atrUnit") === "ticks" ? "ticks" : "points",
   };
 }
 

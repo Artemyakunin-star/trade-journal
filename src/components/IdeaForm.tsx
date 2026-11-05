@@ -15,6 +15,8 @@ export default function IdeaForm({
   returnTo,
   planDocs = [],
   defaultDate,
+  atrUnit = "points",
+  tickSize,
 }: {
   idea?: IdeaRow;
   instruments: string[];
@@ -27,8 +29,16 @@ export default function IdeaForm({
   /** Written plans (Plans menu documents), newest first — for the plan link. */
   planDocs?: { id: string; date: string | null; title: string }[];
   defaultDate?: string;
+  /** Preferred ATR input unit (Settings, remembered from the last save). */
+  atrUnit?: "points" | "ticks";
+  /** Tick size of the idea's instrument — converts the stored points for display in ticks. */
+  tickSize?: number;
 }) {
   const editing = !!idea;
+  // ATR is stored in points; show it in the preferred unit.
+  const atrDisplay = idea?.atr
+    ? String(Number((atrUnit === "ticks" && tickSize ? Number(idea.atr) / tickSize : Number(idea.atr)).toFixed(2)))
+    : "";
   return (
     <form action={editing ? updateIdea : createIdea} className="card" style={{ maxWidth: 640 }}>
       {editing && <input type="hidden" name="id" value={idea.id} />}
@@ -82,19 +92,25 @@ export default function IdeaForm({
           </select>
         </div>
         <div className="tj-field">
-          <label className="tj-label" title="ATR at the moment of the idea, in points of this instrument's chart (e.g. 5-min ATR 14). Builds the volatility statistics — which setups survive quiet vs wild tape.">
-            ATR, pts
+          <label className="tj-label" title="ATR at the moment of the idea (e.g. 5-min ATR 14) — in points or ticks, your pick is remembered. Builds the volatility statistics — which setups survive quiet vs wild tape.">
+            ATR
           </label>
-          <input
-            className="tj-input"
-            name="atr"
-            type="number"
-            min={0}
-            step="any"
-            defaultValue={idea?.atr ? String(Number(idea.atr)) : ""}
-            placeholder="e.g. 25"
-            style={{ width: 90 }}
-          />
+          <span style={{ display: "flex", gap: 4 }}>
+            <input
+              className="tj-input"
+              name="atr"
+              type="number"
+              min={0}
+              step="any"
+              defaultValue={atrDisplay}
+              placeholder="e.g. 25"
+              style={{ width: 84 }}
+            />
+            <select className="tj-select" name="atrUnit" defaultValue={atrUnit} title="Unit you're typing the ATR in" style={{ width: 76 }}>
+              <option value="points">pts</option>
+              <option value="ticks">ticks</option>
+            </select>
+          </span>
         </div>
         <div className="tj-field">
           <label className="tj-label">Trigger</label>

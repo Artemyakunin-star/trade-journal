@@ -729,6 +729,8 @@ export default async function EditIdeaPage({
           instruments={instruments.map((i) => i.symbol)}
           returnTo={`/ideas/${id}/edit`}
           planDocs={planDocs}
+          atrUnit={prefs.atrUnit}
+          tickSize={specs[idea.instrument]?.tickSize}
         />
         <div className="card" style={{ minWidth: 0 }}>
           <h3>

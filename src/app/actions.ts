@@ -24,6 +24,20 @@ function str(fd: FormData, name: string): string {
   return String(fd.get(name) ?? "").trim();
 }
 
+/** The idea form's ATR, normalized to PRICE POINTS (the canonical storage):
+ *  "ticks" input is multiplied by the instrument's tick size. The chosen unit
+ *  is remembered as the preferred one for next time. */
+async function atrPointsFrom(fd: FormData, uid: string, instrument: string): Promise<string | null> {
+  const unit = str(fd, "atrUnit") === "ticks" ? "ticks" : "points";
+  if (fd.has("atrUnit")) await setSetting(uid, "atrUnit", unit);
+  const raw = Number(str(fd, "atr"));
+  if (!(raw > 0)) return null;
+  if (unit === "points") return String(raw);
+  const inst = await db.query.instruments.findFirst({ where: (i, { eq: eq_ }) => eq_(i.symbol, instrument) });
+  const ts = inst ? Number(inst.tickSize) : 0.25;
+  return String(Number((raw * ts).toFixed(4)));
+}
+
 export async function createIdea(fd: FormData) {
   const uid = await requireUserId();
   // Plan link: explicit select wins; fall back to "the plan of that day".
@@ -49,7 +63,7 @@ export async function createIdea(fd: FormData) {
       invalidation: str(fd, "invalidation"),
       trigger: (IDEA_TRIGGERS as readonly string[]).includes(trigger) ? (trigger as (typeof IDEA_TRIGGERS)[number]) : "PLAN",
       comment: str(fd, "comment") || null,
-      atr: Number(str(fd, "atr")) > 0 ? str(fd, "atr") : null,
+      atr: await atrPointsFrom(fd, uid, str(fd, "instrument")),
     })
     .returning();
 
@@ -100,7 +114,7 @@ export async function updateIdea(fd: FormData) {
           : (GRADES as readonly string[]).includes(str(fd, "execGrade"))
             ? (str(fd, "execGrade") as (typeof GRADES)[number])
             : existing.execGrade,
-      atr: !fd.has("atr") ? existing.atr : Number(str(fd, "atr")) > 0 ? str(fd, "atr") : null,
+      atr: !fd.has("atr") ? existing.atr : await atrPointsFrom(fd, uid, str(fd, "instrument") || existing.instrument),
       invalidatedAt: becameInvalidated ? new Date() : existing.invalidatedAt,
       updatedAt: new Date(),
     })
