@@ -2,7 +2,7 @@
 // Inline execution-tag editor for one trade: compact chips, and a popover with
 // the whole vocabulary to toggle plus an input for a brand-new tag (which then
 // joins the vocabulary for good). Used in the Trades table and on trade pages.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { setTradeTags } from "@/app/actions";
 import VocabEditor from "@/components/VocabEditor";
@@ -19,6 +19,12 @@ export default function TradeTags({
   const router = useRouter();
   const [tags, setTags] = useState<string[]>(initial);
   const [open, setOpen] = useState(false);
+  // The server can change this trade's tags from outside (bulk tagging) —
+  // follow the fresh props instead of keeping the first render's state.
+  const initialKey = initial.join("\u0001");
+  useEffect(() => {
+    setTags(initialKey ? initialKey.split("\u0001") : []);
+  }, [initialKey]);
   const [newTag, setNewTag] = useState("");
   const [busy, setBusy] = useState(false);
 

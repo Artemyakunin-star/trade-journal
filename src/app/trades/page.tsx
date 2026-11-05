@@ -4,7 +4,8 @@ import Link from "next/link";
 import { requireUserId } from "@/lib/auth";
 import TradesTable from "@/components/TradesTable";
 import RunGuardButton from "@/components/RunGuardButton";
-import { groupTradesIntoIdea, mergeTrades } from "@/app/actions";
+import { bulkTagTrades, groupTradesIntoIdea, mergeTrades } from "@/app/actions";
+import ComboInput from "@/components/ComboInput";
 import SelectRoguesButton from "@/components/SelectRoguesButton";
 import AccountFilter from "@/components/AccountFilter";
 import ColumnsFilter from "@/components/ColumnsFilter";
@@ -191,6 +192,26 @@ export default async function TradesPage({
           </select>
           <button className="btn btn-sm" type="submit" form="merge-form" formAction={groupTradesIntoIdea}>
             ⊕ Group into idea
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", margin: "2px 0 10px" }}>
+          <span style={{ fontSize: 12.5, color: "var(--ink-2)" }} title="Tick trades in the table, pick or type ONE tag, and add it to (or strip it from) all of them at once">
+            Tag ticked trades:
+          </span>
+          <ComboInput
+            name="tag"
+            options={prefs.tradeTagOptions}
+            defaultValue=""
+            placeholder="tag…"
+            title="Pick a tag from the vocabulary or type a new one (it joins the list for good)"
+            width={160}
+            formId="merge-form"
+          />
+          <button className="btn btn-sm" type="submit" form="merge-form" formAction={bulkTagTrades} name="mode" value="add" title="Add this tag to every ticked trade">
+            Add to ticked
+          </button>
+          <button className="btn ghost btn-sm" type="submit" form="merge-form" formAction={bulkTagTrades} name="mode" value="remove" title="Remove this tag from every ticked trade">
+            Remove
           </button>
         </div>
         <div style={{ overflowX: "auto" }}>

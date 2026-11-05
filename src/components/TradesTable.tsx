@@ -77,6 +77,7 @@ export default function TradesTable({
   entryHrefSuffix = "",
   mergeForm = null,
   labForm = null,
+  selectForm = null,
   barDays = null,
 }: {
   trades: TradeRow[];
@@ -104,6 +105,8 @@ export default function TradesTable({
   mergeForm?: string | null;
   /** id of an external <form action="/lab">: renders a pick-for-Lab checkbox (name="t") per closed trade. */
   labForm?: string | null;
+  /** id of an external form for generic selection (e.g. the bulk-tag bar): renders the same name="t" checkboxes. */
+  selectForm?: string | null;
   /** "SYMBOL|YYYY-MM-DD" days with imported bars (lib/coverage) — enables the ⚠ no-bars marker. */
   barDays?: Set<string> | null;
 }) {
@@ -136,7 +139,7 @@ export default function TradesTable({
       <tr key={t.id} className="in-group">
         <td>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            {(mergeForm || labForm) && t.exitTime && (
+            {(mergeForm || labForm || selectForm) && t.exitTime && (
               <input
                 type="checkbox"
                 name="t"
@@ -144,8 +147,12 @@ export default function TradesTable({
                 data-instr={t.instrument}
                 data-rogue={t.ideaId ? undefined : "1"}
                 data-group={t.ideaId ?? "rogue"}
-                form={mergeForm ?? labForm ?? undefined}
-                title="Select this trade — then Merge selected (parts of one position) or Run in Lab (scenario comparison)"
+                form={mergeForm ?? labForm ?? selectForm ?? undefined}
+                title={
+                  mergeForm || labForm
+                    ? "Select this trade — then Merge selected (parts of one position) or Run in Lab (scenario comparison)"
+                    : "Select this trade — then apply a tag to everything selected below"
+                }
                 style={{ accentColor: "var(--s1)", margin: 0 }}
               />
             )}
@@ -376,7 +383,7 @@ export default function TradesTable({
           const its = byIdea.get(idea.id)!;
           const pnl = ideaPnl({ ...idea, trades: its });
           return (
-            <IdeaGroup key={idea.id} idea={idea} pnl={pnl} colSpan={colCount} selectable={!!(mergeForm || labForm)}>
+            <IdeaGroup key={idea.id} idea={idea} pnl={pnl} colSpan={colCount} selectable={!!(mergeForm || labForm || selectForm)}>
               {its.map(row)}
             </IdeaGroup>
           );
@@ -385,7 +392,7 @@ export default function TradesTable({
           <>
             <tr className="group-head rogue-head">
               <td colSpan={colCount}>
-                {(mergeForm || labForm) && <GroupSelectBox group="rogue" />}
+                {(mergeForm || labForm || selectForm) && <GroupSelectBox group="rogue" />}
                 ⚠ Rogue — no idea ({rogue.length}) ·{" "}
                 <span className={rogue.reduce((a, t) => a + tradePnl(t), 0) >= 0 ? "pos" : "neg"}>
                   {fmtMoney(rogue.reduce((a, t) => a + tradePnl(t), 0))}

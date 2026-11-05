@@ -18,6 +18,7 @@ import { checkIdea } from "@/lib/rules";
 import IdeaChecklist from "@/components/IdeaChecklist";
 import ReplayResolutionNote from "@/components/ReplayResolutionNote";
 import ConfirmButton from "@/components/ConfirmButton";
+import BulkTagBar from "@/components/BulkTagBar";
 import DayNews from "@/components/DayNews";
 import { docs, executions } from "@/db/schema";
 import { convUnitVal, fmtDate, fmtDateShort, fmtExcursion, fmtMoney, fmtPrice, fmtTimeKyiv, kyivDateOf, MISSED_REASON_LABEL, PNL_UNITS, type PnlUnit } from "@/lib/format";
@@ -546,9 +547,11 @@ export default async function EditIdeaPage({
             sim={anyRule ? simMap : null}
             actionsFor={rowActions}
             entryHrefSuffix={simQ}
+            selectForm="bulktag"
             barDays={barDays}
           />
         </div>
+        {simTrades.length > 1 && <BulkTagBar formId="bulktag" tagOptions={prefs.tradeTagOptions} />}
         {idea.trades.filter((t) => t.pnl === null).length > 0 && (
           <div style={{ marginTop: 8 }}>
             {idea.trades.filter((t) => t.pnl === null).map((t) => (

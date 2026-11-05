@@ -1036,6 +1036,44 @@ export async function setTradeTags(input: { tradeId: string; tags: string[]; new
   revalidatePath("/", "layout");
 }
 
+/** One tag on MANY trades at once: the checkboxes in the trades table +
+ *  the bulk-tag bar below it. "add" appends the tag (a new name joins the
+ *  vocabulary), "remove" strips it from the selected trades. */
+export async function bulkTagTrades(fd: FormData) {
+  const uid = await requireUserId();
+  const ids = fd.getAll("t").map(String).filter(Boolean).slice(0, 300);
+  const tag = str(fd, "tag").trim().slice(0, 60);
+  const mode = str(fd, "mode") === "remove" ? "remove" : "add";
+  if (!ids.length || !tag) return;
+  const rows = await db.query.trades.findMany({
+    where: (t, { and: and_, eq: eq_, inArray: in_ }) => and_(eq_(t.userId, uid), in_(t.id, ids)),
+    columns: { id: true, tags: true },
+  });
+  for (const r of rows) {
+    const cur = r.tags ?? [];
+    let next: string[];
+    if (mode === "add") {
+      if (cur.some((x) => x.toLowerCase() === tag.toLowerCase())) continue;
+      next = [...cur, tag].slice(0, 12);
+    } else {
+      next = cur.filter((x) => x.toLowerCase() !== tag.toLowerCase());
+      if (next.length === cur.length) continue;
+    }
+    await db
+      .update(trades)
+      .set({ tags: next.length ? next : null, updatedAt: new Date() })
+      .where(and(eq(trades.id, r.id), eq(trades.userId, uid)));
+  }
+  if (mode === "add") {
+    const { getSettings } = await import("@/lib/settings");
+    const prefs = await getSettings(uid);
+    if (!prefs.tradeTagOptions.some((o) => o.toLowerCase() === tag.toLowerCase())) {
+      await setSetting(uid, "tradeTagOptions", [...prefs.tradeTagOptions, tag]);
+    }
+  }
+  revalidatePath("/", "layout");
+}
+
 /** Grade for ONE trade (execution quality) — ideas keep their own grade. */
 export async function setTradeGrade(fd: FormData) {
   const uid = await requireUserId();

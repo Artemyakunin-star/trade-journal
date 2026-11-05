@@ -13,6 +13,7 @@ export default function ComboInput({
   title,
   width,
   className = "mini-select",
+  formId,
   onValueChange,
 }: {
   name: string;
@@ -22,6 +23,8 @@ export default function ComboInput({
   title?: string;
   width?: number;
   className?: string;
+  /** Associate the input with an external <form id=…> (form attribute). */
+  formId?: string;
   /** Mirror the current value to the parent (the input stays uncontrolled-ish). */
   onValueChange?: (v: string) => void;
 }) {
@@ -49,6 +52,7 @@ export default function ComboInput({
         ref={inputRef}
         className={className}
         name={name}
+        form={formId}
         value={value}
         placeholder={placeholder}
         title={title}
