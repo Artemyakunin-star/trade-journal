@@ -247,6 +247,8 @@ export const ideas = pgTable(
     earlyEntry: boolean("early_entry"),
     /** Entry quality: NORMAL (per plan) | EARLY (−1) | CHASING (−1). */
     entryKind: text("entry_kind"),
+    /** ATR at idea time (points) — volatility context for later comparison. */
+    atr: numeric("atr", { precision: 12, scale: 4 }),
     /** Key level(s) this idea traded around — checked against the frame. */
     locations: jsonb("locations").$type<string[]>(),
     /** Market notes (lessons) attached to this idea — "respect these here". */

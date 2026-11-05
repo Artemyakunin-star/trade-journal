@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { createIdea, updateIdea } from "@/app/actions";
 import AttachTradesPicker, { type PickTrade } from "@/components/AttachTradesPicker";
+import AtrSaveButton from "@/components/AtrSaveButton";
 import type { IdeaRow } from "@/lib/metrics";
 
 export default function IdeaForm({
@@ -81,6 +82,21 @@ export default function IdeaForm({
           </select>
         </div>
         <div className="tj-field">
+          <label className="tj-label" title="ATR at the moment of the idea, in points of this instrument's chart (e.g. 5-min ATR 14). Builds the volatility statistics — which setups survive quiet vs wild tape.">
+            ATR, pts
+          </label>
+          <input
+            className="tj-input"
+            name="atr"
+            type="number"
+            min={0}
+            step="any"
+            defaultValue={idea?.atr ? String(Number(idea.atr)) : ""}
+            placeholder="e.g. 25"
+            style={{ width: 90 }}
+          />
+        </div>
+        <div className="tj-field">
           <label className="tj-label">Trigger</label>
           <select className="tj-select" name="trigger" defaultValue={idea?.trigger ?? "PLAN"}>
             <option value="PLAN">plan — from the written day plan</option>
@@ -147,7 +163,7 @@ export default function IdeaForm({
       )}
 
       <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-        <button className="btn" type="submit">{editing ? "Save idea" : "Create idea"}</button>
+        <AtrSaveButton label={editing ? "Save idea" : "Create idea"} />
       </div>
     </form>
   );

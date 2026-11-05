@@ -49,6 +49,7 @@ export async function createIdea(fd: FormData) {
       invalidation: str(fd, "invalidation"),
       trigger: (IDEA_TRIGGERS as readonly string[]).includes(trigger) ? (trigger as (typeof IDEA_TRIGGERS)[number]) : "PLAN",
       comment: str(fd, "comment") || null,
+      atr: Number(str(fd, "atr")) > 0 ? str(fd, "atr") : null,
     })
     .returning();
 
@@ -99,6 +100,7 @@ export async function updateIdea(fd: FormData) {
           : (GRADES as readonly string[]).includes(str(fd, "execGrade"))
             ? (str(fd, "execGrade") as (typeof GRADES)[number])
             : existing.execGrade,
+      atr: !fd.has("atr") ? existing.atr : Number(str(fd, "atr")) > 0 ? str(fd, "atr") : null,
       invalidatedAt: becameInvalidated ? new Date() : existing.invalidatedAt,
       updatedAt: new Date(),
     })
