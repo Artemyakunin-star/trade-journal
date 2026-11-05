@@ -52,7 +52,7 @@ export default async function AnalyticsPage({
 }: {
   searchParams: Promise<{
     range?: string; from?: string; to?: string; tfrom?: string; tto?: string; instrument?: string;
-    stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string; unit?: string;
+    stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string; unit?: string; size?: string;
   }>;
 }) {
   const uid = await requireUserId();
@@ -77,6 +77,7 @@ export default async function AnalyticsPage({
   const noBe = sp.nobe === "1";
   const beVal = noBe ? null : num(sp.be);
   const slippageTicks = sp.slip && Number(sp.slip) >= 0 ? Number(sp.slip) : 1;
+  const sizeVal = sp.size && Number(sp.size) > 0 ? Math.round(Number(sp.size)) : null;
 
   /** Convert a value in the ACTIVE unit to ticks for a given instrument spec. */
   const toTicks = (v: number | null, spec: { tickSize: number; tickValue: number }): number | null => {
@@ -132,7 +133,7 @@ export default async function AnalyticsPage({
 
   const barsMeta: import("@/lib/whatif").BarsMeta = { tf: new Map() };
   const tradeBars = await loadTradeBars(trades, 8, barsMeta); // extend past exits: sims are not cut by early real-life outs
-  const anyRule = stopVal !== null || targetVal !== null || targetSlots.length > 0 || beVal !== null;
+  const anyRule = stopVal !== null || targetVal !== null || targetSlots.length > 0 || beVal !== null || sizeVal !== null;
   // One position at a time: while a simulated trade is still open, later real
   // re-entries are skipped (you would not have re-entered in that world).
   const results = simulateSequential(
@@ -147,6 +148,7 @@ export default async function AnalyticsPage({
       beTriggerTicks: toTicks(beVal, spec),
       slippageTicks,
       ignoreActualExit: anyRule,
+      sizeOverride: sizeVal,
     }),
     anyRule,
   );
@@ -173,7 +175,7 @@ export default async function AnalyticsPage({
   // table below follows the $/t/pt switch instead.
   const tiles: Tile[] = [
     { lbl: "Actual net P&L", val: fmtMoney(Math.round(sum.actualTotal)), cls: sum.actualTotal > 0 ? "pos" : sum.actualTotal < 0 ? "neg" : "", delta: `${sum.total} closed trades` },
-    { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · ${targetSlots.length ? targetSlots.map((x, i) => `T${i + 1} ${x.size}${unitSuffix}×${x.qty}`).join(" ") : `target ${targetVal ?? "—"}${unitSuffix}`} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t` },
+    { lbl: "What-if P&L", val: fmtMoney(Math.round(sum.simTotal)), cls: sum.simTotal > 0 ? "pos" : sum.simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · ${targetSlots.length ? targetSlots.map((x, i) => `T${i + 1} ${x.size}${unitSuffix}×${x.qty}`).join(" ") : `target ${targetVal ?? "—"}${unitSuffix}`} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix} · slip ${slippageTicks}t${sizeVal !== null ? ` · size ${sizeVal}` : ""}` },
     { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your actual exits" : diff < 0 ? "your actual exits were better" : undefined },
     { lbl: "Win rate: actual → sim", val: `${Math.round(sum.actualWinRate * 100)}% → ${Math.round(sum.simWinRate * 100)}%` },
     { lbl: "Trades re-routed", val: `${sum.changed} of ${sum.covered}`, delta: (() => {
@@ -202,6 +204,7 @@ export default async function AnalyticsPage({
     beTriggerTicks: toTicks(beVal, spec),
     slippageTicks,
     ignoreActualExit: true,
+    sizeOverride: sizeVal,
   })).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
   const targetSweep = sweep(trades, tradeBars, specs, SWEEP_VALUES[unit].target, (v, spec) => ({
     stopTicks: toTicks(stopVal, spec),
@@ -209,6 +212,7 @@ export default async function AnalyticsPage({
     beTriggerTicks: toTicks(beVal, spec),
     slippageTicks,
     ignoreActualExit: true,
+    sizeOverride: sizeVal,
   })).map((s) => ({ lbl: (unit === "usd" ? "$" : "") + s.value + (unit === "usd" ? "" : unitSuffix), pnl: s.pnl }));
 
   // MAE scatter: x = MAE ticks, y = per-contract result in ticks.
@@ -256,7 +260,7 @@ export default async function AnalyticsPage({
     const p = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
       range, from: sp.from, to: sp.to, tfrom: sp.tfrom, tto: sp.tto, instrument: sp.instrument,
-      stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip, unit: sp.unit,
+      stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip, unit: sp.unit, size: sp.size,
       ...patch,
     };
     // Switching units: convert the size inputs when one instrument is filtered
@@ -345,6 +349,10 @@ export default async function AnalyticsPage({
             </label>
           ))}
           <BeField defaultBe={sp.be ?? ""} defaultNoBe={noBe} suffix={unitSuffix} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }} title="Simulate with THIS many contracts per trade instead of the size you actually traded — e.g. half size with a doubled stop (same $ risk). Scale the targets' ×qty too. Empty = as traded.">
+            Size
+            <input className="tj-input" name="size" type="number" min={1} step={1} defaultValue={sp.size ?? ""} placeholder="as traded" style={{ width: 86 }} />
+          </label>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
             Slip, t
             <input className="tj-input" name="slip" type="number" min={0} step={1} defaultValue={slippageTicks} style={{ width: 58 }} />

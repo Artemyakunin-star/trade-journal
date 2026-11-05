@@ -26,6 +26,10 @@ export type SimParams = {
   /** "No BE" mode: ignore the actual exit (e.g. your real break-even out) and
    *  keep the position running on bars PAST it until stop/target/session end. */
   ignoreActualExit?: boolean;
+  /** Simulate with THIS many contracts instead of the trade's actual size
+   *  (wide-stop/half-size regime comparison). Commission scales with it; the
+   *  as-traded fallback scales the actual result proportionally. */
+  sizeOverride?: number | null;
 };
 
 export type SimResult = {
@@ -55,10 +59,13 @@ export function simulateTrade(
   p: SimParams,
 ): SimResult {
   const actualPnl = t.pnl === null ? 0 : Number(t.pnl);
-  const commission = Number(t.commission);
   const dir = t.direction === "LONG" ? 1 : -1;
   const entry = Number(t.avgEntryPrice);
-  const qty = t.quantity;
+  const sizeOv = p.sizeOverride && p.sizeOverride > 0 ? Math.round(p.sizeOverride) : null;
+  const qty = sizeOv ?? t.quantity;
+  /** Sim size / actual size — scales commission and the as-traded fallbacks. */
+  const scale = t.quantity > 0 ? qty / t.quantity : 1;
+  const commission = Number(t.commission) * scale;
   const pv = spec.tickValue / spec.tickSize; // $ per point per contract
 
   const base: Omit<SimResult, "exitReason" | "simPnl" | "exitTime" | "exitPrice"> = {
@@ -70,9 +77,9 @@ export function simulateTrade(
   const beTrigger = p.beTriggerTicks ?? null;
   const ignoreExit = p.ignoreActualExit ?? false;
   const multi = (p.targets ?? []).filter((x) => x.ticks > 0 && x.qty > 0).sort((a, b) => a.ticks - b.ticks);
-  const hasRule = p.stopTicks !== null || p.targetTicks !== null || multi.length > 0 || beTrigger !== null;
+  const hasRule = p.stopTicks !== null || p.targetTicks !== null || multi.length > 0 || beTrigger !== null || sizeOv !== null;
   if (!tradeBars.length || (!hasRule && !ignoreExit)) {
-    return { ...base, exitReason: "asTraded", simPnl: actualPnl, exitTime: t.exitTime, exitPrice: null };
+    return { ...base, exitReason: "asTraded", simPnl: actualPnl * scale, exitTime: t.exitTime, exitPrice: null };
   }
 
   // Without "no BE" mode the replay stops at the actual exit; with it, we run
@@ -177,7 +184,7 @@ export function simulateTrade(
     }
 
     if (!fills.length) {
-      return { ...base, exitReason: "asTraded", simPnl: actualPnl, exitTime: t.exitTime, exitPrice: null };
+      return { ...base, exitReason: "asTraded", simPnl: actualPnl * scale, exitTime: t.exitTime, exitPrice: null };
     }
     const lastLabel = fills[fills.length - 1];
     const exitReason: SimResult["exitReason"] = lastLabel.startsWith("stop")
@@ -237,7 +244,7 @@ export function simulateTrade(
     const gross = (last.close - entry) * dir * qty * pv;
     return { ...base, exitReason: "sessionEnd", simPnl: gross - commission, exitTime: last.time, exitPrice: last.close };
   }
-  return { ...base, exitReason: "asTraded", simPnl: actualPnl, exitTime: t.exitTime, exitPrice: null };
+  return { ...base, exitReason: "asTraded", simPnl: actualPnl * scale, exitTime: t.exitTime, exitPrice: null };
 }
 
 /**

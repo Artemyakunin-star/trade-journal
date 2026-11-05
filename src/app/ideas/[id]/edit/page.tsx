@@ -33,7 +33,7 @@ export default async function EditIdeaPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string; stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string }>;
+  searchParams: Promise<{ unit?: string; stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string; size?: string }>;
 }) {
   const uid = await requireUserId();
   const { id } = await params;
@@ -129,6 +129,7 @@ export default async function EditIdeaPage({
   const noBe = sp.nobe === "1";
   const beVal = noBe ? null : num(sp.be);
   const slippageTicks = sp.slip && Number(sp.slip) >= 0 ? Number(sp.slip) : 1;
+  const sizeVal = sp.size && Number(sp.size) > 0 ? Math.round(Number(sp.size)) : null;
   const toTicks = (v: number | null, spec: { tickSize: number; tickValue: number }): number | null => {
     if (v === null) return null;
     if (unit === "ticks") return Math.round(v);
@@ -139,7 +140,7 @@ export default async function EditIdeaPage({
   const simTrades = idea.trades.filter((t) => t.pnl !== null).sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
   const barsMeta: import("@/lib/whatif").BarsMeta = { tf: new Map() };
   const tradeBars = await loadTradeBars(simTrades, 8, barsMeta);
-  const anyRule = stopVal !== null || targetVal !== null || targetSlots.length > 0 || beVal !== null;
+  const anyRule = stopVal !== null || targetVal !== null || targetSlots.length > 0 || beVal !== null || sizeVal !== null;
   const results = simulateSequential(
     simTrades,
     tradeBars,
@@ -152,6 +153,7 @@ export default async function EditIdeaPage({
       beTriggerTicks: toTicks(beVal, spec),
       slippageTicks,
       ignoreActualExit: anyRule,
+      sizeOverride: sizeVal,
     }),
     anyRule,
   );
@@ -173,7 +175,7 @@ export default async function EditIdeaPage({
   const diff = simTotal - actualTotal;
   const tiles: Tile[] = [
     { lbl: "Actual net P&L", val: fmtMoney(Math.round(actualTotal)), cls: actualTotal > 0 ? "pos" : actualTotal < 0 ? "neg" : "", delta: `${simTrades.length} closed trades` },
-    { lbl: "What-if P&L", val: fmtMoney(Math.round(simTotal)), cls: simTotal > 0 ? "pos" : simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · ${targetSlots.length ? targetSlots.map((x, i) => `T${i + 1} ${x.size}${unitSuffix}×${x.qty}`).join(" ") : `target ${targetVal ?? "—"}${unitSuffix}`} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix}` },
+    { lbl: "What-if P&L", val: fmtMoney(Math.round(simTotal)), cls: simTotal > 0 ? "pos" : simTotal < 0 ? "neg" : "", delta: !anyRule ? "set a stop/target/BE below" : `stop ${stopVal ?? "—"}${unitSuffix} · ${targetSlots.length ? targetSlots.map((x, i) => `T${i + 1} ${x.size}${unitSuffix}×${x.qty}`).join(" ") : `target ${targetVal ?? "—"}${unitSuffix}`} · BE ${noBe ? "off" : (beVal ?? "—") + unitSuffix}${sizeVal !== null ? ` · size ${sizeVal} (actual kept its real size)` : ""}` },
     { lbl: "Difference", val: fmtMoney(Math.round(diff)), cls: diff > 0 ? "pos" : diff < 0 ? "neg" : "", delta: diff > 0 ? "the rule set beats your exits" : diff < 0 ? "your exits were better" : undefined },
     { lbl: "Avg RR", val: rr.avgRR === null ? "—" : `${rr.avgRR > 0 ? "+" : ""}${rr.avgRR.toFixed(2)}R`, cls: rr.avgRR !== null && rr.avgRR > 0 ? "pos" : rr.avgRR !== null && rr.avgRR < 0 ? "neg" : "", delta: `risk from own SL in ${rr.withOwnSl} of ${rr.rrCounted} counted trades${rr.withDefault ? `, default stop from Rules in ${rr.withDefault} (${defaultStopLabels.join(" · ")})` : defaultStopLabels.length ? ` · default stop: ${defaultStopLabels.join(" · ")}` : ""}, else avg stop of this idea's trades · BE excluded${rr.noRiskRef ? ` · ${rr.noRiskRef} skipped (no SL reference — set a default stop in Rules)` : ""}` },
     { lbl: "Win rate", val: rr.winRate === null ? "—" : `${Math.round(rr.winRate * 100)}%`, delta: `${rr.wins}W / ${rr.losses}L / ${rr.be} BE — break-even counts as a loss` },
@@ -294,7 +296,7 @@ export default async function EditIdeaPage({
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
-      unit: sp.unit, stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip,
+      unit: sp.unit, stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip, size: sp.size,
       ...patch,
     };
     // Switching units converts the size inputs (idea = one instrument), so the
@@ -518,6 +520,10 @@ export default async function EditIdeaPage({
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
             Slip, t
             <input className="tj-input" name="slip" type="number" min={0} step={1} defaultValue={slippageTicks} style={{ width: 58 }} />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }} title="Simulate with THIS many contracts instead of the size you actually traded — e.g. half size with a doubled stop (same $ risk). Remember to scale the ×qty of the targets too. Empty = as traded.">
+            Size
+            <input className="tj-input" name="size" type="number" min={1} step={1} defaultValue={sp.size ?? ""} placeholder="as traded" style={{ width: 86 }} />
           </label>
           <button className="btn btn-sm" type="submit">Simulate</button>
           {(anyRule || noBe || beAfterT1) && (
