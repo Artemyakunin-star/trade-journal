@@ -33,7 +33,7 @@ export default async function EditIdeaPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ unit?: string; stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string; size?: string }>;
+  searchParams: Promise<{ unit?: string; stop?: string; target?: string; t1?: string; q1?: string; t2?: string; q2?: string; t3?: string; q3?: string; bet1?: string; be?: string; nobe?: string; slip?: string; size?: string; ret?: string }>;
 }) {
   const uid = await requireUserId();
   const { id } = await params;
@@ -130,6 +130,8 @@ export default async function EditIdeaPage({
   const beVal = noBe ? null : num(sp.be);
   const slippageTicks = sp.slip && Number(sp.slip) >= 0 ? Number(sp.slip) : 1;
   const sizeVal = sp.size && Number(sp.size) > 0 ? Math.round(Number(sp.size)) : null;
+  // The Ideas-list filter this page was opened from (query string) — powers "← Ideas".
+  const ret = typeof sp.ret === "string" && sp.ret.length > 0 && sp.ret.length <= 600 && !sp.ret.includes("://") ? sp.ret : null;
   const toTicks = (v: number | null, spec: { tickSize: number; tickValue: number }): number | null => {
     if (v === null) return null;
     if (unit === "ticks") return Math.round(v);
@@ -296,7 +298,7 @@ export default async function EditIdeaPage({
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
-      unit: sp.unit, stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip, size: sp.size,
+      unit: sp.unit, stop: sp.stop, target: sp.target, t1: sp.t1, q1: sp.q1, t2: sp.t2, q2: sp.q2, t3: sp.t3, q3: sp.q3, bet1: sp.bet1, be: sp.be, nobe: sp.nobe, slip: sp.slip, size: sp.size, ret: ret ?? undefined,
       ...patch,
     };
     // Switching units converts the size inputs (idea = one instrument), so the
@@ -336,6 +338,11 @@ export default async function EditIdeaPage({
   return (
     <>
       <div className="topbar">
+        {ret !== null && (
+          <Link href={`/ideas?${ret}`} className="btn ghost" title="Back to the Ideas list with the same filter you came from">
+            ← Ideas
+          </Link>
+        )}
         <h1>
           {idea.title}{" "}
           {idea.date && <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {fmtDate(idea.date, prefs.dateFormat)}</span>}
@@ -497,6 +504,7 @@ export default async function EditIdeaPage({
             ))}
           </span>
           <input type="hidden" name="unit" value={unit} />
+          {ret !== null && <input type="hidden" name="ret" value={ret} />}
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-2)" }}>
             Stop
             <input className="tj-input" name="stop" type="number" min={0} step="any" defaultValue={sp.stop ?? ""} placeholder={unitSuffix} style={{ width: 76 }} />
@@ -527,7 +535,7 @@ export default async function EditIdeaPage({
           </label>
           <button className="btn btn-sm" type="submit">Simulate</button>
           {(anyRule || noBe || beAfterT1) && (
-            <Link href={`/ideas/${id}/edit?unit=${unit}`} className="btn ghost btn-sm">Reset</Link>
+            <Link href={`/ideas/${id}/edit?unit=${unit}${ret !== null ? `&ret=${encodeURIComponent(ret)}` : ""}`} className="btn ghost btn-sm">Reset</Link>
           )}
         </form>
         <Tiles tiles={tiles} />

@@ -21,6 +21,7 @@ export default function IdeaCard({
   limitsBadge,
   barDays,
   tz,
+  hrefSuffix = "",
 }: {
   idea: IdeaRow;
   editable?: boolean;
@@ -29,6 +30,8 @@ export default function IdeaCard({
   /** "SYMBOL|YYYY-MM-DD" days with imported bars (lib/coverage) — enables the no-bars chip. */
   barDays?: Set<string> | null;
   tz?: string;
+  /** Appended to the card's link (e.g. ?ret=<filter> so the idea page can lead back). */
+  hrefSuffix?: string;
 }) {
   const pnl = ideaPnl(idea);
   const rr = rrStats(idea.trades);
@@ -42,7 +45,7 @@ export default function IdeaCard({
 
   // The whole card is a link to the idea page (trades + simulation + editing).
   return (
-    <Link href={`/ideas/${idea.id}/edit`} className="card idea-card" style={{ display: "block", color: "inherit", textDecoration: "none", cursor: "pointer" }}>
+    <Link href={`/ideas/${idea.id}/edit${hrefSuffix}`} className="card idea-card" style={{ display: "block", color: "inherit", textDecoration: "none", cursor: "pointer" }}>
       <div className="head">
         <div className="title">{idea.title}</div>
         {idea.grade && (

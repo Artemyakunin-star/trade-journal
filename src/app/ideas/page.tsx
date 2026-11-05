@@ -41,12 +41,24 @@ export default async function IdeasPage({
   if (sp.setup) ideas = ideas.filter((i) => setupsOf(i).includes(sp.setup!));
   if (sp.status) ideas = ideas.filter((i) => i.status === sp.status);
   if (sp.trigger) ideas = ideas.filter((i) => i.trigger === sp.trigger);
-  if (sp.grade === "A") ideas = ideas.filter((i) => i.grade?.startsWith("A"));
-  if (sp.grade === "B") ideas = ideas.filter((i) => i.grade?.startsWith("B"));
-  if (sp.grade === "C") ideas = ideas.filter((i) => i.grade?.startsWith("C"));
-  if (sp.grade === "DF") ideas = ideas.filter((i) => i.grade === "D" || i.grade === "F");
+  // Grade filter is MULTI-select: ?grade=A,B keeps both buckets.
+  const GRADE_BUCKETS = ["A", "B", "C", "DF"] as const;
+  const gradeSel = (sp.grade ?? "").split(",").filter((g): g is (typeof GRADE_BUCKETS)[number] => (GRADE_BUCKETS as readonly string[]).includes(g));
+  const bucketOf = (g: string | null) => (g === null ? null : g === "D" || g === "F" ? "DF" : g.startsWith("A") ? "A" : g.startsWith("B") ? "B" : g.startsWith("C") ? "C" : null);
+  if (gradeSel.length) ideas = ideas.filter((i) => gradeSel.includes(bucketOf(i.grade) as never));
 
   ideas = [...ideas].reverse(); // newest first
+
+  // The current filter as a query string: preserved by the grade toggles and
+  // carried into each idea page as ?ret=…, so "← Ideas" returns right here.
+  const fq = (patch: Record<string, string | undefined> = {}) => {
+    const cur: Record<string, string | undefined> = { ...sp, ...patch };
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(cur)) if (v && k !== "ret") p.set(k, v); // no recursive ret
+    return p.toString();
+  };
+  const retQ = fq();
+  const ideaHref = (id: string) => `/ideas/${id}/edit${retQ ? `?ret=${encodeURIComponent(retQ)}` : ""}`;
 
   // Trading-rules check per visible idea (Settings -> Trading rules).
   const instRows = await db.query.instruments.findMany();
@@ -131,13 +143,18 @@ export default async function IdeasPage({
           <option value="TILT">tilt</option>
           <option value="REVENGE">revenge</option>
         </select>
-        <select name="grade" defaultValue={sp.grade ?? ""} className="tj-select">
-          <option value="">All grades</option>
-          <option value="A">A</option>
-          <option value="B">B</option>
-          <option value="C">C</option>
-          <option value="DF">D–F</option>
-        </select>
+        <span className="seg" title="Filter by idea grade — click several to combine (A + B, …)">
+          {([["A", "A"], ["B", "B"], ["C", "C"], ["DF", "D–F"]] as const).map(([key, label]) => {
+            const on = gradeSel.includes(key);
+            const next = on ? gradeSel.filter((g) => g !== key) : [...gradeSel, key];
+            return (
+              <Link key={key} href={`/ideas?${fq({ grade: next.join(",") || undefined })}`} className={on ? "on" : ""}>
+                {label}
+              </Link>
+            );
+          })}
+        </span>
+        {gradeSel.length > 0 && <input type="hidden" name="grade" value={gradeSel.join(",")} />}
         <button className="btn ghost" type="submit">Filter</button>
         {(sp.status || sp.trigger || sp.grade || sp.date || sp.from || sp.to || sp.instrument) && (
           <Link href="/ideas" className="btn ghost">Reset</Link>
@@ -182,7 +199,7 @@ export default async function IdeasPage({
                       <Link href={`/day/${dayOf(i)}`} className="linklike" title="Open this day">{fmtDate(dayOf(i), prefs.dateFormat)}</Link>
                     </td>
                     <td style={{ whiteSpace: "normal", maxWidth: 340 }}>
-                      <Link href={`/ideas/${i.id}/edit`} className="linklike" style={{ fontWeight: 600 }}>
+                      <Link href={ideaHref(i.id)} className="linklike" style={{ fontWeight: 600 }}>
                         {i.title}
                       </Link>
                       {!i.planId && !i.docId && <span className="badge rogue" style={{ marginLeft: 8 }}>outside plan</span>}
@@ -224,7 +241,7 @@ export default async function IdeasPage({
                 style={{ accentColor: "var(--s1)", width: 15, height: 15, marginTop: 16, flex: "0 0 auto" }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <IdeaCard idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} barDays={barDays} tz={tz} />
+                <IdeaCard idea={i} dateFormat={prefs.dateFormat} limitsBadge={ideaChecks.get(i.id) ?? null} barDays={barDays} tz={tz} hrefSuffix={retQ ? `?ret=${encodeURIComponent(retQ)}` : ""} />
               </div>
             </div>
           ))}
