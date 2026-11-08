@@ -27,6 +27,10 @@ export default function TradeTags({
   }, [initialKey]);
   const [newTag, setNewTag] = useState("");
   const [busy, setBusy] = useState(false);
+  // The tags cell often sits at the RIGHT edge (tables, the Live card) — a
+  // left-anchored popover then runs off-screen, worst on phones. Measure on
+  // open and flip the anchor when there is no room to the right.
+  const [alignRight, setAlignRight] = useState(false);
 
   const save = async (next: string[], extra?: string) => {
     setTags(extra ? [...next, extra] : next);
@@ -44,6 +48,8 @@ export default function TradeTags({
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          setAlignRight(r.left + 290 > window.innerWidth);
           setOpen((v) => !v);
         }}
         title="Execution tags — click to edit"
@@ -63,8 +69,9 @@ export default function TradeTags({
           <span
             className="card"
             style={{
-              position: "absolute", zIndex: 300, top: "100%", left: 0, marginTop: 4,
-              minWidth: 260, padding: 10, display: "flex", gap: 6, flexWrap: "wrap",
+              position: "absolute", zIndex: 300, top: "100%", marginTop: 4,
+              ...(alignRight ? { right: 0 } : { left: 0 }),
+              minWidth: 260, maxWidth: "min(320px, 92vw)", padding: 10, display: "flex", gap: 6, flexWrap: "wrap",
               boxShadow: "0 10px 34px rgba(0,0,0,.45)",
             }}
             onClick={(e) => e.stopPropagation()}

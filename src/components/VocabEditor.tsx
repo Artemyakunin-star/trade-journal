@@ -22,6 +22,8 @@ export default function VocabEditor({
   const [list, setList] = useState<string[]>(options);
   const [adding, setAdding] = useState("");
   const [busy, setBusy] = useState(false);
+  // Flip the panel to the left when the pencil sits near the right screen edge.
+  const [alignRight, setAlignRight] = useState(false);
 
   const commit = async (next: string[]) => {
     setList(next);
@@ -53,8 +55,10 @@ export default function VocabEditor({
       <button
         type="button"
         title={`Edit this list${title ? ` (${title})` : ""} — rename or remove options`}
-        onClick={() => {
+        onClick={(e) => {
           setList(options);
+          const r = e.currentTarget.getBoundingClientRect();
+          setAlignRight(r.left + 320 > window.innerWidth);
           setOpen((v) => !v);
         }}
         style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 13, padding: "0 2px", lineHeight: 1 }}
@@ -67,7 +71,8 @@ export default function VocabEditor({
           <span
             className="card"
             style={{
-              position: "absolute", zIndex: 300, top: "100%", left: 0, marginTop: 4,
+              position: "absolute", zIndex: 300, top: "100%", marginTop: 4,
+              ...(alignRight ? { right: 0 } : { left: 0 }),
               width: 300, maxWidth: "min(300px, 86vw)", padding: 10, display: "block",
               boxShadow: "0 10px 34px rgba(0,0,0,.45)",
             }}
