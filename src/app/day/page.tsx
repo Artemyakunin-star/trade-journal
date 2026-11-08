@@ -8,8 +8,10 @@ import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
-export default async function DayIndex() {
+export default async function DayIndex({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const uid = await requireUserId();
+  const sp = await searchParams;
+  if (sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date)) redirect(`/day/${sp.date}`);
   const [trades, prefs] = await Promise.all([getAllTrades(uid), getSettings(uid)]);
   const days = dayAggregates(trades, prefs.timezone);
   const lastTradeDay = days.length ? days[days.length - 1].date : null;

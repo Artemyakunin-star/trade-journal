@@ -10,7 +10,7 @@ import DayFrame from "@/components/DayFrame";
 import DayNews from "@/components/DayNews";
 import { deleteDoc, setDocDate } from "@/app/actions";
 import { getSettings } from "@/lib/settings";
-import { fmtDate, fmtMoney, GRADE_LABEL, gradeClass, kyivDateOf, STATUS_LABEL } from "@/lib/format";
+import { fmtDate, fmtMoney, fmtTimeKyiv, GRADE_LABEL, gradeClass, kyivDateOf, parseInTimeZone, STATUS_LABEL } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +43,17 @@ export default async function DocPage({
         where: (i, { and: and_, eq: eq_, or: or_ }) => and_(eq_(i.userId, uid), or_(eq_(i.date, docDate), eq_(i.docId, id))),
         with: { trades: true },
         orderBy: (i, { asc: asc_ }) => [asc_(i.createdAt)],
+      })
+    : [];
+
+  // Rogue trades of this day (no idea behind them) — the honest part of the
+  // picture a plan review needs, not just the ideas.
+  const dayStart = docDate ? parseInTimeZone(`${docDate} 00:00:00`, prefs.timezone) : null;
+  const rogueTrades = dayStart
+    ? await db.query.trades.findMany({
+        where: (t, { and: and_, eq: eq_, gte: gte_, isNull: isNull_, lt: lt_ }) =>
+          and_(eq_(t.userId, uid), isNull_(t.ideaId), gte_(t.entryTime, dayStart), lt_(t.entryTime, new Date(dayStart.getTime() + 24 * 3600_000))),
+        orderBy: (t, { asc: asc_ }) => [asc_(t.entryTime)],
       })
     : [];
 
@@ -139,6 +150,34 @@ export default async function DocPage({
               </div>
             );
           })}
+
+          {rogueTrades.length > 0 && (
+            <>
+              <div style={{ fontSize: 11.5, color: "var(--crit)", marginTop: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>
+                ⚠ Rogue trades — no idea behind them ({rogueTrades.length})
+              </div>
+              {rogueTrades.map((t) => {
+                const pnl = t.pnl === null ? null : Number(t.pnl);
+                return (
+                  <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap", borderTop: "1px solid var(--border)", padding: "6px 0", fontSize: 12.5 }}>
+                    <Link className="linklike" href={`/trades/${t.id}`} style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {fmtTimeKyiv(t.entryTime, false, prefs.timezone)}
+                    </Link>
+                    <span style={{ color: "var(--ink-2)" }}>
+                      {t.instrument} {t.direction === "LONG" ? "Long" : "Short"} ×{t.quantity}
+                    </span>
+                    <span className="badge rogue">rogue</span>
+                    <b style={{ marginLeft: "auto", color: pnl === null ? "var(--muted)" : pnl > 0 ? "var(--pos)" : pnl < 0 ? "var(--neg)" : "var(--ink-2)", fontVariantNumeric: "tabular-nums" }}>
+                      {pnl === null ? "open" : fmtMoney(pnl)}
+                    </b>
+                  </div>
+                );
+              })}
+              <div className="section-note">
+                Attach them to an idea (or group them into one) on the <Link className="linklike" href={`/trades?date=${docDate}`}>Trades</Link> screen.
+              </div>
+            </>
+          )}
         </div>
       )}
 

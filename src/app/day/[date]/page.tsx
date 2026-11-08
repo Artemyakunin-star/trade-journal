@@ -194,6 +194,27 @@ export default async function DayPage({ params }: { params: Promise<{ date: stri
     <>
       <div className="topbar">
         <h1>Day · {fmtDateLong(date)}</h1>
+        {/* open any other day: ‹ › step a day, the date field jumps anywhere */}
+        <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+          <Link
+            href={`/day/${new Date(new Date(date + "T12:00:00Z").getTime() - 24 * 3600 * 1000).toISOString().slice(0, 10)}`}
+            className="btn ghost btn-sm"
+            title="Previous day"
+          >
+            ‹
+          </Link>
+          <Link
+            href={`/day/${new Date(new Date(date + "T12:00:00Z").getTime() + 24 * 3600 * 1000).toISOString().slice(0, 10)}`}
+            className="btn ghost btn-sm"
+            title="Next day"
+          >
+            ›
+          </Link>
+        </span>
+        <form action="/day" method="get" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input className="tj-input" type="date" name="date" defaultValue={date} style={{ fontSize: 12.5, padding: "4px 8px" }} />
+          <button className="btn ghost btn-sm" type="submit">Open</button>
+        </form>
         <AccountFilter accounts={distinctAccounts(rawTrades)} selected={selectedAccounts} />
         <Link href={`/day/${date}/plan`} className="btn ghost">{plan ? "Edit plan" : "Write plan"}</Link>
         <Link href={`/recap/${date}`} className="btn ghost" title="The evening recap — did the plan work?">☾ Recap</Link>
