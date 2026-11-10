@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { getSettings } from "@/lib/settings";
 import { fmtDate, fmtMoney, fmtTimeKyiv, kyivDateOf, parseInTimeZone } from "@/lib/format";
 import { recapRowFor } from "@/lib/recap";
-import { deleteRecap, moveRecapDate, openDailyDoc } from "@/app/actions";
+import { attachNoteToRecap, deleteRecap, detachNoteFromRecap, moveRecapDate, openDailyDoc } from "@/app/actions";
 import RecapFields from "@/components/RecapFields";
 import RecapFeed from "@/components/RecapFeed";
 import ScenarioMarks from "@/components/ScenarioMarks";
@@ -87,6 +87,24 @@ export default async function RecapPage({
       orderBy: (l, { asc: asc_ }) => [asc_(l.ts)],
     }),
   ]);
+
+  // Market notes (lessons) pinned to this recap + the rest, offered to attach.
+  const allNotes = await db.query.notes.findMany({
+    where: (n, { eq: eq_ }) => eq_(n.userId, uid),
+    with: { evidence: true },
+  });
+  const weightedNotes = allNotes.map((n) => ({
+    n,
+    c: n.evidence.filter((e) => e.verdict === "CONFIRMED").length,
+    r: n.evidence.filter((e) => e.verdict === "REFUTED").length,
+  }));
+  const pinnedIds = recap.noteIds ?? [];
+  const linkedNotes = pinnedIds
+    .map((nid) => weightedNotes.find((w) => w.n.id === nid))
+    .filter((w): w is (typeof weightedNotes)[number] => !!w);
+  const attachableNotes = weightedNotes
+    .filter((w) => !w.n.archived && !pinnedIds.includes(w.n.id))
+    .sort((a, b) => b.c - b.r - (a.c - a.r));
 
   const logIdeaIds = [...new Set(dayLog.map((l) => l.ideaId).filter((x): x is string => !!x))];
   const logIdeas = logIdeaIds.length
@@ -212,6 +230,54 @@ export default async function RecapPage({
         initialCauses={{ triggers: recap.triggers ?? [], drivers: recap.drivers ?? [], behaviors: recap.behaviors ?? [] }}
         causeOptions={{ triggers: prefs.recapTriggerOptions, drivers: prefs.recapDriverOptions, behaviors: prefs.recapBehaviorOptions }}
       />
+
+      {/* ---------- market notes pinned to this recap ---------- */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3>
+          Notes for this day <span className="sub">lessons from the Notes page worth remembering with this recap</span>
+        </h3>
+        {linkedNotes.length === 0 && (
+          <div className="section-note" style={{ margin: "0 0 8px" }}>
+            Nothing pinned yet — pick a note below and it stays attached to this day.
+          </div>
+        )}
+        {linkedNotes.map(({ n, c, r }) => (
+          <div key={n.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5, padding: "4px 0", borderTop: "1px solid var(--border)" }}>
+            <span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ color: "var(--pos)", fontWeight: 700 }}>✓{c}</span>{" "}
+              <span style={{ color: "var(--crit)", fontWeight: 700 }}>✗{r}</span>
+            </span>
+            <span style={{ color: "var(--ink-2)", flex: 1 }}>
+              {n.text}
+              {n.archived && <span style={{ color: "var(--muted)" }}> · archived</span>}
+            </span>
+            <Link className="linklike" href="/notes" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>open →</Link>
+            <form action={detachNoteFromRecap} style={{ display: "inline" }}>
+              <input type="hidden" name="recapId" value={recap.id} />
+              <input type="hidden" name="noteId" value={n.id} />
+              <button type="submit" title="Unpin this note from the recap (the note itself stays)" style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, padding: 0 }}>✕</button>
+            </form>
+          </div>
+        ))}
+        {attachableNotes.length > 0 && (
+          <form action={attachNoteToRecap} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+            <input type="hidden" name="recapId" value={recap.id} />
+            <select className="tj-select" name="noteId" style={{ fontSize: 12.5, maxWidth: 480 }}>
+              {attachableNotes.map(({ n, c, r }) => (
+                <option key={n.id} value={n.id}>
+                  {`✓${c} ✗${r} · ${n.text.length > 90 ? n.text.slice(0, 90) + "…" : n.text}`}
+                </option>
+              ))}
+            </select>
+            <button className="btn btn-sm" type="submit">Attach</button>
+          </form>
+        )}
+        {attachableNotes.length === 0 && allNotes.length === 0 && (
+          <div className="section-note" style={{ margin: 0 }}>
+            No notes yet — write lessons on the <Link className="linklike" href="/notes">Notes</Link> page and pin them here.
+          </div>
+        )}
+      </div>
 
       {/* ---------- what you wrote during the session ---------- */}
       {dayLog.length > 0 && (

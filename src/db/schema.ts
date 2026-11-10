@@ -453,6 +453,8 @@ export const dayRecaps = pgTable(
     triggers: jsonb("triggers").$type<string[]>(),
     drivers: jsonb("drivers").$type<string[]>(),
     behaviors: jsonb("behaviors").$type<string[]>(),
+    /** Market notes (lessons) pinned to this recap. */
+    noteIds: jsonb("note_ids").$type<string[]>(),
     /** Free-form write-up with screenshots (TipTap), like plans. */
     journal: jsonb("journal"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

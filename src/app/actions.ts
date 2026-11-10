@@ -1703,6 +1703,35 @@ export async function detachNoteFromIdea(fd: FormData) {
   revalidatePath("/", "layout");
 }
 
+/** Pin a market note (lesson) to a day's recap — same idea as pinning to an idea. */
+export async function attachNoteToRecap(fd: FormData) {
+  const uid = await requireUserId();
+  const recapId = str(fd, "recapId");
+  const noteId = str(fd, "noteId");
+  if (!recapId || !noteId) return;
+  const { dayRecaps } = await import("@/db/schema");
+  const [recap, note] = await Promise.all([
+    db.query.dayRecaps.findFirst({ where: (r, { and: and_, eq: eq_ }) => and_(eq_(r.id, recapId), eq_(r.userId, uid)) }),
+    db.query.notes.findFirst({ where: (n, { and: and_, eq: eq_ }) => and_(eq_(n.id, noteId), eq_(n.userId, uid)) }),
+  ]);
+  if (!recap || !note) return;
+  const ids = [...new Set([...(recap.noteIds ?? []), noteId])];
+  await db.update(dayRecaps).set({ noteIds: ids, updatedAt: new Date() }).where(eq(dayRecaps.id, recapId));
+  revalidatePath("/", "layout");
+}
+
+export async function detachNoteFromRecap(fd: FormData) {
+  const uid = await requireUserId();
+  const recapId = str(fd, "recapId");
+  const noteId = str(fd, "noteId");
+  const { dayRecaps } = await import("@/db/schema");
+  const recap = await db.query.dayRecaps.findFirst({ where: (r, { and: and_, eq: eq_ }) => and_(eq_(r.id, recapId), eq_(r.userId, uid)) });
+  if (!recap) return;
+  const ids = (recap.noteIds ?? []).filter((x) => x !== noteId);
+  await db.update(dayRecaps).set({ noteIds: ids.length ? ids : null, updatedAt: new Date() }).where(eq(dayRecaps.id, recapId));
+  revalidatePath("/", "layout");
+}
+
 /** Confirm or refute a note on a given day — the evidence trail. */
 export async function addNoteEvidence(fd: FormData) {
   const uid = await requireUserId();
