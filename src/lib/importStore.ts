@@ -83,10 +83,16 @@ export const importStore = {
           }
         }
       } catch (e) {
-        row.error =
-          "Upload failed (" +
-          (e instanceof Error ? e.message : String(e)) +
-          "). Check your connection and try this file again — already-imported rows are skipped automatically.";
+        const msg = e instanceof Error ? e.message : String(e);
+        // "An unexpected response…" is what a STALE tab gets after the site was
+        // redeployed: its action ids no longer exist on the server. A reload fixes it.
+        row.error = /unexpected response|Failed to find Server Action/i.test(msg)
+          ? "Upload failed (" +
+            msg +
+            "). This usually means the site was updated while this page was open — reload the page (F5) and run the import again; already-imported rows are skipped automatically."
+          : "Upload failed (" +
+            msg +
+            "). Check your connection and try this file again — already-imported rows are skipped automatically.";
       }
       row.progress = undefined;
       paint();
